@@ -31,7 +31,7 @@ def validate_yaml(body: ValidateYamlPayload):
     try:
         yaml.safe_load(body.content)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+        raise HTTPException(status_code=400, detail={"error": f"Invalid YAML: {e}"})
 
     return {"valid": True}
 

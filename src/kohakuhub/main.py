@@ -51,7 +51,7 @@ async def public_resolve(repo_id: str, revision: str, path: str, request: Reques
     namespace, name = repo_id.split("/")
     repo = Repository.get_or_none(name=name, namespace=namespace)
     if not repo:
-        raise HTTPException(404, detail="Repository not found")
+        raise HTTPException(404, detail={"error": "Repository not found"})
 
     return await resolve_file(
         repo_type=repo.repo_type,

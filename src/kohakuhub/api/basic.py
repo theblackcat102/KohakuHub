@@ -45,6 +45,11 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
     full_id = f"{namespace}/{payload.name}"
     lakefs_repo = lakefs_repo_name(payload.type, full_id)
 
+    if Repository.get_or_none(
+        (Repository.full_id == full_id) & (Repository.repo_type == payload.type)
+    ):
+        raise HTTPException(400, detail={"error": "Repository already exists"})
+
     # Create LakeFS repository
     client = get_lakefs_client()
     storage_namespace = f"s3://{cfg.s3.bucket}/{lakefs_repo}"
@@ -59,7 +64,7 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"LakeFS repository creation failed: {str(e)}"
+            status_code=500, detail={"error": f"LakeFS repository creation failed: {str(e)}"}
         )
 
     # Store in database for listing/metadata
@@ -125,7 +130,7 @@ def list_repo_tree(
                 "tree": [],
                 "commit": {"oid": None, "date": None},
             }
-        raise HTTPException(status_code=500, detail=f"Failed to list objects: {e}")
+        raise HTTPException(status_code=500, detail={"error": f"Failed to list objects: {e}"})
 
     # Convert LakeFS objects to HuggingFace format
     tree = []
@@ -189,7 +194,7 @@ def list_repos(
     elif "spaces" in path:
         rt = "space"
     else:
-        raise HTTPException(404, detail="Unknown repository type")
+        raise HTTPException(404, detail={"error": "Unknown repository type"})
 
     # Query database
     q = Repository.select().where(Repository.repo_type == rt)

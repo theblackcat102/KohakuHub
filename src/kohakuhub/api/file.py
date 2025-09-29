@@ -55,13 +55,13 @@ async def preupload(repo_type: RepoType, repo_id: str, revision: str, request: R
     if not Repository.get_or_none(
         (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
     ):
-        raise HTTPException(404, detail="Repository not found")
+        raise HTTPException(404, detail={"error": "Repository not found"})
 
     # Parse request body
     try:
         body = await request.json()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
+        raise HTTPException(status_code=400, detail={"error": f"Invalid JSON: {e}"})
 
     if cfg.app.debug_log_payloads:
         print("==== Preupload Payload ====")
@@ -69,7 +69,7 @@ async def preupload(repo_type: RepoType, repo_id: str, revision: str, request: R
 
     files = body.get("files")
     if not isinstance(files, list):
-        raise HTTPException(400, detail="Missing or invalid 'files' array")
+        raise HTTPException(400, detail={"error": "Missing or invalid 'files' array"})
 
     # Get LakeFS client to check existing files
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
@@ -172,7 +172,7 @@ def get_revision(
     try:
         branch = client.branches.get_branch(repository=lakefs_repo, branch=revision)
     except Exception as e:
-        raise HTTPException(404, detail=f"Revision {revision} not found: {e}")
+        raise HTTPException(404, detail={"error": f"Revision {revision} not found: {e}"})
 
     commit_id = branch.commit_id
     commit_info = None
@@ -273,7 +273,7 @@ async def resolve_file(
             repository=lakefs_repo, ref=revision, path=path
         )
     except Exception as e:
-        raise HTTPException(404, detail=f"File not found: {e}")
+        raise HTTPException(404, detail={"error": f"File not found: {e}"})
 
     # Get commit hash for the revision
     try:
@@ -287,7 +287,7 @@ async def resolve_file(
     physical_address = obj_stat.physical_address
 
     if not physical_address.startswith("s3://"):
-        raise HTTPException(500, detail="Unsupported storage backend")
+        raise HTTPException(500, detail={"error": "Unsupported storage backend"})
 
     bucket, key = parse_s3_uri(physical_address)
 
@@ -396,7 +396,7 @@ async def commit(
         try:
             obj = json.loads(line)
         except json.JSONDecodeError as e:
-            raise HTTPException(400, detail=f"Invalid JSON line: {e}")
+            raise HTTPException(400, detail={"error": f"Invalid JSON line: {e}"})
 
         key = obj.get("key")
         value = obj.get("value", {})
@@ -407,7 +407,7 @@ async def commit(
             operations.append({"key": key, "value": value})
 
     if header is None:
-        raise HTTPException(400, detail="Missing commit header")
+        raise HTTPException(400, detail={"error": "Missing commit header"})
 
     # Process operations
     files_changed = False  # Track if any files actually changed
@@ -424,13 +424,13 @@ async def commit(
             encoding = (value.get("encoding") or "").lower()
 
             if not content_b64 or not encoding.startswith("base64"):
-                raise HTTPException(400, detail=f"Invalid file operation for {path}")
+                raise HTTPException(400, detail={"error": f"Invalid file operation for {path}"})
 
             # Decode content
             try:
                 data = base64.b64decode(content_b64)
             except Exception as e:
-                raise HTTPException(400, detail=f"Failed to decode base64: {e}")
+                raise HTTPException(400, detail={"error": f"Failed to decode base64: {e}"})
 
             new_sha256 = hashlib.sha256(data).hexdigest()
 
@@ -458,7 +458,7 @@ async def commit(
                     content=io.BytesIO(data),
                 )
             except Exception as e:
-                raise HTTPException(500, detail=f"Failed to upload {path}: {e}")
+                raise HTTPException(500, detail={"error": f"Failed to upload {path}: {e}"})
 
             # Update database
             File.insert(
@@ -484,7 +484,7 @@ async def commit(
             size = value.get("size")
 
             if not oid:
-                raise HTTPException(400, detail=f"Missing OID for LFS file {path}")
+                raise HTTPException(400, detail={"error": f"Missing OID for LFS file {path}"})
 
             # Check if file unchanged
             existing = File.get_or_none(
@@ -578,7 +578,7 @@ async def commit(
             ),
         )
     except Exception as e:
-        raise HTTPException(500, detail=f"Commit failed: {e}")
+        raise HTTPException(500, detail={"error": f"Commit failed: {e}"})
 
     # Generate commit URL
     commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result.id}"

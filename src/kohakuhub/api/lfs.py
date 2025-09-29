@@ -81,7 +81,7 @@ async def lfs_batch(repo_id: str, request: Request):
         body = await request.json()
         batch_req = LFSBatchRequest(**body)
     except Exception as e:
-        raise HTTPException(400, detail=f"Invalid LFS batch request: {e}")
+        raise HTTPException(400, detail={"error": f"Invalid LFS batch request: {e}"})
 
     if cfg.app.debug_log_payloads:
         print("==== LFS Batch Request ====")
@@ -224,13 +224,13 @@ async def lfs_verify(repo_id: str, request: Request):
     try:
         body = await request.json()
     except Exception as e:
-        raise HTTPException(400, detail=f"Invalid verification request: {e}")
+        raise HTTPException(400, detail={"error": f"Invalid verification request: {e}"})
 
     oid = body.get("oid")
     size = body.get("size")
 
     if not oid:
-        raise HTTPException(400, detail="Missing OID")
+        raise HTTPException(400, detail={"error": "Missing OID"})
 
     # Check if object exists in S3
     from .s3_utils import object_exists
@@ -238,7 +238,7 @@ async def lfs_verify(repo_id: str, request: Request):
     lfs_key = f"lfs/{oid[:2]}/{oid[2:4]}/{oid}"
 
     if not object_exists(cfg.s3.bucket, lfs_key):
-        raise HTTPException(404, detail="Object not found in storage")
+        raise HTTPException(404, detail={"error": "Object not found in storage"})
 
     # Optionally verify size
     if size:
@@ -246,6 +246,6 @@ async def lfs_verify(repo_id: str, request: Request):
 
         metadata = get_object_metadata(cfg.s3.bucket, lfs_key)
         if metadata["size"] != size:
-            raise HTTPException(400, detail="Size mismatch")
+            raise HTTPException(400, detail={"error": "Size mismatch"})
 
     return {"message": "Object verified successfully"}
