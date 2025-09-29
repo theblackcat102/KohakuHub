@@ -20,6 +20,7 @@ dependencies = [
     "toml",
     "peewee",
     "boto3",
+    "lakefs-client",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 
