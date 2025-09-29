@@ -10,8 +10,8 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
     - [ ] Upload
         - [x] Upload small file (not LFS)
         - [ ] Upload large file
-    - [ ] Download
-        - [ ] Direct http requests
+    - [x] Download
+        - [x] Direct http requests
         - [ ] Other special interface (if have)
     - [ ] Repository Managements
         - [x] Tree List
