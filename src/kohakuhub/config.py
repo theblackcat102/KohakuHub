@@ -1,35 +1,47 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+"""Configuration management for Kohaku Hub."""
+
+import os
+import tomllib
 from functools import lru_cache
-import os, tomllib
+
+from pydantic import BaseModel, Field
 
 
 class S3Config(BaseModel):
+    """S3-compatible storage configuration."""
+
+    public_endpoint: str
     endpoint: str
     access_key: str
     secret_key: str
     bucket: str
     region: str = "us-east-1"
-    force_path_style: bool = True  # MinIO 建議 path-style
+    force_path_style: bool = True  # Required for MinIO
 
 
 class LakeFSConfig(BaseModel):
-    public_endpoint: str  # 對外，例如 https://file.hub.kohaku-lab.org
-    internal_endpoint: str  # 內網，例如 http://lakefs:28000
+    """LakeFS versioning system configuration."""
+
+    public_endpoint: str  # External URL, e.g., https://file.hub.example.com
+    internal_endpoint: str  # Internal URL, e.g., http://lakefs:8000
     access_key: str
     secret_key: str
-    repo_namespace: str = "hf"  # 物件key前綴
+    repo_namespace: str = "hf"  # Prefix for LakeFS repo names
 
 
 class AppConfig(BaseModel):
-    base_url: str  # 你的 API 對外 URL，例如 https://api.hub.kohaku-lab.org
-    api_base: str = "/api"  # 路由前綴
-    database_url: str = "sqlite:///./hub.db"  # ✅ 加回
-    lfs_threshold_bytes: int = 10 * 1024 * 1024
+    """Application-level configuration."""
+
+    base_url: str  # External API URL, e.g., https://api.hub.example.com
+    api_base: str = "/api"  # API route prefix
+    database_url: str = "sqlite:///./hub.db"
+    lfs_threshold_bytes: int = 10 * 1024 * 1024  # 10MB threshold
     debug_log_payloads: bool = False
 
 
 class Config(BaseModel):
+    """Root configuration object."""
+
     s3: S3Config
     lakefs: LakeFSConfig
     app: AppConfig
@@ -37,11 +49,19 @@ class Config(BaseModel):
 
 @lru_cache(maxsize=1)
 def load_config(path: str = None) -> Config:
+    """Load configuration from TOML file.
+
+    Args:
+        path: Path to config file. If None, uses HUB_CONFIG env var or default.
+
+    Returns:
+        Parsed Config object.
+    """
     cfg_path = path or os.environ.get("HUB_CONFIG", "config.toml")
     with open(cfg_path, "rb") as f:
         raw = tomllib.load(f)
     return Config(**raw)
 
 
-# 方便直接 import 使用
+# Global config instance
 cfg = load_config()

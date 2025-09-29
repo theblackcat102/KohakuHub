@@ -1,8 +1,14 @@
-from fastapi import Depends
-from ..db import db, User
+"""Authentication and authorization for Kohaku Hub API.
+
+TODO: Implement real authentication system.
+Currently returns mock user for development.
+"""
+
+from ..db import User, db
 
 
 def get_db():
+    """Database connection dependency for FastAPI."""
     try:
         db.connect(reuse_if_open=True)
         yield db
@@ -12,8 +18,21 @@ def get_db():
 
 
 def get_current_user():
-    # TODO: 真正 auth，這裡先 mock
-    class _U:
-        username = "me"
+    """Get current authenticated user.
 
-    return _U()
+    TODO: Implement real authentication:
+    - Parse Authorization header (Bearer token)
+    - Validate token against database or JWT
+    - Return actual User object
+    - Raise HTTPException(401) if invalid
+
+    Returns:
+        Mock user object for development.
+    """
+
+    # Mock user for development
+    class MockUser:
+        username = "me"
+        id = 1
+
+    return MockUser()
