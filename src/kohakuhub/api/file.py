@@ -4,7 +4,7 @@ import base64
 import hashlib
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -472,7 +472,7 @@ async def commit(
                 update={
                     File.sha256: new_sha256,
                     File.size: len(data),
-                    File.updated_at: datetime.utcnow(),
+                    File.updated_at: datetime.now(timezone.utc),
                 },
             ).execute()
 
@@ -512,7 +512,7 @@ async def commit(
                 update={
                     File.sha256: oid,
                     File.size: size,
-                    File.updated_at: datetime.utcnow(),
+                    File.updated_at: datetime.now(timezone.utc),
                 },
             ).execute()
 
@@ -578,6 +578,7 @@ async def commit(
             ),
         )
     except Exception as e:
+        raise e
         raise HTTPException(500, detail={"error": f"Commit failed: {e}"})
 
     # Generate commit URL

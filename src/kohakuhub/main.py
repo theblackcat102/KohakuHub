@@ -24,7 +24,7 @@ app.add_middleware(
 # Mount API routers with configured prefix
 app.include_router(basic.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(file.router, prefix=cfg.app.api_base, tags=["files"])
-app.include_router(lfs.router, prefix=cfg.app.api_base, tags=["lfs"])
+app.include_router(lfs.router, tags=["lfs"])
 app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
 
 
