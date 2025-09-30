@@ -1,6 +1,6 @@
 """S3 client utilities and helper functions."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -83,14 +83,14 @@ def generate_upload_presigned_url(
         Params={
             "Bucket": bucket,
             "Key": key,
-            "ContentType": content_type,
+            # "ContentType": content_type,
         },
         ExpiresIn=expires_in,
         HttpMethod="PUT",
     )
 
     # Calculate expiration time
-    expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     return {
         "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),
@@ -154,7 +154,7 @@ def generate_multipart_upload_urls(
             }
         )
 
-    expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     return {
         "upload_id": upload_id,

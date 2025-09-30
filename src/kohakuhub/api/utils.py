@@ -1,6 +1,6 @@
 """Utility API endpoints for Kohaku Hub."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 import yaml
@@ -24,14 +24,11 @@ def validate_yaml(body: ValidateYamlPayload):
 
     Returns:
         Validation result
-
-    Raises:
-        HTTPException: If YAML is invalid
     """
     try:
         yaml.safe_load(body.content)
     except Exception as e:
-        raise HTTPException(status_code=400, detail={"error": f"Invalid YAML: {e}"})
+        return {"valid": False}
 
     return {"valid": True}
 
