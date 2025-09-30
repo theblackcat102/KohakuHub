@@ -44,3 +44,10 @@ file = api.hf_hub_download(
 )
 with open(file, "rb") as f:
     print(f.read()[:50])
+
+
+file = api.hf_hub_download(
+    repo_id="kohaku/test-2", repo_type="model", filename="test2/large"
+)
+with open(file, "rb") as f:
+    print(f.read()[:50])
