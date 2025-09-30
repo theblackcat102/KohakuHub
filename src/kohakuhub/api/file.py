@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from lakefs_client.models import CommitCreation
+from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadata
 
 from ..config import cfg
 from ..db import File, Repository, StagingUpload
@@ -172,7 +172,9 @@ def get_revision(
     try:
         branch = client.branches.get_branch(repository=lakefs_repo, branch=revision)
     except Exception as e:
-        raise HTTPException(404, detail={"error": f"Revision {revision} not found: {e}"})
+        raise HTTPException(
+            404, detail={"error": f"Revision {revision} not found: {e}"}
+        )
 
     commit_id = branch.commit_id
     commit_info = None
@@ -424,13 +426,17 @@ async def commit(
             encoding = (value.get("encoding") or "").lower()
 
             if not content_b64 or not encoding.startswith("base64"):
-                raise HTTPException(400, detail={"error": f"Invalid file operation for {path}"})
+                raise HTTPException(
+                    400, detail={"error": f"Invalid file operation for {path}"}
+                )
 
             # Decode content
             try:
                 data = base64.b64decode(content_b64)
             except Exception as e:
-                raise HTTPException(400, detail={"error": f"Failed to decode base64: {e}"})
+                raise HTTPException(
+                    400, detail={"error": f"Failed to decode base64: {e}"}
+                )
 
             new_sha256 = hashlib.sha256(data).hexdigest()
 
@@ -458,7 +464,9 @@ async def commit(
                     content=io.BytesIO(data),
                 )
             except Exception as e:
-                raise HTTPException(500, detail={"error": f"Failed to upload {path}: {e}"})
+                raise HTTPException(
+                    500, detail={"error": f"Failed to upload {path}: {e}"}
+                )
 
             # Update database
             File.insert(
@@ -477,14 +485,16 @@ async def commit(
             ).execute()
 
         elif key == "lfsFile":
-            # Large file already uploaded via LFS batch API
-            # TODO: Implement LFS file linking
-            # For now, we expect the file to already be in S3
+            # Large file already uploaded via LFS batch API to S3
+            # Need to link the physical S3 object to LakeFS
             oid = value.get("oid")
             size = value.get("size")
+            algo = value.get("algo", "sha256")
 
             if not oid:
-                raise HTTPException(400, detail={"error": f"Missing OID for LFS file {path}"})
+                raise HTTPException(
+                    400, detail={"error": f"Missing OID for LFS file {path}"}
+                )
 
             # Check if file unchanged
             existing = File.get_or_none(
@@ -494,13 +504,78 @@ async def commit(
                 print(f"Skipping unchanged LFS file: {path}")
                 continue
 
-            # File changed
+            # File changed or new
             files_changed = True
 
-            # TODO: Link physical object in LakeFS
-            # For now, just update database
-            print(f"TODO: Implement LFS file linking for {path}")
+            # Construct S3 physical address for the LFS object
+            # LFS files are stored at: s3://bucket/lfs/{oid[:2]}/{oid[2:4]}/{oid}
+            lfs_key = f"lfs/{oid[:2]}/{oid[2:4]}/{oid}"
+            physical_address = f"s3://{cfg.s3.bucket}/{lfs_key}"
 
+            print(f"Linking LFS file: {path} -> {physical_address}")
+
+            # Verify the object exists in S3 before linking
+            from .s3_utils import object_exists, get_object_metadata
+
+            if not object_exists(cfg.s3.bucket, lfs_key):
+                raise HTTPException(
+                    400,
+                    detail={
+                        "error": f"LFS object {oid} not found in storage. "
+                        f"Upload to S3 may have failed. Path: {lfs_key}"
+                    },
+                )
+
+            # Get actual size from S3 to verify
+            try:
+                s3_metadata = get_object_metadata(cfg.s3.bucket, lfs_key)
+                actual_size = s3_metadata["size"]
+
+                if actual_size != size:
+                    print(
+                        f"Warning: Size mismatch for {path}. Expected: {size}, Got: {actual_size}"
+                    )
+                    # Use actual size from S3
+                    size = actual_size
+            except Exception as e:
+                print(f"Warning: Could not verify S3 object metadata: {e}")
+                # Continue anyway, LakeFS will verify
+
+            # Link the physical S3 object to LakeFS using StagingApi
+            try:
+                # Create staging location with physical address
+                staging_location = StagingLocation(
+                    physical_address=physical_address,
+                    checksum=f"{algo}:{oid}",
+                    size_bytes=size,
+                )
+
+                # Create staging metadata (optional but recommended)
+                staging_metadata = StagingMetadata(
+                    staging=staging_location,
+                    checksum=f"{algo}:{oid}",
+                    size_bytes=size,
+                )
+
+                # Use the staging API to link the physical address
+                client.staging.link_physical_address(
+                    repository=lakefs_repo,
+                    branch=revision,
+                    path=path,
+                    staging_metadata=staging_metadata,
+                )
+
+                print(f"Successfully linked LFS file in LakeFS: {path}")
+
+            except Exception as e:
+                raise HTTPException(
+                    500,
+                    detail={
+                        "error": f"Failed to link LFS file {path} in LakeFS: {str(e)}"
+                    },
+                )
+
+            # Update database
             File.insert(
                 repo_full_id=repo_id,
                 path_in_repo=path,
@@ -512,9 +587,12 @@ async def commit(
                 update={
                     File.sha256: oid,
                     File.size: size,
+                    File.lfs: True,
                     File.updated_at: datetime.now(timezone.utc),
                 },
             ).execute()
+
+            print(f"Updated database record for LFS file: {path}")
 
         elif key == "deletedFile":
             # Delete file
@@ -578,8 +656,7 @@ async def commit(
             ),
         )
     except Exception as e:
-        raise e
-        raise HTTPException(500, detail={"error": f"Commit failed: {e}"})
+        raise HTTPException(500, detail={"error": f"Commit failed: {str(e)}"})
 
     # Generate commit URL
     commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result.id}"
