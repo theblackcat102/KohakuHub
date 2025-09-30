@@ -64,7 +64,8 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail={"error": f"LakeFS repository creation failed: {str(e)}"}
+            status_code=500,
+            detail={"error": f"LakeFS repository creation failed: {str(e)}"},
         )
 
     # Store in database for listing/metadata
@@ -130,7 +131,9 @@ def list_repo_tree(
                 "tree": [],
                 "commit": {"oid": None, "date": None},
             }
-        raise HTTPException(status_code=500, detail={"error": f"Failed to list objects: {e}"})
+        raise HTTPException(
+            status_code=500, detail={"error": f"Failed to list objects: {e}"}
+        )
 
     # Convert LakeFS objects to HuggingFace format
     tree = []

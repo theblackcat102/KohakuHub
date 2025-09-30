@@ -135,8 +135,8 @@ async def lfs_batch(repo_id: str, request: Request):
                             size=size,
                             error=LFSError(
                                 code=501,  # Not Implemented
-                                message="Multipart upload not yet implemented for files >5GB"
-                            )
+                                message="Multipart upload not yet implemented for files >5GB",
+                            ),
                         )
                     )
                 else:
@@ -175,8 +175,8 @@ async def lfs_batch(repo_id: str, request: Request):
                                 size=size,
                                 error=LFSError(
                                     code=500,
-                                    message=f"Failed to generate upload URL: {str(e)}"
-                                )
+                                    message=f"Failed to generate upload URL: {str(e)}",
+                                ),
                             )
                         )
 
@@ -187,10 +187,7 @@ async def lfs_batch(repo_id: str, request: Request):
                     LFSObjectResponse(
                         oid=oid,
                         size=size,
-                        error=LFSError(
-                            code=404,
-                            message="Object not found"
-                        )
+                        error=LFSError(code=404, message="Object not found"),
                     )
                 )
             else:
@@ -229,8 +226,8 @@ async def lfs_batch(repo_id: str, request: Request):
                             size=size,
                             error=LFSError(
                                 code=500,
-                                message=f"Failed to generate download URL: {str(e)}"
-                            )
+                                message=f"Failed to generate download URL: {str(e)}",
+                            ),
                         )
                     )
 
@@ -241,11 +238,11 @@ async def lfs_batch(repo_id: str, request: Request):
         objects=objects_response,
         hash_algo="sha256",
     )
-    
+
     # Use JSONResponse to ensure proper serialization with exclude_none
     return JSONResponse(
         content=response.model_dump(exclude_none=True),
-        media_type="application/vnd.git-lfs+json"
+        media_type="application/vnd.git-lfs+json",
     )
 
 

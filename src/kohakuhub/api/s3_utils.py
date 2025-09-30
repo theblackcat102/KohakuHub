@@ -90,7 +90,9 @@ def generate_upload_presigned_url(
     )
 
     # Calculate expiration time
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ"
+    )
 
     return {
         "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),
@@ -154,7 +156,9 @@ def generate_multipart_upload_urls(
             }
         )
 
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ"
+    )
 
     return {
         "upload_id": upload_id,
