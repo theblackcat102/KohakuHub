@@ -11,6 +11,7 @@ try:
 except Exception as e:
     print(e)
 
+os.makedirs("./test_path", exist_ok=True)
 # 上傳檔案
 with open("./test_path/large", "wb") as f:
     f.write(os.urandom(1024 * 1024 * 20))
