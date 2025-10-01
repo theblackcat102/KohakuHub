@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadata
 
 from ..config import cfg
@@ -595,32 +595,178 @@ async def commit(
             print(f"Updated database record for LFS file: {path}")
 
         elif key == "deletedFile":
-            # Delete file
+            # Delete a single file
             files_changed = True
+
+            print(f"Deleting file: {path}")
 
             try:
                 client.objects.delete_object(
                     repository=lakefs_repo, branch=revision, path=path
                 )
+                print(f"Successfully deleted file from LakeFS: {path}")
             except Exception as e:
-                print(f"Warning: Failed to delete {path}: {e}")
+                # File might not exist, log warning but continue
+                print(f"Warning: Failed to delete {path} from LakeFS: {e}")
 
             # Remove from database
-            File.delete().where(
-                (File.repo_full_id == repo_id) & (File.path_in_repo == path)
-            ).execute()
+            deleted_count = (
+                File.delete()
+                .where((File.repo_full_id == repo_id) & (File.path_in_repo == path))
+                .execute()
+            )
+
+            if deleted_count > 0:
+                print(f"Removed {path} from database")
+            else:
+                print(f"File {path} was not in database")
 
         elif key == "deletedFolder":
-            # Delete folder (delete all files with prefix)
+            # Delete all files with the given path prefix
+            # LakeFS handles both LFS and regular files the same way
             files_changed = True
-            # TODO: Implement folder deletion
-            print(f"TODO: Implement folder deletion for {path}")
+
+            # Normalize folder path (ensure it ends with /)
+            folder_path = path if path.endswith("/") else f"{path}/"
+            print(f"Deleting folder: {folder_path}")
+
+            try:
+                # List all objects in the folder
+                objects = client.objects.list_objects(
+                    repository=lakefs_repo,
+                    ref=revision,
+                    prefix=folder_path,
+                    delimiter="",  # No delimiter to get all files recursively
+                )
+
+                deleted_files = []
+                for obj in objects.results:
+                    if obj.path_type == "object":
+                        try:
+                            client.objects.delete_object(
+                                repository=lakefs_repo, branch=revision, path=obj.path
+                            )
+                            deleted_files.append(obj.path)
+                            print(f"  Deleted: {obj.path}")
+                        except Exception as e:
+                            print(f"  Warning: Failed to delete {obj.path}: {e}")
+
+                print(f"Deleted {len(deleted_files)} files from folder {folder_path}")
+
+                # Remove from database - use LIKE for prefix matching
+                if deleted_files:
+                    # Delete all files that start with the folder path
+                    deleted_count = (
+                        File.delete()
+                        .where(
+                            (File.repo_full_id == repo_id)
+                            & (File.path_in_repo.startswith(folder_path))
+                        )
+                        .execute()
+                    )
+                    print(f"Removed {deleted_count} records from database")
+
+            except Exception as e:
+                print(f"Warning: Error deleting folder {folder_path}: {e}")
 
         elif key == "copyFile":
-            # Copy file within repository
+            # Copy a file within the repository
+            # LakeFS handles both LFS and regular files uniformly
             files_changed = True
-            # TODO: Implement file copying
-            print(f"TODO: Implement file copying for {path}")
+
+            src_path = value.get("srcPath")
+            dest_path = path  # 'path' is the destination
+            src_revision = value.get(
+                "srcRevision", revision
+            )  # Default to current revision
+
+            if not src_path:
+                raise HTTPException(
+                    400, detail={"error": f"Missing srcPath for copyFile operation"}
+                )
+
+            print(
+                f"Copying file: {src_path} -> {dest_path} (from revision: {src_revision})"
+            )
+
+            try:
+                # Get source file metadata from LakeFS
+                src_obj = client.objects.stat_object(
+                    repository=lakefs_repo, ref=src_revision, path=src_path
+                )
+
+                # Use LakeFS staging API to link the physical address
+                # This works for both LFS and regular files
+                staging_metadata = StagingMetadata(
+                    staging=StagingLocation(
+                        physical_address=src_obj.physical_address,
+                        checksum=src_obj.checksum,
+                        size_bytes=src_obj.size_bytes,
+                    ),
+                    checksum=src_obj.checksum,
+                    size_bytes=src_obj.size_bytes,
+                )
+
+                client.staging.link_physical_address(
+                    repository=lakefs_repo,
+                    branch=revision,
+                    path=dest_path,
+                    staging_metadata=staging_metadata,
+                )
+
+                print(
+                    f"Successfully linked {dest_path} to same physical address as {src_path}"
+                )
+
+                # Update database - copy file metadata
+                src_file = File.get_or_none(
+                    (File.repo_full_id == repo_id) & (File.path_in_repo == src_path)
+                )
+
+                if src_file:
+                    File.insert(
+                        repo_full_id=repo_id,
+                        path_in_repo=dest_path,
+                        size=src_file.size,
+                        sha256=src_file.sha256,
+                        lfs=src_file.lfs,
+                    ).on_conflict(
+                        conflict_target=(File.repo_full_id, File.path_in_repo),
+                        update={
+                            File.sha256: src_file.sha256,
+                            File.size: src_file.size,
+                            File.lfs: src_file.lfs,
+                            File.updated_at: datetime.now(timezone.utc),
+                        },
+                    ).execute()
+                else:
+                    # If not in database, create entry based on LakeFS info
+                    is_lfs = src_obj.size_bytes >= cfg.app.lfs_threshold_bytes
+                    File.insert(
+                        repo_full_id=repo_id,
+                        path_in_repo=dest_path,
+                        size=src_obj.size_bytes,
+                        sha256=src_obj.checksum,
+                        lfs=is_lfs,
+                    ).on_conflict(
+                        conflict_target=(File.repo_full_id, File.path_in_repo),
+                        update={
+                            File.sha256: src_obj.checksum,
+                            File.size: src_obj.size_bytes,
+                            File.lfs: is_lfs,
+                            File.updated_at: datetime.now(timezone.utc),
+                        },
+                    ).execute()
+
+                print(f"Successfully copied {src_path} to {dest_path}")
+
+            except Exception as e:
+                raise HTTPException(
+                    500,
+                    detail={
+                        "error": f"Failed to copy file {src_path} to {dest_path}: {str(e)}"
+                    },
+                )
 
     # If no files changed, we can return early without creating a commit
     # Get current commit hash to return
