@@ -31,4 +31,4 @@ def lakefs_repo_name(repo_type: str, repo_id: str) -> str:
     """
     # Replace slashes with hyphens for LakeFS compatibility
     safe_id = repo_id.replace("/", "-")
-    return f"{cfg.lakefs.repo_namespace}-{repo_type}-{safe_id}"
+    return f"{cfg.lakefs.repo_namespace}-{repo_type}-{safe_id}".lower()

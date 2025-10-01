@@ -16,6 +16,14 @@ from ..db import File, Repository, StagingUpload
 from .auth import get_current_user
 from .lakefs_utils import get_lakefs_client, lakefs_repo_name
 from .s3_utils import get_s3_client
+from .hf_utils import (
+    hf_repo_not_found,
+    hf_entry_not_found,
+    hf_revision_not_found,
+    hf_bad_request,
+    hf_server_error,
+    is_lakefs_not_found_error,
+)
 
 router = APIRouter()
 
@@ -161,10 +169,15 @@ def get_revision(
 
     Returns:
         Revision metadata
-
-    Raises:
-        HTTPException: If revision not found
     """
+    # Check if repository exists in database first
+    repo_row = Repository.get_or_none(
+        (Repository.repo_type == repo_type.value) & (Repository.full_id == repo_id)
+    )
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type.value)
+
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
     client = get_lakefs_client()
 
@@ -172,9 +185,9 @@ def get_revision(
     try:
         branch = client.branches.get_branch(repository=lakefs_repo, branch=revision)
     except Exception as e:
-        raise HTTPException(
-            404, detail={"error": f"Revision {revision} not found: {e}"}
-        )
+        if is_lakefs_not_found_error(e):
+            return hf_revision_not_found(repo_id, revision)
+        return hf_server_error(f"Failed to get branch: {str(e)}")
 
     commit_id = branch.commit_id
     commit_info = None
@@ -185,35 +198,29 @@ def get_revision(
             commit_info = client.commits.get_commit(
                 repository=lakefs_repo, commit_id=commit_id
             )
-        except Exception:
-            pass
-
-    # Get repository metadata from database
-    repo_row = Repository.get_or_none(
-        (Repository.repo_type == repo_type.value) & (Repository.full_id == repo_id)
-    )
-    namespace = repo_row.namespace if repo_row else repo_id.split("/")[0]
-    private = repo_row.private if repo_row else False
-    created_at = (
-        repo_row.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        if repo_row and repo_row.created_at
-        else None
-    )
+        except Exception as e:
+            # Log but don't fail if commit info unavailable
+            print(f"Warning: Could not get commit info: {e}")
 
     # Format last modified date
     last_modified = None
     if commit_info and commit_info.creation_date:
+        from datetime import datetime
+
         last_modified = datetime.fromtimestamp(commit_info.creation_date).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
+    # Format created_at
+    created_at = repo_row.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
     return {
         "id": repo_id,
-        "author": namespace,
+        "author": repo_row.namespace,
         "sha": commit_id,
         "lastModified": last_modified,
         "createdAt": created_at,
-        "private": private,
+        "private": repo_row.private,
         "downloads": 0,
         "likes": 0,
         "gated": False,

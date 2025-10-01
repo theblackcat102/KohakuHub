@@ -2,13 +2,23 @@
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from lakefs_client.models import RepositoryCreation
 from pydantic import BaseModel
 
 from ..config import cfg
 from ..db import Repository, init_db
 from .auth import get_current_user
+from .hf_utils import (
+    HFErrorCode,
+    hf_error_response,
+    hf_repo_not_found,
+    hf_bad_request,
+    hf_server_error,
+    format_hf_datetime,
+    is_lakefs_not_found_error,
+    is_lakefs_revision_error,
+)
 from .lakefs_utils import get_lakefs_client, lakefs_repo_name
 
 router = APIRouter()
@@ -37,9 +47,6 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
 
     Returns:
         Created repository information
-
-    Raises:
-        HTTPException: If LakeFS repository creation fails
     """
     namespace = payload.organization or user.username
     full_id = f"{namespace}/{payload.name}"
@@ -48,7 +55,11 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
     if Repository.get_or_none(
         (Repository.full_id == full_id) & (Repository.repo_type == payload.type)
     ):
-        raise HTTPException(400, detail={"error": "Repository already exists"})
+        return hf_error_response(
+            400,
+            HFErrorCode.REPO_EXISTS,
+            f"Repository {full_id} already exists",
+        )
 
     # Create LakeFS repository
     client = get_lakefs_client()
@@ -63,10 +74,7 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
             )
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail={"error": f"LakeFS repository creation failed: {str(e)}"},
-        )
+        return hf_server_error(f"LakeFS repository creation failed: {str(e)}")
 
     # Store in database for listing/metadata
     Repository.get_or_create(
@@ -83,31 +91,164 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
     }
 
 
-@router.get("/{repo_type}s/{repo_id:path}/tree/{revision}{path:path}")
+@router.get("/models/{namespace}/{repo_name}")
+@router.get("/datasets/{namespace}/{repo_name}")
+@router.get("/spaces/{namespace}/{repo_name}")
+def get_repo_info(namespace: str, repo_name: str, request: Request):
+    """Get repository information (without revision).
+
+    This endpoint matches HuggingFace Hub API format:
+    - /api/models/{namespace}/{repo_name}
+    - /api/datasets/{namespace}/{repo_name}
+    - /api/spaces/{namespace}/{repo_name}
+
+    Note: For revision-specific info, use /{repo_type}s/{namespace}/{repo_name}/revision/{revision}
+          which is handled in file.py
+
+    Args:
+        namespace: Repository namespace (user or organization)
+        repo_name: Repository name
+        request: FastAPI request object
+
+    Returns:
+        Repository metadata or error response with headers
+    """
+    # Construct full repo ID
+    repo_id = f"{namespace}/{repo_name}"
+
+    # Determine repo type from path
+    path = request.url.path
+    if "/models/" in path:
+        repo_type = "model"
+    elif "/datasets/" in path:
+        repo_type = "dataset"
+    elif "/spaces/" in path:
+        repo_type = "space"
+    else:
+        return hf_error_response(
+            404,
+            HFErrorCode.INVALID_REPO_TYPE,
+            "Invalid repository type",
+        )
+
+    # Check if repository exists in database
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    # Get LakeFS info for default branch
+    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+    client = get_lakefs_client()
+
+    # Get default branch info
+    commit_id = None
+    last_modified = None
+
+    try:
+        branch = client.branches.get_branch(repository=lakefs_repo, branch="main")
+        commit_id = branch.commit_id
+
+        # Get commit details if available
+        if commit_id:
+            try:
+                commit_info = client.commits.get_commit(
+                    repository=lakefs_repo, commit_id=commit_id
+                )
+                if commit_info and commit_info.creation_date:
+                    from datetime import datetime
+
+                    last_modified = datetime.fromtimestamp(
+                        commit_info.creation_date
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            except Exception:
+                pass
+    except Exception as e:
+        # Log warning but continue - repo exists even if LakeFS has issues
+        print(f"Warning: Could not get branch info for {lakefs_repo}/main: {e}")
+
+    # Format created_at
+    created_at = format_hf_datetime(repo_row.created_at)
+
+    # Return repository info in HuggingFace format
+    return {
+        "_id": repo_row.id,
+        "id": repo_id,
+        "modelId": repo_id if repo_type == "model" else None,
+        "author": repo_row.namespace,
+        "sha": commit_id,
+        "lastModified": last_modified,
+        "createdAt": created_at,
+        "private": repo_row.private,
+        "disabled": False,
+        "gated": False,
+        "downloads": 0,
+        "likes": 0,
+        "tags": [],
+        "pipeline_tag": None,
+        "library_name": None,
+        "siblings": [],
+        "spaces": [],
+        "models": [],
+        "datasets": [],
+    }
+
+
+# NOTE: /{repo_type}s/{namespace}/{repo_name}/revision/{revision} is handled in file.py
+# to avoid duplication
+
+
+@router.get("/{repo_type}s/{namespace}/{repo_name}/tree/{revision}{path:path}")
 def list_repo_tree(
     repo_type: RepoType,
-    repo_id: str,
+    namespace: str,
+    repo_name: str,
     revision: str = "main",
     path: str = "",
-    recursive: bool = True,
+    recursive: bool = False,
     expand: bool = False,
 ):
     """List repository file tree.
 
+    Returns a flat list of files and folders in HuggingFace format.
+
+    Response format matches HuggingFace API:
+    [
+        {
+            "type": "file",  # or "directory"
+            "oid": "sha256_hash",
+            "size": 1234,
+            "path": "relative/path/to/file.txt",
+            "lfs": {"oid": "...", "size": ..., "pointerSize": ...}  # if LFS file
+        },
+        ...
+    ]
+
     Args:
         repo_type: Type of repository
-        repo_id: Full repository ID (namespace/name)
-        revision: Branch name or commit hash
-        path: Path within repository
-        recursive: List recursively
-        expand: Include detailed metadata
+        namespace: Repository namespace
+        repo_name: Repository name
+        revision: Branch name or commit hash (default: "main")
+        path: Path within repository (default: root)
+        recursive: List recursively (default: False)
+        expand: Include detailed metadata (default: False)
 
     Returns:
-        File tree structure
-
-    Raises:
-        HTTPException: If listing fails
+        Flat list of file/folder objects
     """
+    # Construct full repo ID
+    repo_id = f"{namespace}/{repo_name}"
+
+    # Check if repository exists
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
     client = get_lakefs_client()
 
@@ -123,49 +264,60 @@ def list_repo_tree(
             delimiter="" if recursive else "/",
         )
     except Exception as e:
-        # Return empty tree for non-existent paths
-        if "404" in str(e):
-            return {
-                "sha": None,
-                "truncated": False,
-                "tree": [],
-                "commit": {"oid": None, "date": None},
-            }
-        raise HTTPException(
-            status_code=500, detail={"error": f"Failed to list objects: {e}"}
-        )
+        # Check for specific error types
+        if is_lakefs_not_found_error(e):
+            if is_lakefs_revision_error(e):
+                from .hf_utils import hf_revision_not_found
 
-    # Convert LakeFS objects to HuggingFace format
-    tree = []
+                return hf_revision_not_found(repo_id, revision)
+            else:
+                # Return empty list for non-existent paths
+                return []
+
+        # Other errors are server errors
+        return hf_server_error(f"Failed to list objects: {str(e)}")
+
+    # Convert LakeFS objects to HuggingFace format (flat list)
+    result_list = []
+
     for obj in result.results:
         if obj.path_type == "object":
-            tree.append(
-                {
-                    "path": obj.path,
-                    "type": "blob",
+            # File object
+            is_lfs = obj.size_bytes > cfg.app.lfs_threshold_bytes
+
+            file_obj = {
+                "type": "file",
+                "oid": obj.checksum,
+                "size": obj.size_bytes,
+                "path": obj.path,
+            }
+
+            # Add LFS metadata if it's an LFS file
+            if is_lfs:
+                file_obj["lfs"] = {
+                    "oid": obj.checksum,  # Use checksum as LFS oid
                     "size": obj.size_bytes,
-                    "oid": obj.checksum,
-                    "lfs": obj.size_bytes > cfg.app.lfs_threshold_bytes,
-                    "lastCommit": {
-                        "id": obj.checksum,
-                        "date": obj.mtime.isoformat() if obj.mtime else None,
-                    },
+                    "pointerSize": 134,  # Standard Git LFS pointer size
                 }
-            )
+
+            result_list.append(file_obj)
+
         elif obj.path_type == "common_prefix":
-            tree.append(
+            # Directory object
+            result_list.append(
                 {
-                    "path": obj.path,
-                    "type": "tree",
+                    "type": "directory",
+                    "oid": (
+                        obj.checksum
+                        if hasattr(obj, "checksum") and obj.checksum
+                        else ""
+                    ),
+                    "size": 0,
+                    "path": obj.path.rstrip("/"),  # Remove trailing slash
                 }
             )
 
-    return {
-        "sha": None,  # Could fetch from commit info
-        "truncated": result.pagination.has_more if result.pagination else False,
-        "tree": tree,
-        "commit": {"oid": None, "date": None},
-    }
+    return result_list
 
 
 @router.get("/models")
@@ -185,9 +337,6 @@ def list_repos(
 
     Returns:
         List of repositories
-
-    Raises:
-        HTTPException: If invalid route
     """
     path = request.url.path
     if "models" in path:
@@ -197,7 +346,11 @@ def list_repos(
     elif "spaces" in path:
         rt = "space"
     else:
-        raise HTTPException(404, detail={"error": "Unknown repository type"})
+        return hf_error_response(
+            404,
+            HFErrorCode.INVALID_REPO_TYPE,
+            "Unknown repository type",
+        )
 
     # Query database
     q = Repository.select().where(Repository.repo_type == rt)
@@ -211,7 +364,7 @@ def list_repos(
             "id": r.full_id,
             "author": r.namespace,
             "private": r.private,
-            "sha": None,  # Could fetch from LakeFS
+            "sha": None,
             "lastModified": None,
             "createdAt": r.created_at.isoformat() if r.created_at else None,
             "downloads": 0,
