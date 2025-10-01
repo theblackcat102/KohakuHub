@@ -51,9 +51,13 @@ docker compose up -d --build
 Services:
 
 * MinIO S3 API → `http://127.0.0.1:29001`
+    * Expose this API and fill the public url into `KOHAKU_HUB_S3_PUBLIC_ENDPOINT`
 * MinIO Console → `http://127.0.0.1:29000`
+    * For browsing physical storage object
 * LakeFS Web + API → `http://127.0.0.1:28000`
+    * For browsing repository content
 * KohakuHub API → `http://127.0.0.1:48888`
+    * Expose this API and fill the public url into `KOHAKU_HUB_BASE_URL`
 
 
 ### 4. Test with HuggingFace Hub client
