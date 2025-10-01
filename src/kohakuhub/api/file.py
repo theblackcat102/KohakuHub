@@ -496,10 +496,18 @@ async def commit(
                     400, detail={"error": f"Missing OID for LFS file {path}"}
                 )
 
-            # Check if file unchanged
+            # Check for existing file at this path (BEFORE any changes)
             existing = File.get_or_none(
                 (File.repo_full_id == repo_id) & (File.path_in_repo == path)
             )
+
+            # Track old LFS object for potential deletion
+            old_lfs_oid = None
+            if existing and existing.lfs and existing.sha256 != oid:
+                old_lfs_oid = existing.sha256
+                print(f"File {path} will be replaced: {old_lfs_oid} → {oid}")
+
+            # Check if file unchanged
             if existing and existing.sha256 == oid and existing.size == size:
                 print(f"Skipping unchanged LFS file: {path}")
                 continue
@@ -535,29 +543,24 @@ async def commit(
                     print(
                         f"Warning: Size mismatch for {path}. Expected: {size}, Got: {actual_size}"
                     )
-                    # Use actual size from S3
                     size = actual_size
             except Exception as e:
                 print(f"Warning: Could not verify S3 object metadata: {e}")
-                # Continue anyway, LakeFS will verify
 
             # Link the physical S3 object to LakeFS using StagingApi
             try:
-                # Create staging location with physical address
                 staging_location = StagingLocation(
                     physical_address=physical_address,
                     checksum=f"{algo}:{oid}",
                     size_bytes=size,
                 )
 
-                # Create staging metadata (optional but recommended)
                 staging_metadata = StagingMetadata(
                     staging=staging_location,
                     checksum=f"{algo}:{oid}",
                     size_bytes=size,
                 )
 
-                # Use the staging API to link the physical address
                 client.staging.link_physical_address(
                     repository=lakefs_repo,
                     branch=revision,
@@ -575,7 +578,7 @@ async def commit(
                     },
                 )
 
-            # Update database
+            # Update database (BEFORE deleting old object, so deduplication check works)
             File.insert(
                 repo_full_id=repo_id,
                 path_in_repo=path,
@@ -593,6 +596,36 @@ async def commit(
             ).execute()
 
             print(f"Updated database record for LFS file: {path}")
+
+            # NOW delete the old LFS object if it exists and is not used elsewhere
+            if old_lfs_oid:
+                # Check if this OID is still used by other files (deduplication check)
+                other_uses = (
+                    File.select()
+                    .where((File.sha256 == old_lfs_oid) & (File.lfs == True))
+                    .count()
+                )
+
+                if other_uses == 0:
+                    # Safe to delete - not used anywhere
+                    old_lfs_key = (
+                        f"lfs/{old_lfs_oid[:2]}/{old_lfs_oid[2:4]}/{old_lfs_oid}"
+                    )
+                    try:
+                        from .s3_utils import get_s3_client
+
+                        s3_client = get_s3_client()
+                        s3_client.delete_object(Bucket=cfg.s3.bucket, Key=old_lfs_key)
+                        print(f"✓ Deleted old LFS object: {old_lfs_key}")
+                    except Exception as e:
+                        # Log but don't fail - the new file is already linked successfully
+                        print(
+                            f"Warning: Failed to delete old LFS object {old_lfs_key}: {e}"
+                        )
+                else:
+                    print(
+                        f"✓ Keeping old LFS object {old_lfs_oid} - still used by {other_uses} file(s)"
+                    )
 
         elif key == "deletedFile":
             # Delete a single file
