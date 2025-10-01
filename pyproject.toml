@@ -21,6 +21,7 @@ dependencies = [
     "peewee",
     "boto3",
     "lakefs-client",
+    "psycopg2",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 

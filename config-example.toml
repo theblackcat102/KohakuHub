@@ -17,6 +17,7 @@ repo_namespace = "hf"
 [app]
 base_url = "http://127.0.0.1:48888"
 api_base = "/api"
-database_url = "sqlite:///./hub.db"
+db_backend = "postgres"  # or "sqlite"
+database_url = "postgresql://hub:hubpass@127.0.0.1:25432/hubdb"
 lfs_threshold_bytes = 10485760 # 10MB
 debug_log_payloads = true
