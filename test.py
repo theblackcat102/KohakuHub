@@ -52,3 +52,13 @@ file = api.hf_hub_download(
 )
 with open(file, "rb") as f:
     print(f.read()[:50])
+
+# 刪除檔案
+api.delete_file(
+    path_in_repo="test2/1",
+    repo_id="kohaku/test-2",
+    repo_type="model",
+)
+
+# 刪除 repo
+# api.delete_repo(repo_id="kohaku/test-2", repo_type="model")

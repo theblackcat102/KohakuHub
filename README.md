@@ -61,8 +61,8 @@ cp config-example.toml config.toml
 At minimum, ensure:
 
 * `s3.public_endpoint` / `s3.endpoint`
-* `lakefs.public_endpoint` / `lakefs.internal_endpoint`
-* `app.base_url`
+* `lakefs.endpoint`
+* `app.base_url` / `app.db_backend` / `app.database_url`
 
 ### 4. Run the API server
 
@@ -85,8 +85,9 @@ python test.py
 This will:
 
 * Create a test repo (`kohaku/test-2`)
-* Upload a folder + file
+* Upload a folder with random content + README file
 * Download them back and print content
+* delete the folder with random content
 
 ---
 
@@ -94,29 +95,5 @@ This will:
 
 * Config format: [TOML](./config-example.toml)
 * Dependencies: see [pyproject.toml](./pyproject.toml)
-* Database: SQLite (auto-initialized on startup)
+* Database: SQLite (auto-initialized on startup) / PostgreSQL (docker-compose)
 * Auth: currently mocked (`me` user only)
-
----
-
-## Roadmap / TODO
-
-From [TODO.md](./TODO.md):
-
-### Basic Infra
-
-* [x] LakeFS + MinIO deployment
-* [ ] MinIO presigned URL integration
-
-### API Layer
-
-* [x] Upload small file
-* [ ] Upload large file (LFS full support)
-* [x] Download via direct HTTP
-* [ ] Repo deletion, rename
-* [ ] Auth system & orgs/visibility
-
-### Web UI
-
-* [ ] User dashboard
-* [ ] Repo browser

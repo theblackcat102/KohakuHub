@@ -4,19 +4,20 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
 
 - [ ] Basic Infra Structure
     - [x] LakeFS + MinIO deployment
-    - [ ] MinIO presigned URL
+    - [x] MinIO presigned URL
     - [ ] ...TBA...
 - [ ] API layer
-    - [ ] Upload
+    - [x] Upload
         - [x] Upload small file (not LFS)
-        - [ ] Upload large file
+        - [x] Upload large file
     - [x] Download
-        - [x] Direct http requests
+        - [x] Direct http requests (with S3 presigned url)
         - [ ] Other special interface (if have)
+    - [x] Deletion
     - [ ] Repository Managements
         - [x] Tree List
         - [x] Creation
-        - [ ] Deletion
+        - [x] Deletion
         - [ ] Move/Modify name
         - [ ] ...TBA...
     - [ ] User Auth System
@@ -24,4 +25,4 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
     - [ ] ...TBA...
 - [ ] Basic webUI
     - [ ] User dashboard
-    - [ ]
+    - [ ] ...TBA...
