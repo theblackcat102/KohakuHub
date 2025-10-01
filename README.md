@@ -6,7 +6,7 @@ It combines:
 - **LakeFS** → Git-like versioning of files  
 - **MinIO (S3)** → Object storage backend  
 - **FastAPI** → API layer compatible with HuggingFace Hub client  
-- **SQLite** → Lightweight metadata and deduplication database  
+- **SQL database (Postgre/SQLite)** → Lightweight metadata and deduplication database  
 
 ⚠️ This project is still under active development. Expect incomplete features and frequent changes.
 
@@ -18,7 +18,7 @@ It combines:
 - ✅ File upload (small files)
 - ✅ File download (via presigned URLs)
 - ✅ Tree listing & revision metadata
-- ⚠️ Large file upload (Git LFS) – partially implemented
+- ✅ Large file upload (Git LFS)
 - ⚠️ User auth & organizations – not yet implemented
 - ⚠️ Web UI – not yet implemented
 
@@ -33,15 +33,19 @@ For detailed API workflow, see [API.md](./API.md).
 ```bash
 git clone https://github.com/KohakuBlueleaf/Kohaku-Hub.git
 cd Kohaku-Hub
-python -m pip install -e .[dev]
-````
+```
 
-### 2. Launch dependencies with Docker Compose
+### 2. Configure the app
 
-This spins up **MinIO** and **LakeFS** under a local network.
+Modify the `docker-compose.yml` if needed.
+
+by default, the KohakuHub container will try to setup lakefs and s3 storage if lakefs have no user and s3 storage have no choosed bucket.
+If you have your own lakefs/s3 storage, you may want to configure the access key by yourselve.
+
+### 3. Launch the server directly
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 Services:
@@ -49,32 +53,10 @@ Services:
 * MinIO S3 API → `http://127.0.0.1:29001`
 * MinIO Console → `http://127.0.0.1:29000`
 * LakeFS Web + API → `http://127.0.0.1:28000`
+* KohakuHub API → `http://127.0.0.1:48888`
 
-### 3. Configure the app
 
-Copy the example config and adjust as needed:
-
-```bash
-cp config-example.toml config.toml
-```
-
-At minimum, ensure:
-
-* `s3.public_endpoint` / `s3.endpoint`
-* `lakefs.endpoint`
-* `app.base_url` / `app.db_backend` / `app.database_url`
-
-### 4. Run the API server
-
-For development:
-
-```bash
-uvicorn kohakuhub.main:app --reload --port 48888
-```
-
-Now your hub API is available at `http://127.0.0.1:48888`.
-
-### 5. Test with HuggingFace Hub client
+### 4. Test with HuggingFace Hub client
 
 A sample script is included in [`test.py`](./test.py):
 
@@ -89,11 +71,8 @@ This will:
 * Download them back and print content
 * delete the folder with random content
 
----
+You should be able to see the Repository in LakeFS ui after running this test script.
 
-## Development Notes
-
-* Config format: [TOML](./config-example.toml)
-* Dependencies: see [pyproject.toml](./pyproject.toml)
-* Database: SQLite (auto-initialized on startup) / PostgreSQL (docker-compose)
-* Auth: currently mocked (`me` user only)
+NOTE:
+* If you are using default behavior, the access key/secrete key of LakeFS will be stored at `hub-meta/hub-api/credentials.env`
+* You can use access key as account, secrete key as password in LakeFS web interface to browse the repository.
