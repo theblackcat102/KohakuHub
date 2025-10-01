@@ -182,6 +182,9 @@ file = api.hf_hub_download(
 
 That's it! All existing `huggingface_hub` code works without modification.
 
+### With `hfutils`
+hfutils: https://github.com/deepghs/hfutils
+
 With `hfutils` you can also upload your whole folder easily and utilize KohakuHub in any huggingface model loader like `transformers` or `diffusers`
 ```bash
 export HF_ENDPOINT="https://huggingface.co/"
@@ -189,6 +192,9 @@ hfutils download -t model -r KBlueLeaf/EQ-SDXL-VAE -d . -o ./eq-sdxl
 export HF_ENDPOINT="http://127.0.0.1:48888/"
 hfutils upload -t model -r KBlueLeaf/EQ-SDXL-VAE -d . -i ./eq-sdxl
 ```
+
+### Use KohakuHub in `transformers` and `diffusers`
+You can utilize your model on KohakuHub in `transformers` and `diffusers` directly:
 
 ```python
 import os
