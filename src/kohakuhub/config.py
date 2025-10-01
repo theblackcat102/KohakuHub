@@ -47,8 +47,8 @@ def load_config(path: str = None) -> Config:
         s3_config = S3Config(
             public_endpoint=os.environ["KOHAKU_HUB_S3_PUBLIC_ENDPOINT"],
             endpoint=os.environ["KOHAKU_HUB_S3_ENDPOINT"],
-            access_key=["KOHAKU_HUB_S3_ACCESS_KEY"],
-            secret_key=["KOHAKU_HUB_S3_SECRET_KEY"],
+            access_key=os.environ["KOHAKU_HUB_S3_ACCESS_KEY"],
+            secret_key=os.environ["KOHAKU_HUB_S3_SECRET_KEY"],
             bucket=os.environ.get("KOHAKU_HUB_S3_BUCKET", "hub_storage"),
             region=os.environ.get("KOHAKU_HUB_S3_REGION", "us-east-1"),
         )
@@ -59,7 +59,6 @@ def load_config(path: str = None) -> Config:
             secret_key=os.environ["KOHAKU_HUB_LAKEFS_SECRET_KEY"],
             repo_namespace=os.environ.get("KOHAKU_HUB_LAKEFS_REPO_NAMESPACE", ""),
         )
-
         app_config = AppConfig(
             base_url=os.environ.get("KOHAKU_HUB_BASE_URL", "127.0.0.1:48888"),
             api_base=os.environ.get("KOHAKU_HUB_API_BASE", "/api"),

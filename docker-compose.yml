@@ -1,13 +1,45 @@
+# docker-compose.yml
 version: "3.9"
 
 services:
+  hub-api:
+    build: . # Build the image from the Dockerfile in the current directory
+    container_name: hub-api
+    restart: always
+    ports:
+      - "48888:48888" # Map host port to container port
+    depends_on:
+      - postgres
+      - lakefs
+      - minio
+    environment:
+      ## S3 Configuration (linking to the 'minio' service)
+      - KOHAKU_HUB_S3_PUBLIC_ENDPOINT=http://127.0.0.1:29001
+      - KOHAKU_HUB_S3_ENDPOINT=http://minio:9000
+      - KOHAKU_HUB_S3_ACCESS_KEY=minioadmin
+      - KOHAKU_HUB_S3_SECRET_KEY=minioadmin
+      - KOHAKU_HUB_S3_BUCKET=hub-storage
+      ## LakeFS Configuration (linking to the 'lakefs' service)
+      # uncomment the following lines if you want to manually configure LakeFS
+      # by default the hub-api docker container will try to setup lakefs automatically
+      # -KOHAKU_HUB_LAKEFS_ACCESS_KEY=xxx
+      # -KOHAKU_HUB_LAKEFS_SECRET_KEY=xxx
+      - KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:28000
+      - KOHAKU_HUB_LAKEFS_REPO_NAMESPACE=hf
+      ## Application Configuration
+      - KOHAKU_HUB_BASE_URL=http://127.0.0.1:48888
+      - KOHAKU_HUB_DB_BACKEND=postgres
+      - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/hubdb # Linking to the 'postgres' service
+    volumes:
+      - ./hub-meta/hub-api:/hub-api-creds
+
   minio:
     image: quay.io/minio/minio:latest
     container_name: minio
     command: server /data --console-address ":29000"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
     ports:
       - "29001:9000"    # S3 API
       - "29000:29000"   # Web Console
@@ -19,24 +51,22 @@ services:
     image: treeverse/lakefs:latest
     container_name: lakefs
     environment:
-      LAKEFS_DATABASE_TYPE: local
-      LAKEFS_DATABASE_LOCAL_PATH: /var/lakefs/data/metadata.db
-      LAKEFS_BLOCKSTORE_TYPE: s3
-      LAKEFS_BLOCKSTORE_S3_ENDPOINT: http://minio:9000
-      LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE: "true"
-      LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID: minioadmin
-      LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY: minioadmin
-      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: "YOUR_SECRET_KEY"
-      LAKEFS_LOGGING_FORMAT: text
-      LAKEFS_LISTEN_ADDRESS: "0.0.0.0:28000"
+      - LAKEFS_DATABASE_TYPE=local
+      - LAKEFS_DATABASE_LOCAL_PATH=/var/lakefs/data/metadata.db
+      - LAKEFS_BLOCKSTORE_TYPE=s3
+      - LAKEFS_BLOCKSTORE_S3_ENDPOINT=http://minio:9000
+      - LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE=true
+      - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID=minioadmin
+      - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY=minioadmin
+      - LAKEFS_AUTH_ENCRYPT_SECRET_KEY=a_very_secret_key_change_me # IMPORTANT: Change this key
+      - LAKEFS_LOGGING_FORMAT=text
+      - LAKEFS_LISTEN_ADDRESS=0.0.0.0:28000
     ports:
       - "28000:28000"   # lakeFS Web + API
-    user: "${UID}:${GID}" # May be crucial for lakefs/data and cache to work correctly
+    user: "${UID}:${GID}" # May be crucial for permissions
     depends_on:
       - minio
     volumes:
-      ### NOTE: REMEMBER TO ENSURE THE PERMISSIONS OF /data/hub-meta/lakefs-data and /lakefs/data/cache
-      ### LakeFS may not be able to access these directories (always check docker logs for errors)
       - ./hub-meta/lakefs-data:/var/lakefs/data
       - ./hub-meta/lakefs-cache:/lakefs/data/cache
 
@@ -45,9 +75,9 @@ services:
     container_name: postgres
     restart: always
     environment:
-      POSTGRES_USER: hub
-      POSTGRES_PASSWORD: hubpass
-      POSTGRES_DB: hubdb
+      - POSTGRES_USER=hub
+      - POSTGRES_PASSWORD=hubpass
+      - POSTGRES_DB=hubdb
     ports:
       - "25432:5432"
     volumes:

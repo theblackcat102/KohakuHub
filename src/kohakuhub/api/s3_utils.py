@@ -27,6 +27,41 @@ def get_s3_client():
     )
 
 
+def init_storage():
+    """Check and create the configured S3 bucket if it doesn't exist."""
+    s3 = get_s3_client()
+    bucket_name = cfg.s3.bucket
+    region = cfg.s3.region
+
+    try:
+        s3.head_bucket(Bucket=bucket_name)
+        print(f"S3 Bucket '{bucket_name}' already exists.")
+    except Exception as e:
+        # If a 404 error is received, the bucket does not exist
+        error_code = e.response["Error"]["Code"]
+        if error_code == "404":
+            print(f"S3 Bucket '{bucket_name}' not found. Creating it...")
+            try:
+                # MinIO doesn't care about the region for local setup, but S3 requires it
+                if region and region != "us-east-1":
+                    s3.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={"LocationConstraint": region},
+                    )
+                else:
+                    s3.create_bucket(Bucket=bucket_name)
+
+                print(f"S3 Bucket '{bucket_name}' created successfully.")
+            except Exception as e:
+                print(f"Failed to create S3 bucket '{bucket_name}': {e}")
+                # You might want to raise this error to halt startup
+                raise
+        else:
+            # Other error (e.g., 403 Forbidden)
+            print(f"Error checking S3 bucket '{bucket_name}': {e}")
+            raise
+
+
 def generate_download_presigned_url(
     bucket: str, key: str, expires_in: int = 3600, filename: str = None
 ) -> str:

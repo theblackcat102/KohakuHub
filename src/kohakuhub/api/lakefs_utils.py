@@ -33,7 +33,4 @@ def lakefs_repo_name(repo_type: str, repo_id: str) -> str:
     # Replace slashes with hyphens for LakeFS compatibility
     safe_id = repo_id.replace("/", "-")
     basename = f"{cfg.lakefs.repo_namespace}-{repo_type}-{safe_id}".lower()
-    repo = Repository.get_or_none(full_id=repo_id, repo_type=repo_type)
-    if repo:
-        return f"{basename}-{repo.id}"
     return basename

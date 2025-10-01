@@ -1,18 +1,30 @@
 """Main FastAPI application for Kohaku Hub."""
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import basic, file, lfs, utils
 from .config import cfg
 from .db import Repository
-from .api.file import resolve_file, RepoType
+from .api.file import resolve_file
+from .api.s3_utils import init_storage
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the ML model
+    init_storage()
+    yield
+
 
 app = FastAPI(
     title="Kohaku Hub",
     description="HuggingFace-compatible hub with LakeFS and S3 storage",
     version="0.0.1",
+    lifespan=lifespan,
 )
+
 
 # CORS middleware
 app.add_middleware(
