@@ -13,7 +13,12 @@ from pydantic import BaseModel
 
 from ..config import cfg
 from ..db import File
-from .s3_utils import generate_upload_presigned_url, generate_multipart_upload_urls
+from .s3_utils import (
+    generate_download_presigned_url,
+    generate_upload_presigned_url,
+    object_exists,
+    get_object_metadata,
+)
 
 router = APIRouter()
 
@@ -67,8 +72,8 @@ class LFSBatchResponse(BaseModel):
     hash_algo: str = "sha256"
 
 
-@router.post("/{repo_id:path}.git/info/lfs/objects/batch")
-async def lfs_batch(repo_id: str, request: Request):
+@router.post("/{namespace}/{name}.git/info/lfs/objects/batch")
+async def lfs_batch(namespace: str, name: str, request: Request):
     """Git LFS Batch API endpoint.
 
     Handles LFS batch requests for upload/download operations.
@@ -84,6 +89,7 @@ async def lfs_batch(repo_id: str, request: Request):
     Raises:
         HTTPException: If operation fails
     """
+    repo_id = f"{namespace}/{name}"
     # Parse request
     try:
         body = await request.json()
@@ -193,8 +199,6 @@ async def lfs_batch(repo_id: str, request: Request):
             else:
                 # Object exists, provide download URL
                 try:
-                    from .s3_utils import generate_download_presigned_url
-
                     download_url = generate_download_presigned_url(
                         bucket=cfg.s3.bucket,
                         key=lfs_key,
@@ -246,8 +250,8 @@ async def lfs_batch(repo_id: str, request: Request):
     )
 
 
-@router.post("/{repo_id:path}.git/info/lfs/verify")
-async def lfs_verify(repo_id: str, request: Request):
+@router.post("/api/{namespace}/{name}.git/info/lfs/verify")
+async def lfs_verify(namespace: str, name: str, request: Request):
     """Verify LFS upload completion.
 
     Called by client after successful upload to confirm the file.
@@ -259,6 +263,7 @@ async def lfs_verify(repo_id: str, request: Request):
     Returns:
         Verification result
     """
+    repo_id = f"{namespace}/{name}"
     try:
         body = await request.json()
     except Exception as e:
@@ -270,9 +275,6 @@ async def lfs_verify(repo_id: str, request: Request):
     if not oid:
         raise HTTPException(400, detail={"error": "Missing OID"})
 
-    # Check if object exists in S3
-    from .s3_utils import object_exists
-
     lfs_key = f"lfs/{oid[:2]}/{oid[2:4]}/{oid}"
 
     if not object_exists(cfg.s3.bucket, lfs_key):
@@ -280,8 +282,6 @@ async def lfs_verify(repo_id: str, request: Request):
 
     # Optionally verify size
     if size:
-        from .s3_utils import get_object_metadata
-
         try:
             metadata = get_object_metadata(cfg.s3.bucket, lfs_key)
             if metadata["size"] != size:

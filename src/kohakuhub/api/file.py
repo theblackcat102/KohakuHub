@@ -39,8 +39,10 @@ class RepoType(str, Enum):
 # ========== Preupload Endpoint ==========
 
 
-@router.post("/{repo_type}s/{repo_id:path}/preupload/{revision}")
-async def preupload(repo_type: RepoType, repo_id: str, revision: str, request: Request):
+@router.post("/{repo_type}s/{namespace}/{name}/preupload/{revision}")
+async def preupload(
+    repo_type: RepoType, namespace: str, name: str, revision: str, request: Request
+):
     """Check files before upload and determine upload mode.
 
     This endpoint implements HuggingFace's content deduplication mechanism.
@@ -59,6 +61,7 @@ async def preupload(repo_type: RepoType, repo_id: str, revision: str, request: R
     Raises:
         HTTPException: If repository not found or invalid payload
     """
+    repo_id = f"{namespace}/{name}"
     # Verify repository exists
     if not Repository.get_or_none(
         (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
@@ -155,9 +158,13 @@ async def preupload(repo_type: RepoType, repo_id: str, revision: str, request: R
 # ========== Revision Info Endpoint ==========
 
 
-@router.get("/{repo_type}s/{repo_id:path}/revision/{revision}")
+@router.get("/{repo_type}s/{namespace}/{name}/revision/{revision}")
 def get_revision(
-    repo_type: RepoType, repo_id: str, revision: str, expand: Optional[str] = None
+    repo_type: RepoType,
+    namespace: str,
+    name: str,
+    revision: str,
+    expand: Optional[str] = None,
 ):
     """Get revision information for a repository.
 
@@ -170,6 +177,7 @@ def get_revision(
     Returns:
         Revision metadata
     """
+    repo_id = f"{namespace}/{name}"
     # Check if repository exists in database first
     repo_row = Repository.get_or_none(
         (Repository.repo_type == repo_type.value) & (Repository.full_id == repo_id)
@@ -238,10 +246,15 @@ def get_revision(
 # ========== Download Endpoints ==========
 
 
-@router.head("/{repo_type}s/{repo_id:path}/resolve/{revision}/{path:path}")
-@router.get("/{repo_type}s/{repo_id:path}/resolve/{revision}/{path:path}")
+@router.head("/{repo_type}s/{namespace}/{repo_name}/resolve/{revision}/{path:path}")
+@router.get("/{repo_type}s/{namespace}/{repo_name}/resolve/{revision}/{path:path}")
 async def resolve_file(
-    repo_type: str, repo_id: str, revision: str, path: str, request: Request
+    repo_type: str,
+    namespace: str,
+    name: str,
+    revision: str,
+    path: str,
+    request: Request,
 ):
     """Resolve file path to download URL.
 
@@ -273,7 +286,7 @@ async def resolve_file(
     from fastapi.responses import Response, RedirectResponse
     from .s3_utils import generate_download_presigned_url, parse_s3_uri
 
-    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+    lakefs_repo = lakefs_repo_name(repo_type, f"{namespace}/{name}")
     client = get_lakefs_client()
 
     try:
@@ -356,10 +369,11 @@ async def resolve_file(
 # ========== Commit Endpoint ==========
 
 
-@router.post("/{repo_type}s/{repo_id:path}/commit/{revision}")
+@router.post("/{repo_type}s/{namespace}/{name}/commit/{revision}")
 async def commit(
     repo_type: RepoType,
-    repo_id: str,
+    namespace: str,
+    name: str,
     revision: str,
     request: Request,
     user=Depends(get_current_user),
@@ -382,6 +396,7 @@ async def commit(
     Raises:
         HTTPException: If commit fails
     """
+    repo_id = f"{namespace}/{name}"
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
     client = get_lakefs_client()
 

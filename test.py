@@ -37,7 +37,7 @@ file = api.hf_hub_download(
     filename="README.md",
     repo_type="model",
 )
-with open(file, "r") as f:
+with open(file, "rb") as f:
     print(f.read()[:50])
 
 file = api.hf_hub_download(

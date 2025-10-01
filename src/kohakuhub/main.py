@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import basic, file, lfs, utils
 from .config import cfg
+from .db import Repository
+from .api.file import resolve_file, RepoType
 
 app = FastAPI(
     title="Kohaku Hub",
@@ -29,9 +31,11 @@ app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
 
 
 # Public download endpoint (no /api prefix, matches HuggingFace URL pattern)
-@app.get("/{repo_id:path}/resolve/{revision}/{path:path}")
-@app.head("/{repo_id:path}/resolve/{revision}/{path:path}")
-async def public_resolve(repo_id: str, revision: str, path: str, request: Request):
+@app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
+@app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
+async def public_resolve(
+    namespace: str, name: str, revision: str, path: str, request: Request
+):
     """Public download endpoint without /api prefix.
 
     Matches HuggingFace Hub URL pattern for direct file downloads.
@@ -45,17 +49,15 @@ async def public_resolve(repo_id: str, revision: str, path: str, request: Reques
     Returns:
         File download response or redirect
     """
-    from .db import Repository
-    from .api.file import resolve_file, RepoType
 
-    namespace, name = repo_id.split("/")
     repo = Repository.get_or_none(name=name, namespace=namespace)
     if not repo:
         raise HTTPException(404, detail={"error": "Repository not found"})
 
     return await resolve_file(
         repo_type=repo.repo_type,
-        repo_id=repo_id,
+        namespace=namespace,
+        name=name,
         revision=revision,
         path=path,
         request=request,
