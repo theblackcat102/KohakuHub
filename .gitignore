@@ -1,3 +1,5 @@
+hub-meta/
+hub-storage/
 *.db
 test_*/
 config.toml
