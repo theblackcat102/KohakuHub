@@ -207,7 +207,7 @@ async def lfs_batch(namespace: str, name: str, request: Request):
 
                     expires_at = (
                         datetime.now(timezone.utc) + timedelta(seconds=3600)
-                    ).isoformat() + "Z"
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
                     objects_response.append(
                         LFSObjectResponse(

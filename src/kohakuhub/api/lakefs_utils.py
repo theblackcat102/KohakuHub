@@ -4,6 +4,7 @@ import lakefs_client
 from lakefs_client.client import LakeFSClient
 
 from ..config import cfg
+from ..db import Repository
 
 
 def get_lakefs_client() -> LakeFSClient:
@@ -15,7 +16,7 @@ def get_lakefs_client() -> LakeFSClient:
     config = lakefs_client.Configuration()
     config.username = cfg.lakefs.access_key
     config.password = cfg.lakefs.secret_key
-    config.host = f"{cfg.lakefs.internal_endpoint}/api/v1"
+    config.host = f"{cfg.lakefs.endpoint}/api/v1"
     return LakeFSClient(config)
 
 
@@ -31,4 +32,8 @@ def lakefs_repo_name(repo_type: str, repo_id: str) -> str:
     """
     # Replace slashes with hyphens for LakeFS compatibility
     safe_id = repo_id.replace("/", "-")
-    return f"{cfg.lakefs.repo_namespace}-{repo_type}-{safe_id}".lower()
+    basename = f"{cfg.lakefs.repo_namespace}-{repo_type}-{safe_id}".lower()
+    repo = Repository.get_or_none(full_id=repo_id, repo_type=repo_type)
+    if repo:
+        return f"{basename}-{repo.id}"
+    return basename
