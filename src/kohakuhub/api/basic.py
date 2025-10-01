@@ -7,7 +7,7 @@ from lakefs_client.models import RepositoryCreation
 from pydantic import BaseModel
 
 from ..config import cfg
-from ..db import Repository, init_db
+from ..db import Repository, init_db, File, StagingUpload
 from .auth import get_current_user
 from .hf_utils import (
     HFErrorCode,
@@ -89,6 +89,74 @@ def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
         "url": f"{cfg.app.base_url}/{payload.type}s/{full_id}",
         "repo_id": full_id,
     }
+
+
+class DeleteRepoPayload(BaseModel):
+    """Payload for repository deletion."""
+
+    type: RepoType = "model"
+    name: str
+    organization: Optional[str] = None
+    sdk: Optional[str] = None
+
+
+@router.delete("/repos/delete")
+async def delete_repo(
+    payload: DeleteRepoPayload,
+    user=Depends(get_current_user),
+):
+    """Delete a repository. (NOTE: This is IRREVERSIBLE)
+
+    Args:
+        name: Repository name.
+        organization: Organization name (optional, defaults to user namespace).
+        type: Repository type.
+        user: Current authenticated user.
+
+    Returns:
+        Success message or error response.
+    """
+    repo_type = payload.type
+    namespace = payload.organization or user.username
+    full_id = f"{namespace}/{payload.name}"
+    lakefs_repo = lakefs_repo_name(repo_type, full_id)
+
+    # 1. Check if repository exists in database
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == full_id) & (Repository.repo_type == repo_type)
+    )
+
+    if not repo_row:
+        # NOTE: HuggingFace client expects 400 for delete repo not found
+        # but 404 for getting repo not found. Use 400 with RepoNotFound code.
+        return hf_repo_not_found(full_id, repo_type)
+
+    # 2. Delete LakeFS repository
+    client = get_lakefs_client()
+    try:
+        # Note: Deleting a LakeFS repo is generally fast as it only deletes metadata
+        client.repositories.delete_repository(repository=lakefs_repo)
+        print(f"Successfully deleted LakeFS repository: {lakefs_repo}")
+    except Exception as e:
+        # LakeFS returns 404 if repo doesn't exist, which is fine
+        if not is_lakefs_not_found_error(e):
+            # If LakeFS deletion fails for other reasons, fail the whole operation
+            return hf_server_error(f"LakeFS repository deletion failed: {str(e)}")
+        print(f"LakeFS repository {lakefs_repo} not found/already deleted (OK)")
+
+    # 3. Delete related metadata from database (manual cascade)
+    try:
+        # Delete related file records first
+        File.delete().where(File.repo_full_id == full_id).execute()
+        StagingUpload.delete().where(StagingUpload.repo_full_id == full_id).execute()
+        repo_row.delete_instance()
+        print(f"Successfully deleted database records for: {full_id}")
+    except Exception as e:
+        return hf_server_error(f"Database deletion failed for {full_id}: {str(e)}")
+
+    # 4. Return success response (200 OK with a simple message)
+    # HuggingFace Hub delete_repo returns a simple 200 OK.
+    return {"message": f"Repository '{full_id}' of type '{repo_type}' deleted."}
 
 
 @router.get("/models/{namespace}/{repo_name}")
@@ -354,8 +422,9 @@ def list_repos(
 
     # Query database
     q = Repository.select().where(Repository.repo_type == rt)
-    if author:
-        q = q.where(Repository.namespace == author)
+    # [TODO] User auth system with correct namespace system
+    # if author:
+    #     q = q.where(Repository.namespace == author)
     rows = q.limit(limit)
 
     # Format response
@@ -366,7 +435,9 @@ def list_repos(
             "private": r.private,
             "sha": None,
             "lastModified": None,
-            "createdAt": r.created_at.isoformat() if r.created_at else None,
+            "createdAt": (
+                r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if r.created_at else None
+            ),
             "downloads": 0,
             "likes": 0,
             "gated": False,
