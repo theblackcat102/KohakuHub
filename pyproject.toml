@@ -24,6 +24,8 @@ dependencies = [
     "psycopg2-binary",
     "pyyaml",
     "bcrypt",
+    "questionary",
+    "rich",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 
@@ -31,6 +33,10 @@ urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 dev = [
     "huggingface_hub",
 ]
+
+
+[project.scripts]
+khub-cli = "khub_cli.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
