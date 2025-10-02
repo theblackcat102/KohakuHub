@@ -44,6 +44,9 @@ See [API.md](./API.md) for detailed API documentation and workflow diagrams.
 
 - Docker and Docker Compose
 - Python 3.10+ (for testing with `huggingface_hub` client)
+- [Optional]
+    - S3 Storage (MinIO is default one which run with docker compose)
+    - SMTP service (For optional email verification)
 
 ### 1. Clone the Repository
 
