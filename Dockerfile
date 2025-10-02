@@ -8,9 +8,9 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-COPY pyproject.toml .
+COPY ./pyproject.toml .
 COPY ./src/ ./src/
-COPY startup.py /app/startup.py
+COPY ./docker/startup.py /app/startup.py
 RUN chmod +x /app/startup.py
 
 RUN uv pip install --system httpx
