@@ -20,7 +20,7 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
         - [x] Deletion
         - [ ] Move/Modify name
         - [ ] ...TBA...
-    - [ ] User Auth System
+    - [x] User Auth System
     - [ ] Organization/Visibility
     - [ ] ...TBA...
 - [ ] Basic webUI

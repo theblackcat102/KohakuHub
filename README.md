@@ -19,13 +19,15 @@ KohakuHub provides a simple but functional solution for teams and individuals wh
 ## Key Features
 
 - ✅ **HuggingFace Compatible**: Works seamlessly with existing `huggingface_hub` client code
-- ✅ **S3-Compatible Storage**: Use any S3-compatible backend (MinIO, Cloudflare R2, Wasabi, AWS S3, etc.) - pick the one that fits your budget and performance needs
+- ✅ **S3-Compatible Storage**: Use any S3-compatible backend (MinIO, Cloudflare R2, Wasabi, AWS S3, etc.)
 - ✅ **Repository Management**: Create, list, and delete model/dataset/space repositories
 - ✅ **File Operations**: Upload, download, copy, and delete files with automatic deduplication
 - ✅ **Large File Support**: Handles files of any size with Git LFS protocol
 - ✅ **Version Control**: Git-like branching and commit history via LakeFS
+- ✅ **Authentication & Authorization**: Secure user registration, session management, and API tokens
+- ✅ **Organization Management**: Create organizations and manage member roles
+- ✅ **CLI Tool**: `kohub-cli` for easy user and organization management
 - 🚧 **Web UI**: Coming soon (contributions welcome!)
-- 🚧 **Authentication**: Basic auth system (under development)
 
 ## Architecture
 
@@ -111,8 +113,6 @@ The S3 public endpoint is used for generating download URLs. It should point to 
 ### 3. Start the Services
 
 ```bash
-cd docker
-
 # Set user/group ID for proper permissions
 export UID=$(id -u)
 export GID=$(id -g)
@@ -143,8 +143,6 @@ Access the web interfaces:
 ### 5. Test with Python Client
 
 ```bash
-cd ..
-
 # Install the official HuggingFace client
 pip install huggingface_hub
 
@@ -158,9 +156,57 @@ The test script will:
 - Download them back
 - Verify content integrity
 
+## `kohub-cli` Usage
+
+KohakuHub includes a command-line tool, `kohub-cli`, to simplify user and organization management.
+
+### Installation
+
+The CLI is included in the source code. To run it, first install the dependencies:
+
+```bash
+pip install -r requirements.txt
+pip install -e .
+```
+
+Then run the CLI:
+
+```bash
+kohub-cli
+```
+
+### User Management
+
+The CLI provides an interactive menu for user management.
+
+#### 1. Register a New User
+
+- Run the CLI and select `User Management` -> `Register`.
+- Follow the prompts to enter a username, email, and password.
+
+#### 2. Login
+
+- Select `User Management` -> `Login`.
+- Enter your username and password to create a session.
+
+#### 3. Generate an API Token
+
+- After logging in, select `User Management` -> `Create Token`.
+- Give the token a name (e.g., "my-laptop").
+- The CLI will print a new API token. **Save this token securely!**
+
+### Organization Management
+
+You can also manage organizations and members.
+
+- **Create Organization**: `Organization Management` -> `Create Organization`
+- **Manage Members**: Add, remove, or update member roles within an organization.
+
 ## Using KohakuHub
 
 ### With Python Client
+
+To interact with your private repositories, you need to provide your API token.
 
 ```python
 import os
@@ -168,26 +214,30 @@ from huggingface_hub import HfApi
 
 # Point to your KohakuHub instance
 os.environ["HF_ENDPOINT"] = "http://localhost:48888"
-api = HfApi(endpoint="http://localhost:48888")
+# Provide your API token
+os.environ["HF_TOKEN"] = "your_api_token_here"
+
+api = HfApi(
+    endpoint=os.environ["HF_ENDPOINT"],
+    token=os.environ["HF_TOKEN"]
+)
 
 # Create a repository
-api.create_repo("myorg/mymodel", repo_type="model")
+api.create_repo("my-org/my-model", repo_type="model")
 
 # Upload files
 api.upload_file(
     path_or_fileobj="model.safetensors",
     path_in_repo="model.safetensors",
-    repo_id="myorg/mymodel",
+    repo_id="my-org/my-model",
 )
 
 # Download files
 file = api.hf_hub_download(
-    repo_id="myorg/mymodel",
+    repo_id="my-org/my-model",
     filename="model.safetensors",
 )
 ```
-
-That's it! All existing `huggingface_hub` code works without modification.
 
 ### With `hfutils`
 hfutils: https://github.com/deepghs/hfutils
@@ -197,6 +247,7 @@ With `hfutils` you can also upload your whole folder easily and utilize KohakuHu
 export HF_ENDPOINT="https://huggingface.co/"
 hfutils download -t model -r KBlueLeaf/EQ-SDXL-VAE -d . -o ./eq-sdxl
 export HF_ENDPOINT="http://127.0.0.1:48888/"
+export HF_TOKEN="your_api_token_here"
 hfutils upload -t model -r KBlueLeaf/EQ-SDXL-VAE -d . -i ./eq-sdxl
 ```
 
@@ -206,6 +257,7 @@ You can utilize your model on KohakuHub in `transformers` and `diffusers` direct
 ```python
 import os
 os.environ["HF_ENDPOINT"] = "http://127.0.0.1:48888/"
+os.environ["HF_TOKEN"] = "your_api_token_here"
 from diffusers import AutoencoderKL
 
 vae = AutoencoderKL.from_pretrained("KBlueLeaf/EQ-SDXL-VAE")
@@ -229,7 +281,7 @@ For advanced configuration, you can create a `config.toml` file or use environme
 Key settings include:
 - **LFS threshold**: Files larger than this use Git LFS protocol (default: 10MB)
 - **Database backend**: Choose between SQLite (default) or PostgreSQL
-- **Storage paths**: Customize where metadata and files are stored
+- **Authentication**: Enable email verification, set session expiry, etc.
 
 ## Project Status & Roadmap
 
@@ -240,9 +292,10 @@ See [TODO.md](./TODO.md) for detailed development status.
 - ✅ HuggingFace client compatibility
 - ✅ Large file support (Git LFS)
 - ✅ Docker deployment
-- 🚧 Authentication & authorization
+- ✅ Authentication & Authorization
+- ✅ Organization Management
+- ✅ CLI for administration
 - 🚧 Web user interface
-- 🚧 Organization management
 
 ## Contributing
 
