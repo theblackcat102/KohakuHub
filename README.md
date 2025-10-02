@@ -1,5 +1,7 @@
 # KohakuHub: Self-Hosted HuggingFace Hub Alternative
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/KohakuBlueleaf/KohakuHub)
+
 **⚠️ Work In Progress - Not Ready for Production**
 
 **Join our community!: https://discord.gg/xWYrkyvJ2s**
