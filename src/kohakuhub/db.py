@@ -127,9 +127,37 @@ class StagingUpload(BaseModel):
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
+class Organization(BaseModel):
+    id = AutoField()
+    name = CharField(unique=True, index=True)
+    description = TextField(null=True)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+
+class UserOrganization(BaseModel):
+    id = AutoField()
+    user = IntegerField(index=True)
+    organization = IntegerField(index=True)
+    role = CharField(default="visitor")  # super-admin, admin, member, visitor
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = ((("user", "organization"), True),)
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
-        [User, EmailVerification, Session, Token, Repository, File, StagingUpload],
+        [
+            User,
+            EmailVerification,
+            Session,
+            Token,
+            Repository,
+            File,
+            StagingUpload,
+            Organization,
+            UserOrganization,
+        ],
         safe=True,
     )

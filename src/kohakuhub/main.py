@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import basic, file, lfs, utils
 from .auth import router as auth_router
+from .org import router as org_router
 from .config import cfg
 from .db import Repository
 from .api.file import resolve_file
@@ -39,6 +40,7 @@ app.include_router(basic.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(file.router, prefix=cfg.app.api_base, tags=["files"])
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
+app.include_router(org_router, prefix="/org", tags=["organizations"])
 
 
 @app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
