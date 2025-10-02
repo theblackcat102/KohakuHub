@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadata
 
 from ..config import cfg
-from ..db import File, Repository, StagingUpload
+from ..db import File, Repository, StagingUpload, User
 from .auth import get_current_user
 from .lakefs_utils import get_lakefs_client, lakefs_repo_name
 from .s3_utils import get_s3_client
@@ -376,7 +376,7 @@ async def commit(
     name: str,
     revision: str,
     request: Request,
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Create atomic commit with multiple file operations.
 
@@ -447,7 +447,7 @@ async def commit(
             content_b64 = value.get("content")
             encoding = (value.get("encoding") or "").lower()
 
-            if not content_b64 or not encoding.startswith("base64"):
+            if not encoding.startswith("base64"):
                 raise HTTPException(
                     400, detail={"error": f"Invalid file operation for {path}"}
                 )
@@ -456,6 +456,7 @@ async def commit(
             try:
                 data = base64.b64decode(content_b64)
             except Exception as e:
+                raise e
                 raise HTTPException(
                     400, detail={"error": f"Failed to decode base64: {e}"}
                 )

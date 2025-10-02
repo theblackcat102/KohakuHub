@@ -7,7 +7,7 @@ from lakefs_client.models import RepositoryCreation
 from pydantic import BaseModel
 
 from ..config import cfg
-from ..db import Repository, init_db, File, StagingUpload
+from ..db import Repository, init_db, File, StagingUpload, User
 from .auth import get_current_user
 from .hf_utils import (
     HFErrorCode,
@@ -38,7 +38,7 @@ class CreateRepoPayload(BaseModel):
 
 
 @router.post("/repos/create")
-def create_repo(payload: CreateRepoPayload, user=Depends(get_current_user)):
+def create_repo(payload: CreateRepoPayload, user: User = Depends(get_current_user)):
     """Create a new repository.
 
     Args:
@@ -103,7 +103,7 @@ class DeleteRepoPayload(BaseModel):
 @router.delete("/repos/delete")
 async def delete_repo(
     payload: DeleteRepoPayload,
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Delete a repository. (NOTE: This is IRREVERSIBLE)
 

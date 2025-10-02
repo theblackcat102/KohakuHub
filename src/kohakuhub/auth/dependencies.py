@@ -14,6 +14,11 @@ def get_current_user(
 ) -> User:
     """Get current authenticated user from session or token."""
 
+    session_id = str(session_id) if session_id is not None else None
+    authorization = str(authorization) if authorization is not None else None
+
+    print(f"session_id: {session_id}, authorization: {authorization}")
+
     # Try session-based auth first (web UI)
     if session_id:
         session = Session.get_or_none(
