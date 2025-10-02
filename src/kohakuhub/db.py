@@ -11,6 +11,7 @@ from peewee import (
     Model,
     SqliteDatabase,
     PostgresqlDatabase,
+    TextField,
 )
 from .config import cfg
 
@@ -21,7 +22,6 @@ def _sqlite_path(url: str) -> str:
 
 # Choose DB backend
 if cfg.app.db_backend == "postgres":
-    # Example: postgresql://user:pass@host:5432/dbname
     url = cfg.app.database_url.replace("postgresql://", "")
     user_pass, host_db = url.split("@")
     user, password = user_pass.split(":")
@@ -52,6 +52,37 @@ class BaseModel(Model):
 class User(BaseModel):
     id = AutoField()
     username = CharField(unique=True, index=True)
+    email = CharField(unique=True, index=True)
+    password_hash = CharField()
+    email_verified = BooleanField(default=False)
+    is_active = BooleanField(default=True)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+
+class EmailVerification(BaseModel):
+    id = AutoField()
+    user = IntegerField(index=True)
+    token = CharField(unique=True, index=True)
+    expires_at = DateTimeField()
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+
+class Session(BaseModel):
+    id = AutoField()
+    session_id = CharField(unique=True, index=True)
+    user_id = IntegerField(index=True)
+    secret = CharField()
+    expires_at = DateTimeField()
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+
+class Token(BaseModel):
+    id = AutoField()
+    user_id = IntegerField(index=True)
+    token_hash = CharField(unique=True, index=True)
+    name = CharField()
+    last_used = DateTimeField(null=True)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
 class Repository(BaseModel):
@@ -61,6 +92,7 @@ class Repository(BaseModel):
     name = CharField(index=True)
     full_id = CharField(unique=True, index=True)
     private = BooleanField(default=False)
+    owner_id = IntegerField(index=True, default=1)
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
     class Meta:
@@ -97,4 +129,7 @@ class StagingUpload(BaseModel):
 
 def init_db():
     db.connect(reuse_if_open=True)
-    db.create_tables([User, Repository, File, StagingUpload], safe=True)
+    db.create_tables(
+        [User, EmailVerification, Session, Token, Repository, File, StagingUpload],
+        safe=True,
+    )

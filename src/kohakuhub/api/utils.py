@@ -1,9 +1,12 @@
 """Utility API endpoints for Kohaku Hub."""
 
-from fastapi import APIRouter, HTTPException, Request
+import yaml
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-import yaml
+from ..db import User
+from .auth import get_optional_user
+
 
 router = APIRouter()
 
@@ -34,21 +37,30 @@ def validate_yaml(body: ValidateYamlPayload):
 
 
 @router.get("/whoami-v2")
-def whoami_v2():
-    """Get current user information.
+def whoami_v2(user: User = Depends(get_optional_user)):
+    """Get current user information (HuggingFace compatible).
 
-    TODO: Implement real user info retrieval from authentication system.
-
-    Returns:
-        User information object
+    Matches HuggingFace Hub /api/whoami-v2 endpoint format.
+    Returns user info if authenticated, 401 if not.
     """
-    # Mock response matching HuggingFace Hub format
+    if not user:
+        raise HTTPException(401, detail="Invalid user token")
+
+    # Get user's organizations (stub for now - can be implemented later)
+    orgs = []
+
     return {
-        "name": "me",
         "type": "user",
-        "displayName": "me",
-        "email": None,
-        "orgs": [],
+        "id": str(user.id),
+        "name": user.username,
+        "fullname": user.username,
+        "email": user.email,
+        "emailVerified": user.email_verified,
+        "canPay": False,
         "isPro": False,
-        "periodEnd": None,
+        "orgs": orgs,
+        "auth": {
+            "type": "access_token",
+            "accessToken": {"displayName": "Auto-generated token", "role": "write"},
+        },
     }

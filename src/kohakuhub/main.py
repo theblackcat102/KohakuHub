@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import basic, file, lfs, utils
+from .auth import router as auth_router
 from .config import cfg
 from .db import Repository
 from .api.file import resolve_file
@@ -13,7 +14,6 @@ from .api.s3_utils import init_storage
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load the ML model
     init_storage()
     yield
 
@@ -26,7 +26,6 @@ app = FastAPI(
 )
 
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,32 +34,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount API routers with configured prefix
+app.include_router(auth_router, prefix=cfg.app.api_base)
 app.include_router(basic.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(file.router, prefix=cfg.app.api_base, tags=["files"])
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
 
 
-# Public download endpoint (no /api prefix, matches HuggingFace URL pattern)
 @app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
 async def public_resolve(
     namespace: str, name: str, revision: str, path: str, request: Request
 ):
-    """Public download endpoint without /api prefix.
-
-    Matches HuggingFace Hub URL pattern for direct file downloads.
-    Defaults to model repository type.
-
-    Args:
-        repo_id: Repository ID (e.g., "org/repo")
-        revision: Branch name or commit hash
-        path: File path within repository
-
-    Returns:
-        File download response or redirect
-    """
+    """Public download endpoint without /api prefix."""
 
     repo = Repository.get_or_none(name=name, namespace=namespace)
     if not repo:
@@ -85,6 +71,7 @@ def root():
         "description": "HuggingFace-compatible hub with LakeFS and S3 storage",
         "endpoints": {
             "api": cfg.app.api_base,
+            "auth": f"{cfg.app.api_base}/auth",
             "docs": "/docs",
             "redoc": "/redoc",
         },

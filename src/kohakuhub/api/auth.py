@@ -1,10 +1,13 @@
 """Authentication and authorization for Kohaku Hub API.
 
-TODO: Implement real authentication system.
-Currently returns mock user for development.
+Integrates with the new auth system in kohakuhub.auth module.
 """
 
-from ..db import User, db
+from ..db import db, User
+from ..auth.dependencies import (
+    get_current_user as auth_get_current_user,
+    get_optional_user,
+)
 
 
 def get_db():
@@ -20,19 +23,6 @@ def get_db():
 def get_current_user():
     """Get current authenticated user.
 
-    TODO: Implement real authentication:
-    - Parse Authorization header (Bearer token)
-    - Validate token against database or JWT
-    - Return actual User object
-    - Raise HTTPException(401) if invalid
-
-    Returns:
-        Mock user object for development.
+    Now delegates to the real auth system.
     """
-
-    # Mock user for development
-    class MockUser:
-        username = "me"
-        id = 1
-
-    return MockUser()
+    return auth_get_current_user()

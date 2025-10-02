@@ -16,13 +16,14 @@ dependencies = [
     "fastapi",
     "httpx",
     "uvicorn",
-    "pydantic",
+    "pydantic[email]",
     "toml",
     "peewee",
     "boto3",
     "lakefs-client",
     "psycopg2-binary",
     "pyyaml",
+    "bcrypt",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 
