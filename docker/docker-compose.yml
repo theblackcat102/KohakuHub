@@ -30,6 +30,19 @@ services:
       - KOHAKU_HUB_BASE_URL=http://127.0.0.1:48888
       - KOHAKU_HUB_DB_BACKEND=postgres
       - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/hubdb # Linking to the 'postgres' service
+      ## SMTP Configuration (Email Verification - Optional)
+      - KOHAKU_HUB_SMTP_ENABLED=false
+      - KOHAKU_HUB_SMTP_HOST=smtp.gmail.com
+      - KOHAKU_HUB_SMTP_PORT=587
+      - KOHAKU_HUB_SMTP_USERNAME=
+      - KOHAKU_HUB_SMTP_PASSWORD=
+      - KOHAKU_HUB_SMTP_FROM=noreply@kohakuhub.local
+      - KOHAKU_HUB_SMTP_TLS=true
+      ## Auth Configuration
+      - KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
+      - KOHAKU_HUB_SESSION_SECRET=change-this-to-random-string-in-production
+      - KOHAKU_HUB_SESSION_EXPIRE_HOURS=168
+      - KOHAKU_HUB_TOKEN_EXPIRE_DAYS=365
     volumes:
       - ./hub-meta/hub-api:/hub-api-creds
 

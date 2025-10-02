@@ -54,7 +54,7 @@ cd Kohaku-Hub
 
 ### 2. Configure Docker Compose
 
-Before starting, review and customize `docker-compose.yml`:
+Before starting, review and customize `docker/docker-compose.yml`:
 
 #### **Important: Security Configuration**
 
@@ -108,6 +108,8 @@ The S3 public endpoint is used for generating download URLs. It should point to 
 ### 3. Start the Services
 
 ```bash
+cd docker
+
 # Set user/group ID for proper permissions
 export UID=$(id -u)
 export GID=$(id -g)
@@ -138,11 +140,13 @@ Access the web interfaces:
 ### 5. Test with Python Client
 
 ```bash
+cd ..
+
 # Install the official HuggingFace client
 pip install huggingface_hub
 
 # Run the test script
-python test.py
+python scripts/test.py
 ```
 
 The test script will:
@@ -209,7 +213,8 @@ vae = AutoencoderKL.from_pretrained("KBlueLeaf/EQ-SDXL-VAE")
 
 LakeFS credentials are automatically generated on first startup and stored in:
 ```
-hub-meta/hub-api/credentials.env
+docker/hub-meta/hub-api/credentials.env
+# or other path if you have modified docker-compose.yml
 ```
 
 Use these credentials to log into the LakeFS web interface at http://localhost:28000 and browse your repositories.
