@@ -1,7 +1,7 @@
 <!-- src/components/repo/RepoViewer.vue -->
 <template>
   <div class="container-main">
-    <el-breadcrumb separator="/" class="mb-6">
+    <el-breadcrumb separator="/" class="mb-6 text-gray-700 dark:text-gray-300">
       <el-breadcrumb-item :to="{ path: '/' }">Home</el-breadcrumb-item>
       <el-breadcrumb-item :to="{ path: `/${repoType}s` }">
         {{ repoTypeLabel }}
@@ -27,7 +27,7 @@
 
     <div v-else class="grid grid-cols-[1fr_300px] gap-6">
       <!-- Main Content -->
-      <main>
+      <main class="min-w-0">
         <!-- Repo Header -->
         <div class="card mb-6">
           <div class="flex items-start justify-between mb-4">
@@ -36,14 +36,14 @@
               <div>
                 <h1 class="text-3xl font-bold">{{ repoInfo?.id }}</h1>
                 <div class="flex items-center gap-2 mt-1">
-                  <RouterLink 
-                    :to="`/${namespace}`" 
-                    class="text-blue-600 hover:underline"
+                  <RouterLink
+                    :to="`/${namespace}`"
+                    class="text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     {{ namespace }}
                   </RouterLink>
-                  <span class="text-gray-400">/</span>
-                  <span class="text-gray-700">{{ name }}</span>
+                  <span class="text-gray-400 dark:text-gray-500">/</span>
+                  <span class="text-gray-700 dark:text-gray-300">{{ name }}</span>
                 </div>
               </div>
             </div>
@@ -61,7 +61,7 @@
           </div>
 
           <!-- Stats -->
-          <div class="flex items-center gap-6 text-sm text-gray-600">
+          <div class="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
             <div class="flex items-center gap-1">
               <div class="i-carbon-download" />
               <span>{{ repoInfo?.downloads || 0 }} downloads</span>
@@ -95,11 +95,11 @@
 
         <!-- Navigation Tabs -->
         <div class="mb-6">
-          <div class="flex gap-1 border-b border-gray-200">
+          <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700">
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
-                activeTab === 'card' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-900'
+                activeTab === 'card' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               ]"
               @click="navigateToTab('card')"
             >
@@ -108,7 +108,7 @@
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
-                activeTab === 'files' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-900'
+                activeTab === 'files' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               ]"
               @click="navigateToTab('files')"
             >
@@ -117,7 +117,7 @@
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
-                activeTab === 'commits' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600 hover:text-gray-900'
+                activeTab === 'commits' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               ]"
               @click="navigateToTab('commits')"
             >
@@ -127,21 +127,23 @@
         </div>
 
         <!-- Tab Content -->
-        <div v-if="activeTab === 'card'" class="card">
-          <div v-if="readmeContent">
-            <MarkdownViewer :content="readmeContent" />
-          </div>
-          <div v-else class="text-center py-12 text-gray-500">
-            <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
-            <p>No README.md found</p>
-            <el-button 
-              v-if="isOwner" 
-              class="mt-4" 
-              type="primary"
-              @click="createReadme"
-            >
-              Create README.md
-            </el-button>
+        <div v-if="activeTab === 'card'" class="card overflow-hidden">
+          <div class="max-w-full overflow-x-auto">
+            <div v-if="readmeContent">
+              <MarkdownViewer :content="readmeContent" />
+            </div>
+            <div v-else class="text-center py-12 text-gray-500 dark:text-gray-400">
+              <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
+              <p>No README.md found</p>
+              <el-button
+                v-if="isOwner"
+                class="mt-4"
+                type="primary"
+                @click="createReadme"
+              >
+                Create README.md
+              </el-button>
+            </div>
           </div>
         </div>
 
@@ -151,7 +153,7 @@
               <el-select v-model="currentBranch" size="small" style="width: 150px" @change="handleBranchChange">
                 <el-option label="main" value="main" />
               </el-select>
-              <span class="text-sm text-gray-600">
+              <span class="text-sm text-gray-600 dark:text-gray-400">
                 {{ fileTree.length }} {{ fileTree.length === 1 ? 'file' : 'files' }}
               </span>
             </div>
@@ -171,11 +173,11 @@
 
           <!-- Breadcrumb for current path -->
           <div v-if="currentPath" class="mb-3 text-sm">
-            <el-breadcrumb separator="/">
+            <el-breadcrumb separator="/" class="text-gray-700 dark:text-gray-300">
               <el-breadcrumb-item>
-                <RouterLink 
+                <RouterLink
                   :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}`"
-                  class="text-blue-600 hover:underline"
+                  class="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   root
                 </RouterLink>
@@ -184,9 +186,9 @@
                 v-for="(segment, idx) in pathSegments"
                 :key="idx"
               >
-                <RouterLink 
+                <RouterLink
                   :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}/${pathSegments.slice(0, idx + 1).join('/')}`"
-                  class="text-blue-600 hover:underline"
+                  class="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   {{ segment }}
                 </RouterLink>
@@ -195,26 +197,26 @@
           </div>
 
           <!-- File List -->
-          <div class="divide-y divide-gray-200">
+          <div class="divide-y divide-gray-200 dark:divide-gray-700">
             <div
               v-for="file in filteredFiles"
               :key="file.path"
-              class="py-3 flex items-center gap-3 hover:bg-gray-50 px-2 cursor-pointer transition-colors"
+              class="py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 cursor-pointer transition-colors"
               @click="handleFileClick(file)"
             >
-              <div 
-                :class="file.type === 'directory' ? 'i-carbon-folder text-blue-500' : 'i-carbon-document text-gray-500'"
+              <div
+                :class="file.type === 'directory' ? 'i-carbon-folder text-blue-500' : 'i-carbon-document text-gray-500 dark:text-gray-400'"
                 class="text-xl flex-shrink-0"
               />
               <div class="flex-1 min-w-0">
                 <div class="font-medium truncate">{{ getFileName(file.path) }}</div>
               </div>
-              <div class="text-sm text-gray-500">
+              <div class="text-sm text-gray-500 dark:text-gray-400">
                 {{ formatSize(file.size) }}
               </div>
             </div>
 
-            <div v-if="filteredFiles.length === 0" class="py-12 text-center text-gray-500">
+            <div v-if="filteredFiles.length === 0" class="py-12 text-center text-gray-500 dark:text-gray-400">
               <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
               <p>No files found</p>
             </div>
@@ -222,7 +224,7 @@
         </div>
 
         <div v-if="activeTab === 'commits'" class="card">
-          <div class="text-center py-12 text-gray-500">
+          <div class="text-center py-12 text-gray-500 dark:text-gray-400">
             <div class="i-carbon-branch text-6xl mb-4 inline-block" />
             <p>Commit history coming soon</p>
           </div>
@@ -234,11 +236,11 @@
         <!-- Owner Info -->
         <div class="card">
           <h3 class="font-semibold mb-3">Owner</h3>
-          <RouterLink 
+          <RouterLink
             :to="`/${namespace}`"
-            class="flex items-center gap-2 hover:bg-gray-50 p-2 rounded transition-colors"
+            class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded transition-colors"
           >
-            <div class="i-carbon-user-avatar text-3xl text-gray-400" />
+            <div class="i-carbon-user-avatar text-3xl text-gray-400 dark:text-gray-500" />
             <span class="font-medium">{{ namespace }}</span>
           </RouterLink>
         </div>
@@ -262,15 +264,15 @@
           <h3 class="font-semibold mb-3">Metadata</h3>
           <div class="space-y-2 text-sm">
             <div>
-              <span class="text-gray-600">Type:</span>
+              <span class="text-gray-600 dark:text-gray-400">Type:</span>
               <span class="ml-2 font-medium">{{ repoTypeLabel }}</span>
             </div>
             <div>
-              <span class="text-gray-600">Created:</span>
+              <span class="text-gray-600 dark:text-gray-400">Created:</span>
               <span class="ml-2">{{ formatDate(repoInfo?.createdAt) }}</span>
             </div>
             <div v-if="repoInfo?.sha">
-              <span class="text-gray-600">Commit:</span>
+              <span class="text-gray-600 dark:text-gray-400">Commit:</span>
               <span class="ml-2 font-mono text-xs">{{ repoInfo.sha.slice(0, 7) }}</span>
             </div>
           </div>
@@ -296,11 +298,11 @@
           </el-input>
         </div>
 
-        <div class="bg-gray-50 p-4 rounded text-sm">
+        <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded text-sm">
           <p class="mb-2 font-medium">Usage:</p>
           <pre class="text-xs overflow-x-auto">git clone {{ cloneUrl }}</pre>
-          <p class="mt-3 text-gray-600">
-            Or use <code class="bg-white px-1 py-0.5 rounded">huggingface-cli</code>:
+          <p class="mt-3 text-gray-600 dark:text-gray-400">
+            Or use <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded">huggingface-cli</code>:
           </p>
           <pre class="text-xs overflow-x-auto mt-1">huggingface-cli download {{ repoInfo?.id }}</pre>
         </div>

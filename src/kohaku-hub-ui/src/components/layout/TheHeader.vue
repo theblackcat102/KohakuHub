@@ -1,28 +1,38 @@
 <!-- src/components/layout/TheHeader.vue -->
 <template>
-  <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+  <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-colors">
     <div class="container-main flex items-center justify-between h-12">
       <!-- Logo -->
       <RouterLink to="/" class="flex items-center gap-2">
         <div class="i-carbon-cube text-3xl text-blue-500" />
         <span class="text-xl font-bold">KohakuHub</span>
       </RouterLink>
-      
+
       <!-- Navigation -->
       <nav class="flex items-center gap-6">
-        <RouterLink to="/models" class="text-gray-700 hover:text-blue-500">
+        <RouterLink to="/models" class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
           Models
         </RouterLink>
-        <RouterLink to="/datasets" class="text-gray-700 hover:text-blue-500">
+        <RouterLink to="/datasets" class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
           Datasets
         </RouterLink>
-        <RouterLink to="/spaces" class="text-gray-700 hover:text-blue-500">
+        <RouterLink to="/spaces" class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
           Spaces
         </RouterLink>
       </nav>
-      
+
       <!-- User Menu -->
       <div class="flex items-center gap-4">
+        <!-- Dark Mode Toggle -->
+        <el-button
+          @click="themeStore.toggle()"
+          circle
+          text
+          class="!text-gray-700 dark:!text-gray-300"
+        >
+          <div v-if="themeStore.isDark" class="i-carbon-moon text-xl" />
+          <div v-else class="i-carbon-asleep text-xl" />
+        </el-button>
         <template v-if="isAuthenticated">
           <!-- Create New Dropdown -->
           <el-dropdown trigger="click">
@@ -95,9 +105,11 @@
 <script setup>
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
 import { ElMessage } from 'element-plus'
 
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 const { isAuthenticated, username } = storeToRefs(authStore)
 const router = useRouter()
 

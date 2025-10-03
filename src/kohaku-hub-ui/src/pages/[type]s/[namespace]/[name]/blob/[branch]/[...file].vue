@@ -2,7 +2,7 @@
 <template>
   <div class="container-main">
     <!-- Breadcrumb -->
-    <el-breadcrumb separator="/" class="mb-6">
+    <el-breadcrumb separator="/" class="mb-6 text-gray-700 dark:text-gray-300">
       <el-breadcrumb-item :to="{ path: '/' }">Home</el-breadcrumb-item>
       <el-breadcrumb-item :to="{ path: `/${repoType}s` }">
         {{ repoTypeLabel }}
@@ -25,7 +25,7 @@
     <div v-else-if="error" class="text-center py-20">
       <div class="i-carbon-warning text-6xl text-red-500 mb-4" />
       <h2 class="text-2xl font-bold mb-2">File Not Found</h2>
-      <p class="text-gray-600 mb-4">{{ error }}</p>
+      <p class="text-gray-600 dark:text-gray-400 mb-4">{{ error }}</p>
       <el-button @click="$router.back()">Go Back</el-button>
     </div>
 
@@ -37,7 +37,7 @@
             <div :class="getFileIcon(fileName)" class="text-3xl" />
             <div>
               <h1 class="text-2xl font-bold">{{ fileName }}</h1>
-              <div class="text-sm text-gray-600 mt-1">
+              <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 {{ formatSize(fileSize) }}
                 <span v-if="fileSize" class="mx-2">•</span>
                 <span>{{ fileExtension || 'No extension' }}</span>
@@ -58,23 +58,23 @@
         </div>
 
         <!-- File path breadcrumb -->
-        <div class="mt-4 pt-4 border-t border-gray-200">
+        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-2 text-sm">
             <el-tag size="small">{{ branch }}</el-tag>
-            <span class="text-gray-400">/</span>
-            <el-breadcrumb separator="/">
+            <span class="text-gray-400 dark:text-gray-500">/</span>
+            <el-breadcrumb separator="/" class="text-gray-700 dark:text-gray-300">
               <el-breadcrumb-item
                 v-for="(segment, idx) in pathSegments"
                 :key="idx"
               >
-                <a 
+                <a
                   v-if="idx < pathSegments.length - 1"
                   @click="navigateToFolder(pathSegments.slice(0, idx + 1).join('/'))"
-                  class="cursor-pointer text-blue-600 hover:underline"
+                  class="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   {{ segment }}
                 </a>
-                <span v-else class="text-gray-700">{{ segment }}</span>
+                <span v-else class="text-gray-700 dark:text-gray-300">{{ segment }}</span>
               </el-breadcrumb-item>
             </el-breadcrumb>
           </div>
@@ -122,23 +122,23 @@
 
         <!-- Text/Code Preview -->
         <div v-else-if="canPreviewText">
-          <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
+          <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-200 dark:border-gray-700">
             <div class="flex items-center gap-2">
               <el-tag size="small" type="info">{{ languageLabel }}</el-tag>
-              <span class="text-sm text-gray-600">{{ lineCount }} lines</span>
+              <span class="text-sm text-gray-600 dark:text-gray-400">{{ lineCount }} lines</span>
             </div>
             <el-button size="small" @click="copyContent">
               <div class="i-carbon-copy inline-block mr-1" />
               Copy
             </el-button>
           </div>
-          
-          <pre class="text-sm overflow-x-auto bg-gray-50 p-4 rounded"><code>{{ fileContent }}</code></pre>
+
+          <pre class="text-sm overflow-x-auto bg-gray-50 dark:bg-gray-900 p-4 rounded"><code>{{ fileContent }}</code></pre>
         </div>
 
         <!-- Markdown Preview -->
         <div v-else-if="isMarkdown">
-          <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+          <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
             <el-radio-group v-model="markdownView" size="small">
               <el-radio-button label="preview">Preview</el-radio-button>
               <el-radio-button label="source">Source</el-radio-button>
@@ -152,14 +152,14 @@
           <div v-if="markdownView === 'preview'">
             <MarkdownViewer :content="fileContent" />
           </div>
-          <pre v-else class="text-sm overflow-x-auto bg-gray-50 p-4 rounded"><code>{{ fileContent }}</code></pre>
+          <pre v-else class="text-sm overflow-x-auto bg-gray-50 dark:bg-gray-900 p-4 rounded"><code>{{ fileContent }}</code></pre>
         </div>
 
         <!-- Too Large / Binary -->
         <div v-else class="text-center py-16">
-          <div :class="getFileIcon(fileName)" class="text-8xl text-gray-300 mb-4 inline-block" />
+          <div :class="getFileIcon(fileName)" class="text-8xl text-gray-300 dark:text-gray-600 mb-4 inline-block" />
           <h3 class="text-xl font-semibold mb-2">{{ tooLargeMessage }}</h3>
-          <p class="text-gray-600 mb-6">
+          <p class="text-gray-600 dark:text-gray-400 mb-6">
             {{ fileSize > maxPreviewSize ? `File is ${formatSize(fileSize)}, too large to preview` : 'This file type cannot be previewed' }}
           </p>
           <el-button type="primary" size="large" @click="downloadFile">

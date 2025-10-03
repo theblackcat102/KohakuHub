@@ -11,7 +11,7 @@
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-2">
             <div :class="getIconClass(type)" />
-            <h3 class="text-lg font-semibold text-blue-600 hover:underline">
+            <h3 class="text-lg font-semibold text-blue-600 dark:text-blue-400 hover:underline">
               {{ repo.id }}
             </h3>
             <el-tag v-if="repo.private" size="small" type="warning">
@@ -19,7 +19,7 @@
             </el-tag>
           </div>
           
-          <div class="text-sm text-gray-600 flex items-center gap-4">
+          <div class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-4">
             <span>by {{ repo.author }}</span>
             <span v-if="repo.lastModified">
               Updated {{ formatDate(repo.lastModified) }}
@@ -38,7 +38,7 @@
           </div>
         </div>
         
-        <div class="flex items-center gap-4 text-sm text-gray-500">
+        <div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
           <div class="flex items-center gap-1">
             <div class="i-carbon-download" />
             {{ repo.downloads || 0 }}
@@ -51,7 +51,7 @@
       </div>
     </div>
     
-    <div v-if="!repos || repos.length === 0" class="text-center py-12 text-gray-500">
+    <div v-if="!repos || repos.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
       No repositories found
     </div>
   </div>

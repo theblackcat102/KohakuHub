@@ -3,7 +3,7 @@
   <div class="container-main">
     <div class="max-w-3xl mx-auto">
       <h1 class="text-3xl font-bold mb-2">Create New Repository</h1>
-      <p class="text-gray-600 mb-8">
+      <p class="text-gray-600 dark:text-gray-400 mb-8">
         A repository contains all project files, including revision history.
       </p>
 
@@ -39,7 +39,7 @@
                 </el-radio-button>
                 </el-radio-group>
             </div>
-            <div class="text-xs text-gray-500 mt-2">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
               {{ getTypeDescription(form.type) }}
             </div>
           </el-form-item>
@@ -102,7 +102,7 @@
                   <div class="i-carbon-unlocked text-xl text-green-500" />
                   <div>
                     <div class="font-semibold">Public</div>
-                    <div class="text-xs text-gray-600">
+                    <div class="text-xs text-gray-600 dark:text-gray-400">
                       Anyone on the internet can see this repository
                     </div>
                   </div>
@@ -113,7 +113,7 @@
                   <div class="i-carbon-locked text-xl text-orange-500" />
                   <div>
                     <div class="font-semibold">Private</div>
-                    <div class="text-xs text-gray-600">
+                    <div class="text-xs text-gray-600 dark:text-gray-400">
                       You choose who can see and commit to this repository
                     </div>
                   </div>
@@ -123,7 +123,7 @@
           </el-form-item>
 
           <!-- Actions -->
-          <div class="flex gap-3 mt-8 pt-6 border-t border-gray-200">
+          <div class="flex gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
             <el-button 
               size="large"
               @click="$router.back()"

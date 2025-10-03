@@ -16,16 +16,16 @@ export default defineConfig({
       warn: true
     })
   ],
-  
+
   shortcuts: {
     'btn': 'px-4 py-2 rounded cursor-pointer transition-colors',
     'btn-primary': 'btn bg-blue-500 text-white hover:bg-blue-600',
-    'btn-secondary': 'btn bg-gray-200 text-gray-800 hover:bg-gray-300',
-    'card': 'bg-white rounded-lg shadow-sm border border-gray-200 p-4',
-    'input': 'px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500',
+    'btn-secondary': 'btn bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600',
+    'card': 'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4',
+    'input': 'px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-blue-500 dark:bg-gray-700 dark:text-white',
     'container-main': 'max-w-7xl mx-auto px-4 py-6'
   },
-  
+
   theme: {
     colors: {
       primary: {

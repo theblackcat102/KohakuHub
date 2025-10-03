@@ -53,13 +53,13 @@
                   <h4 class="font-semibold text-sm text-blue-600 hover:underline truncate">
                     {{ repo.id }}
                   </h4>
-                  <div class="text-xs text-gray-600 mt-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     {{ formatDate(repo.lastModified) }}
                   </div>
                 </div>
               </div>
               
-              <div class="flex items-center gap-3 text-xs text-gray-500 mt-2">
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2">
                 <div class="flex items-center gap-1">
                   <div class="i-carbon-download" />
                   {{ repo.downloads || 0 }}
@@ -104,13 +104,13 @@
                   <h4 class="font-semibold text-sm text-green-600 hover:underline truncate">
                     {{ repo.id }}
                   </h4>
-                  <div class="text-xs text-gray-600 mt-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     {{ formatDate(repo.lastModified) }}
                   </div>
                 </div>
               </div>
               
-              <div class="flex items-center gap-3 text-xs text-gray-500 mt-2">
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2">
                 <div class="flex items-center gap-1">
                   <div class="i-carbon-download" />
                   {{ repo.downloads || 0 }}
@@ -155,13 +155,13 @@
                   <h4 class="font-semibold text-sm text-purple-600 hover:underline truncate">
                     {{ repo.id }}
                   </h4>
-                  <div class="text-xs text-gray-600 mt-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     {{ formatDate(repo.lastModified) }}
                   </div>
                 </div>
               </div>
               
-              <div class="flex items-center gap-3 text-xs text-gray-500 mt-2">
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-2">
                 <div class="flex items-center gap-1">
                   <div class="i-carbon-download" />
                   {{ repo.downloads || 0 }}

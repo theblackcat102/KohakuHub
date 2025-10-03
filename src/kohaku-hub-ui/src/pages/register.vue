@@ -49,9 +49,9 @@
         </el-button>
       </el-form>
       
-      <div class="mt-4 text-center text-sm text-gray-600">
+      <div class="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
         Already have an account?
-        <RouterLink to="/login" class="text-blue-500 hover:underline">
+        <RouterLink to="/login" class="text-blue-500 dark:text-blue-400 hover:underline">
           Login
         </RouterLink>
       </div>

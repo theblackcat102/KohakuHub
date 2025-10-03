@@ -25,9 +25,10 @@ export function sanitizeHTML(html) {
   
   return DOMPurify.sanitize(html, {
     // Blacklist dangerous tags
+    // Note: We allow 'input' for radio-based image galleries
     FORBID_TAGS: [
       'script',
-      'iframe', 
+      'iframe',
       'object',
       'embed',
       'applet',
@@ -35,7 +36,6 @@ export function sanitizeHTML(html) {
       'link',
       'base',
       'form',
-      'input',
       'button',
       'textarea',
       'select'
@@ -71,16 +71,38 @@ export function sanitizeHTML(html) {
 }
 
 /**
+ * Strip YAML frontmatter from markdown content
+ * HuggingFace repo cards use YAML frontmatter for metadata
+ *
+ * @param {string} markdown - Markdown text with potential YAML frontmatter
+ * @returns {string} - Markdown without frontmatter
+ */
+export function stripYAMLFrontmatter(markdown) {
+  if (!markdown) return ''
+
+  // Match YAML frontmatter: starts with ---, ends with ---
+  const frontmatterRegex = /^---\s*\n([\s\S]*?\n)?---\s*\n/
+  return markdown.replace(frontmatterRegex, '')
+}
+
+/**
  * Render markdown to safe HTML
- * 
+ *
  * @param {string} markdown - Markdown text
+ * @param {Object} options - Rendering options
+ * @param {boolean} options.stripFrontmatter - Strip YAML frontmatter (default: false)
  * @returns {string} - Sanitized HTML
  */
-export function renderMarkdown(markdown) {
+export function renderMarkdown(markdown, options = {}) {
   if (!markdown) return ''
-  
+
+  const { stripFrontmatter = false } = options
+
   try {
-    const rawHTML = md.render(markdown)
+    // Strip YAML frontmatter if requested
+    let content = stripFrontmatter ? stripYAMLFrontmatter(markdown) : markdown
+
+    const rawHTML = md.render(content)
     return sanitizeHTML(rawHTML)
   } catch (err) {
     console.error('Markdown rendering error:', err)

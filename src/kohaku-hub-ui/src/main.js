@@ -11,6 +11,8 @@ import '@unocss/reset/tailwind.css'
 
 // Import Element Plus base styles
 import 'element-plus/dist/index.css'
+// Import Element Plus dark theme
+import 'element-plus/theme-chalk/dark/css-vars.css'
 
 const app = createApp(App)
 const pinia = createPinia()

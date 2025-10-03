@@ -9,12 +9,12 @@
             <div class="i-carbon-user-avatar text-5xl text-gray-400" />
             <div>
               <h2 class="text-xl font-bold">{{ username }}</h2>
-              <p class="text-sm text-gray-600">User</p>
+              <p class="text-sm text-gray-600 dark:text-gray-400">User</p>
             </div>
           </div>
           
           <div class="space-y-2 text-sm">
-            <div class="flex items-center gap-2 text-gray-600">
+            <div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <div class="i-carbon-calendar" />
               Joined {{ formatDate(userInfo?.created_at) }}
             </div>
@@ -29,59 +29,59 @@
               :to="`/${username}`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                !currentType ? 'bg-gray-100' : 'hover:bg-gray-50'
+                !currentType ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
-                <div class="i-carbon-grid text-gray-500" />
+                <div class="i-carbon-grid text-gray-500 dark:text-gray-400" />
                 <span :class="!currentType ? 'font-semibold' : ''">Overview</span>
               </div>
             </RouterLink>
-            
+
             <RouterLink
               :to="`/${username}/models`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                currentType === 'models' ? 'bg-blue-50' : 'hover:bg-gray-50'
+                currentType === 'models' ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
                 <div class="i-carbon-model text-blue-500" />
-                <span :class="currentType === 'models' ? 'font-semibold text-blue-600' : ''">Models</span>
+                <span :class="currentType === 'models' ? 'font-semibold text-blue-600 dark:text-blue-400' : ''">Models</span>
               </div>
-              <span :class="['text-sm font-semibold', currentType === 'models' ? 'text-blue-600' : 'text-gray-600']">
+              <span :class="['text-sm font-semibold', currentType === 'models' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400']">
                 {{ getCount('model') }}
               </span>
             </RouterLink>
-            
+
             <RouterLink
               :to="`/${username}/datasets`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                currentType === 'datasets' ? 'bg-green-50' : 'hover:bg-gray-50'
+                currentType === 'datasets' ? 'bg-green-50 dark:bg-green-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
                 <div class="i-carbon-data-table text-green-500" />
-                <span :class="currentType === 'datasets' ? 'font-semibold text-green-600' : ''">Datasets</span>
+                <span :class="currentType === 'datasets' ? 'font-semibold text-green-600 dark:text-green-400' : ''">Datasets</span>
               </div>
-              <span :class="['text-sm font-semibold', currentType === 'datasets' ? 'text-green-600' : 'text-gray-600']">
+              <span :class="['text-sm font-semibold', currentType === 'datasets' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400']">
                 {{ getCount('dataset') }}
               </span>
             </RouterLink>
-            
+
             <RouterLink
               :to="`/${username}/spaces`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                currentType === 'spaces' ? 'bg-purple-50' : 'hover:bg-gray-50'
+                currentType === 'spaces' ? 'bg-purple-50 dark:bg-purple-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
                 <div class="i-carbon-application text-purple-500" />
-                <span :class="currentType === 'spaces' ? 'font-semibold text-purple-600' : ''">Spaces</span>
+                <span :class="currentType === 'spaces' ? 'font-semibold text-purple-600 dark:text-purple-400' : ''">Spaces</span>
               </div>
-              <span :class="['text-sm font-semibold', currentType === 'spaces' ? 'text-purple-600' : 'text-gray-600']">
+              <span :class="['text-sm font-semibold', currentType === 'spaces' ? 'text-purple-600 dark:text-purple-400' : 'text-gray-600 dark:text-gray-400']">
                 {{ getCount('space') }}
               </span>
             </RouterLink>
@@ -122,10 +122,10 @@
               <div class="flex items-start gap-2 mb-2">
                 <div class="i-carbon-model text-blue-500 text-xl flex-shrink-0" />
                 <div class="flex-1 min-w-0">
-                  <h3 class="font-semibold text-blue-600 hover:underline truncate">
+                  <h3 class="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate">
                     {{ repo.id }}
                   </h3>
-                  <div class="text-xs text-gray-600 mt-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     Updated {{ formatDate(repo.lastModified) }}
                   </div>
                 </div>
@@ -142,7 +142,7 @@
                 </el-tag>
               </div>
               
-              <div class="flex items-center gap-3 text-xs text-gray-500">
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                 <div class="flex items-center gap-1">
                   <div class="i-carbon-download" />
                   {{ repo.downloads || 0 }}
@@ -155,7 +155,7 @@
             </div>
           </div>
           
-          <div v-else class="text-center py-20 text-gray-500">
+          <div v-else class="text-center py-20 text-gray-500 dark:text-gray-400">
             <div class="i-carbon-search text-6xl mb-4 inline-block" />
             <p>No models found</p>
           </div>
@@ -192,7 +192,7 @@
               <div class="flex items-start gap-2 mb-2">
                 <div class="i-carbon-data-table text-green-500 text-xl flex-shrink-0" />
                 <div class="flex-1 min-w-0">
-                  <h3 class="font-semibold text-green-600 hover:underline truncate">
+                  <h3 class="font-semibold text-green-600 dark:text-green-400 hover:underline truncate">
                     {{ repo.id }}
                   </h3>
                   <div class="text-xs text-gray-600 mt-1">
@@ -212,7 +212,7 @@
                 </el-tag>
               </div>
               
-              <div class="flex items-center gap-3 text-xs text-gray-500">
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                 <div class="flex items-center gap-1">
                   <div class="i-carbon-download" />
                   {{ repo.downloads || 0 }}
@@ -225,7 +225,7 @@
             </div>
           </div>
           
-          <div v-else class="text-center py-20 text-gray-500">
+          <div v-else class="text-center py-20 text-gray-500 dark:text-gray-400">
             <div class="i-carbon-search text-6xl mb-4 inline-block" />
             <p>No datasets found</p>
           </div>
@@ -262,7 +262,7 @@
               <div class="flex items-start gap-2 mb-2">
                 <div class="i-carbon-application text-purple-500 text-xl flex-shrink-0" />
                 <div class="flex-1 min-w-0">
-                  <h3 class="font-semibold text-purple-600 hover:underline truncate">
+                  <h3 class="font-semibold text-purple-600 dark:text-purple-400 hover:underline truncate">
                     {{ repo.id }}
                   </h3>
                   <div class="text-xs text-gray-600 mt-1">
@@ -282,7 +282,7 @@
                 </el-tag>
               </div>
               
-              <div class="flex items-center gap-3 text-xs text-gray-500">
+              <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                 <div class="flex items-center gap-1">
                   <div class="i-carbon-download" />
                   {{ repo.downloads || 0 }}
@@ -295,7 +295,7 @@
             </div>
           </div>
           
-          <div v-else class="text-center py-20 text-gray-500">
+          <div v-else class="text-center py-20 text-gray-500 dark:text-gray-400">
             <div class="i-carbon-search text-6xl mb-4 inline-block" />
             <p>No spaces found</p>
           </div>
