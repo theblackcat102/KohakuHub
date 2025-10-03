@@ -28,6 +28,7 @@ declare module 'vue-router/auto-routes' {
     '/[username]/': RouteRecordInfo<'/[username]/', '/:username', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/[username]/[type]': RouteRecordInfo<'/[username]/[type]', '/:username/:type', { username: ParamValue<true>, type: ParamValue<true> }, { username: ParamValue<false>, type: ParamValue<false> }>,
     '/about': RouteRecordInfo<'/about', '/about', Record<never, never>, Record<never, never>>,
+    '/docs': RouteRecordInfo<'/docs', '/docs', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
     '/privacy': RouteRecordInfo<'/privacy', '/privacy', Record<never, never>, Record<never, never>>,
@@ -85,6 +86,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/about.vue': {
       routes: '/about'
+      views: never
+    }
+    'src/pages/docs.vue': {
+      routes: '/docs'
       views: never
     }
     'src/pages/login.vue': {
