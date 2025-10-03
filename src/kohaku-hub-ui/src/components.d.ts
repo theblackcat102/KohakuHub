@@ -25,6 +25,7 @@ declare module 'vue' {
     ElSkeleton: typeof import('element-plus/es')['ElSkeleton']
     ElTag: typeof import('element-plus/es')['ElTag']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
+    MarkdownPage: typeof import('./components/common/MarkdownPage.vue')['default']
     MarkdownViewer: typeof import('./components/common/MarkdownViewer.vue')['default']
     RepoList: typeof import('./components/repo/RepoList.vue')['default']
     RepoViewer: typeof import('./components/repo/RepoViewer.vue')['default']

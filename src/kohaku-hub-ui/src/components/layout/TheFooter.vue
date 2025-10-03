@@ -21,7 +21,7 @@
         <div>
           <h3 class="font-semibold mb-3">Community</h3>
           <div class="flex flex-col gap-2 text-sm">
-            <a href="https://github.com/KohakuBlueleaf/Kohaku-Hub" target="_blank" class="text-gray-600 hover:text-blue-500">
+            <a href="https://github.com/KohakuBlueleaf/KohakuHub" target="_blank" class="text-gray-600 hover:text-blue-500">
               GitHub
             </a>
             <a href="https://discord.gg/xWYrkyvJ2s" target="_blank" class="text-gray-600 hover:text-blue-500">
