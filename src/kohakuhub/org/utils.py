@@ -46,11 +46,17 @@ def remove_member_from_organization(org_id: int, username: str):
 
 
 def get_user_organizations(user_id: int):
-    return (
-        UserOrganization.select()
+    """
+    Return the user's organization memberships with joined Organization rows.
+    Using FK + join allows attribute access like uo.organization.name.
+    """
+    query = (
+        UserOrganization
+        .select(UserOrganization, Organization)
+        .join(Organization)  # FK-based join now works implicitly
         .where(UserOrganization.user == user_id)
-        .join(Organization)
     )
+    return list(query)
 
 
 def update_member_role(org_id: int, username: str, role: str):

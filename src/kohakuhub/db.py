@@ -12,6 +12,7 @@ from peewee import (
     SqliteDatabase,
     PostgresqlDatabase,
     TextField,
+    ForeignKeyField,
 )
 from .config import cfg
 
@@ -136,9 +137,19 @@ class Organization(BaseModel):
 
 class UserOrganization(BaseModel):
     id = AutoField()
-    user = IntegerField(index=True)
-    organization = IntegerField(index=True)
-    role = CharField(default="visitor")  # super-admin, admin, member, visitor
+    user = ForeignKeyField(
+        User,
+        backref="user_orgs",
+        on_delete="CASCADE",
+        index=True,
+    )
+    organization = ForeignKeyField(
+        Organization,
+        backref="members",
+        on_delete="CASCADE",
+        index=True,
+    )
+    role = CharField(default="member")  # keep your role semantics as before
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
     class Meta:
