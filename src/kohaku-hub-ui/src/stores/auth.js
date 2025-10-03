@@ -6,7 +6,8 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
     token: localStorage.getItem('hf_token') || null,
-    loading: false
+    loading: false,
+    initialized: false
   }),
   
   getters: {
@@ -80,6 +81,25 @@ export const useAuthStore = defineStore('auth', {
       this.token = token
       localStorage.setItem('hf_token', token)
       await this.fetchUser()
+    },
+    
+    /**
+     * Initialize auth state (restore session on app load)
+     */
+    async init() {
+      if (this.initialized) return
+      
+      this.initialized = true
+      
+      // Try to restore user from session cookie or token
+      try {
+        await this.fetchUser()
+      } catch (err) {
+        // Session expired or invalid, clear state
+        this.user = null
+        this.token = null
+        localStorage.removeItem('hf_token')
+      }
     }
   }
 })

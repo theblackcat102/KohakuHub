@@ -56,7 +56,25 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Proxy API calls
       '/api': {
+        target: 'http://localhost:48888',
+        changeOrigin: true
+      },
+      // Proxy organization endpoints
+      '/org': {
+        target: 'http://localhost:48888',
+        changeOrigin: true
+      },
+      // Proxy file resolve/download endpoints (models/datasets/spaces)
+      // This catches: /models/*/resolve/*, /datasets/*/resolve/*, /spaces/*/resolve/*
+      '^/(models|datasets|spaces)/.+/resolve/': {
+        target: 'http://localhost:48888',
+        changeOrigin: true
+      },
+      // Proxy direct download endpoints (for backward compatibility)
+      // This catches: /namespace/name/resolve/*
+      '^/[^/]+/[^/]+/resolve/': {
         target: 'http://localhost:48888',
         changeOrigin: true
       }

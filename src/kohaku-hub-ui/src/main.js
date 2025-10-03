@@ -13,6 +13,7 @@ import '@unocss/reset/tailwind.css'
 import 'element-plus/dist/index.css'
 
 const app = createApp(App)
+const pinia = createPinia()
 
 // Create router
 const router = createRouter({
@@ -20,6 +21,14 @@ const router = createRouter({
   routes
 })
 
-app.use(createPinia())
+app.use(pinia)
 app.use(router)
-app.mount('#app')
+
+// Initialize auth before mounting
+import { useAuthStore } from './stores/auth'
+const authStore = useAuthStore()
+
+// Restore auth state, then mount app
+authStore.init().finally(() => {
+  app.mount('#app')
+})

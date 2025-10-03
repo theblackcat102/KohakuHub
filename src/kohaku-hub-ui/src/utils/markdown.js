@@ -21,11 +21,9 @@ const md = new MarkdownIt({
  * @returns {string} - Sanitized HTML
  */
 export function sanitizeHTML(html) {
+  if (!html) return ''
+  
   return DOMPurify.sanitize(html, {
-    // Allow all HTML tags and attributes by default
-    ALLOWED_TAGS: null, // null = allow all except forbidden
-    ALLOWED_ATTR: null, // null = allow all except forbidden
-    
     // Blacklist dangerous tags
     FORBID_TAGS: [
       'script',
@@ -58,12 +56,6 @@ export function sanitizeHTML(html) {
     // Allow data attributes and styles for galleries
     ALLOW_DATA_ATTR: true,
     ALLOW_UNKNOWN_PROTOCOLS: false,
-    
-    // Custom hook to further sanitize
-    WHOLE_DOCUMENT: false,
-    RETURN_DOM: false,
-    RETURN_DOM_FRAGMENT: false,
-    RETURN_TRUSTED_TYPE: false,
     
     // Sanitize CSS in style attributes
     SANITIZE_DOM: true,

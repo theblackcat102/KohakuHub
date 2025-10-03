@@ -63,6 +63,7 @@
 </template>
 
 <script setup>
+import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 

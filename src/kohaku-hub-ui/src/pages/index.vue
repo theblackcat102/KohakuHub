@@ -14,7 +14,11 @@
           <el-button size="large" type="primary" @click="$router.push('/models')">
             Browse Models
           </el-button>
-          <el-button size="large" @click="$router.push('/register')">
+          <el-button 
+            v-if="!isAuthenticated"
+            size="large" 
+            @click="$router.push('/register')"
+          >
             Get Started
           </el-button>
         </div>
@@ -60,7 +64,11 @@
 
 <script setup>
 import { repoAPI } from '@/utils/api'
+import { useAuthStore } from '@/stores/auth'
 import RepoList from '@/components/repo/RepoList.vue'
+
+const authStore = useAuthStore()
+const { isAuthenticated } = storeToRefs(authStore)
 
 const activeTab = ref('models')
 const stats = ref({ models: 0, datasets: 0, spaces: 0 })

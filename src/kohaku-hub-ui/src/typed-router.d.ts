@@ -19,6 +19,12 @@ declare module 'vue-router/auto-routes' {
    */
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
+    '/[type]s/': RouteRecordInfo<'/[type]s/', '/:type()s', { type: ParamValue<true> }, { type: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/', '/:type()s/:namespace/:name', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/blob/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/blob/[branch]/[...file]', '/:type()s/:namespace/:name/blob/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/commits/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/commits/[branch]/', '/:type()s/:namespace/:name/commits/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/tree/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/', '/:type()s/:namespace/:name/tree/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/tree/[branch]/[...path]': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/[...path]', '/:type()s/:namespace/:name/tree/:branch/:path(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, path: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, path: ParamValue<false> }>,
     '/[username]/': RouteRecordInfo<'/[username]/', '/:username', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
@@ -38,6 +44,30 @@ declare module 'vue-router/auto-routes' {
   export interface _RouteFileInfoMap {
     'src/pages/index.vue': {
       routes: '/'
+      views: never
+    }
+    'src/pages/[type]s/index.vue': {
+      routes: '/[type]s/'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/index.vue': {
+      routes: '/[type]s/[namespace]/[name]/'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/blob/[branch]/[...file].vue': {
+      routes: '/[type]s/[namespace]/[name]/blob/[branch]/[...file]'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/commits/[branch]/index.vue': {
+      routes: '/[type]s/[namespace]/[name]/commits/[branch]/'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/tree/[branch]/index.vue': {
+      routes: '/[type]s/[namespace]/[name]/tree/[branch]/'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/tree/[branch]/[...path].vue': {
+      routes: '/[type]s/[namespace]/[name]/tree/[branch]/[...path]'
       views: never
     }
     'src/pages/[username]/index.vue': {
