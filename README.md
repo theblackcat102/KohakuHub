@@ -6,7 +6,8 @@
 
 **Join our community!: https://discord.gg/xWYrkyvJ2s**
 
-![1759506767828](image/README/1759506767828.png)
+|![1759520817420](image/README/1759520817420.png)|![1759521021890](image/README/1759521021890.png)|
+|-|-|
 
 KohakuHub is a minimal, self-hosted alternative to HuggingFace Hub that lets you host and version your own models, datasets, and other AI artifacts with full HuggingFace client compatibility.
 

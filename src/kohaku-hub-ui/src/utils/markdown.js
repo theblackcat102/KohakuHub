@@ -86,23 +86,72 @@ export function stripYAMLFrontmatter(markdown) {
 }
 
 /**
+ * Transform relative image paths to absolute repository URLs
+ *
+ * @param {string} html - HTML with potential relative image paths
+ * @param {Object} repoContext - Repository context for path resolution
+ * @returns {string} - HTML with absolute image paths
+ */
+function resolveImagePaths(html, repoContext) {
+  if (!html || !repoContext) return html;
+
+  const { repoType, namespace, name, branch } = repoContext;
+  const baseUrl = `/${repoType}s/${namespace}/${name}/resolve/${branch}`;
+
+  // Create a DOM parser
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  // Find all img tags
+  const images = doc.querySelectorAll("img");
+
+  images.forEach((img) => {
+    const src = img.getAttribute("src");
+    if (src && !isAbsoluteUrl(src)) {
+      // Remove leading ./ if present
+      const cleanPath = src.replace(/^\.\//, "");
+      img.setAttribute("src", `${baseUrl}/${cleanPath}`);
+    }
+  });
+
+  return doc.body.innerHTML;
+}
+
+/**
+ * Check if URL is absolute
+ *
+ * @param {string} url - URL to check
+ * @returns {boolean} - True if URL is absolute
+ */
+function isAbsoluteUrl(url) {
+  return /^(https?:\/\/|\/\/)/.test(url) || url.startsWith("/");
+}
+
+/**
  * Render markdown to safe HTML
  *
  * @param {string} markdown - Markdown text
  * @param {Object} options - Rendering options
  * @param {boolean} options.stripFrontmatter - Strip YAML frontmatter (default: false)
+ * @param {Object} options.repoContext - Repository context for image path resolution
  * @returns {string} - Sanitized HTML
  */
 export function renderMarkdown(markdown, options = {}) {
   if (!markdown) return "";
 
-  const { stripFrontmatter = false } = options;
+  const { stripFrontmatter = false, repoContext = null } = options;
 
   try {
     // Strip YAML frontmatter if requested
     let content = stripFrontmatter ? stripYAMLFrontmatter(markdown) : markdown;
 
-    const rawHTML = md.render(content);
+    let rawHTML = md.render(content);
+
+    // Resolve relative image paths if repo context provided
+    if (repoContext) {
+      rawHTML = resolveImagePaths(rawHTML, repoContext);
+    }
+
     return sanitizeHTML(rawHTML);
   } catch (err) {
     console.error("Markdown rendering error:", err);

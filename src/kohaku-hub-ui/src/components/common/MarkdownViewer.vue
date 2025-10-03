@@ -10,6 +10,10 @@ import { renderMarkdown } from "@/utils/markdown";
  * @typedef {Object} Props
  * @property {string} content - Markdown content to render
  * @property {boolean} stripFrontmatter - Strip YAML frontmatter (default: true for repo cards)
+ * @property {string} repoType - Repository type (model/dataset/space) for image path resolution
+ * @property {string} namespace - Repository namespace for image path resolution
+ * @property {string} name - Repository name for image path resolution
+ * @property {string} branch - Repository branch for image path resolution (default: 'main')
  */
 const props = defineProps({
   content: {
@@ -20,11 +24,36 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  repoType: {
+    type: String,
+    default: "",
+  },
+  namespace: {
+    type: String,
+    default: "",
+  },
+  name: {
+    type: String,
+    default: "",
+  },
+  branch: {
+    type: String,
+    default: "main",
+  },
 });
 
 const renderedHTML = computed(() => {
   return renderMarkdown(props.content, {
     stripFrontmatter: props.stripFrontmatter,
+    repoContext:
+      props.repoType && props.namespace && props.name
+        ? {
+            repoType: props.repoType,
+            namespace: props.namespace,
+            name: props.name,
+            branch: props.branch,
+          }
+        : null,
   });
 });
 </script>

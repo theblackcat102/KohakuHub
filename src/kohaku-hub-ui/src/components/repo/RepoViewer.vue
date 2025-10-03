@@ -146,7 +146,13 @@
         <div v-if="activeTab === 'card'" class="card overflow-hidden">
           <div class="max-w-full overflow-x-auto">
             <div v-if="readmeContent">
-              <MarkdownViewer :content="readmeContent" />
+              <MarkdownViewer
+                :content="readmeContent"
+                :repo-type="repoType"
+                :namespace="namespace"
+                :name="name"
+                :branch="currentBranch"
+              />
             </div>
             <div
               v-else
