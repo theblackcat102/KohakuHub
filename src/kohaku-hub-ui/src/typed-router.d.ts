@@ -26,7 +26,9 @@ declare module 'vue-router/auto-routes' {
     '/[type]s/[namespace]/[name]/tree/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/', '/:type()s/:namespace/:name/tree/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/tree/[branch]/[...path]': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/[...path]', '/:type()s/:namespace/:name/tree/:branch/:path(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, path: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, path: ParamValue<false> }>,
     '/[username]/': RouteRecordInfo<'/[username]/', '/:username', { username: ParamValue<true> }, { username: ParamValue<false> }>,
+    '/[username]/[type]': RouteRecordInfo<'/[username]/[type]', '/:username/:type', { username: ParamValue<true>, type: ParamValue<true> }, { username: ParamValue<false>, type: ParamValue<false> }>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
+    '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
     '/settings': RouteRecordInfo<'/settings', '/settings', Record<never, never>, Record<never, never>>,
   }
@@ -74,8 +76,16 @@ declare module 'vue-router/auto-routes' {
       routes: '/[username]/'
       views: never
     }
+    'src/pages/[username]/[type].vue': {
+      routes: '/[username]/[type]'
+      views: never
+    }
     'src/pages/login.vue': {
       routes: '/login'
+      views: never
+    }
+    'src/pages/new.vue': {
+      routes: '/new'
       views: never
     }
     'src/pages/register.vue': {

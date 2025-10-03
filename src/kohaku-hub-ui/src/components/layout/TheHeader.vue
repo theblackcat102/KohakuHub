@@ -1,7 +1,7 @@
-<!-- src/kohaku-hub-ui/src/components/layout/TheHeader.vue -->
+<!-- src/components/layout/TheHeader.vue -->
 <template>
   <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
-    <div class="container-main flex items-center justify-between h-16">
+    <div class="container-main flex items-center justify-between h-12">
       <!-- Logo -->
       <RouterLink to="/" class="flex items-center gap-2">
         <div class="i-carbon-cube text-3xl text-blue-500" />
@@ -24,6 +24,36 @@
       <!-- User Menu -->
       <div class="flex items-center gap-4">
         <template v-if="isAuthenticated">
+          <!-- Create New Dropdown -->
+          <el-dropdown trigger="click">
+            <el-button type="primary" circle>
+              <div class="i-carbon-add text-xl" />
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="createNew('model')">
+                  <div class="flex items-center gap-2">
+                    <div class="i-carbon-model text-blue-500" />
+                    <span>New Model</span>
+                  </div>
+                </el-dropdown-item>
+                <el-dropdown-item @click="createNew('dataset')">
+                  <div class="flex items-center gap-2">
+                    <div class="i-carbon-data-table text-green-500" />
+                    <span>New Dataset</span>
+                  </div>
+                </el-dropdown-item>
+                <el-dropdown-item @click="createNew('space')">
+                  <div class="flex items-center gap-2">
+                    <div class="i-carbon-application text-purple-500" />
+                    <span>New Space</span>
+                  </div>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+
+          <!-- User Dropdown -->
           <el-dropdown>
             <div class="flex items-center gap-2 cursor-pointer">
               <div class="i-carbon-user-avatar text-2xl" />
@@ -70,6 +100,13 @@ import { ElMessage } from 'element-plus'
 const authStore = useAuthStore()
 const { isAuthenticated, username } = storeToRefs(authStore)
 const router = useRouter()
+
+function createNew(type) {
+  router.push({
+    path: '/new',
+    query: { type }
+  })
+}
 
 async function handleLogout() {
   try {

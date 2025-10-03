@@ -1,0 +1,382 @@
+<!-- src/pages/[username]/[type].vue -->
+<template>
+  <div class="container-main">
+    <div class="grid grid-cols-[280px_1fr] gap-6">
+      <!-- Sidebar -->
+      <aside class="space-y-4">
+        <div class="card">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="i-carbon-user-avatar text-5xl text-gray-400" />
+            <div>
+              <h2 class="text-xl font-bold">{{ username }}</h2>
+              <p class="text-sm text-gray-600">User</p>
+            </div>
+          </div>
+          
+          <div class="space-y-2 text-sm">
+            <div class="flex items-center gap-2 text-gray-600">
+              <div class="i-carbon-calendar" />
+              Joined {{ formatDate(userInfo?.created_at) }}
+            </div>
+          </div>
+        </div>
+        
+        <!-- Stats Summary / Tab Navigation -->
+        <div class="card">
+          <h3 class="font-semibold mb-3">Repositories</h3>
+          <div class="space-y-1">
+            <RouterLink
+              :to="`/${username}`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                !currentType ? 'bg-gray-100' : 'hover:bg-gray-50'
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-grid text-gray-500" />
+                <span :class="!currentType ? 'font-semibold' : ''">Overview</span>
+              </div>
+            </RouterLink>
+            
+            <RouterLink
+              :to="`/${username}/models`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                currentType === 'models' ? 'bg-blue-50' : 'hover:bg-gray-50'
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-model text-blue-500" />
+                <span :class="currentType === 'models' ? 'font-semibold text-blue-600' : ''">Models</span>
+              </div>
+              <span :class="['text-sm font-semibold', currentType === 'models' ? 'text-blue-600' : 'text-gray-600']">
+                {{ getCount('model') }}
+              </span>
+            </RouterLink>
+            
+            <RouterLink
+              :to="`/${username}/datasets`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                currentType === 'datasets' ? 'bg-green-50' : 'hover:bg-gray-50'
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-data-table text-green-500" />
+                <span :class="currentType === 'datasets' ? 'font-semibold text-green-600' : ''">Datasets</span>
+              </div>
+              <span :class="['text-sm font-semibold', currentType === 'datasets' ? 'text-green-600' : 'text-gray-600']">
+                {{ getCount('dataset') }}
+              </span>
+            </RouterLink>
+            
+            <RouterLink
+              :to="`/${username}/spaces`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                currentType === 'spaces' ? 'bg-purple-50' : 'hover:bg-gray-50'
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-application text-purple-500" />
+                <span :class="currentType === 'spaces' ? 'font-semibold text-purple-600' : ''">Spaces</span>
+              </div>
+              <span :class="['text-sm font-semibold', currentType === 'spaces' ? 'text-purple-600' : 'text-gray-600']">
+                {{ getCount('space') }}
+              </span>
+            </RouterLink>
+          </div>
+        </div>
+      </aside>
+      
+      <!-- Main Content -->
+      <main>
+        <!-- Models Tab -->
+        <div v-if="repoType === 'model'">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+              <div class="i-carbon-model text-blue-500 text-3xl" />
+              <h1 class="text-3xl font-bold">All Models</h1>
+              <el-tag type="info" size="large">{{ getCount('model') }}</el-tag>
+            </div>
+            
+            <el-input
+              v-model="searchQuery"
+              placeholder="Search models..."
+              style="width: 300px"
+              clearable
+            >
+              <template #prefix>
+                <div class="i-carbon-search" />
+              </template>
+            </el-input>
+          </div>
+          
+          <div v-if="filteredRepos.length > 0" class="grid grid-cols-2 gap-4">
+            <div
+              v-for="repo in filteredRepos"
+              :key="repo.id"
+              class="card hover:shadow-md transition-shadow cursor-pointer"
+              @click="goToRepo('model', repo)"
+            >
+              <div class="flex items-start gap-2 mb-2">
+                <div class="i-carbon-model text-blue-500 text-xl flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-semibold text-blue-600 hover:underline truncate">
+                    {{ repo.id }}
+                  </h3>
+                  <div class="text-xs text-gray-600 mt-1">
+                    Updated {{ formatDate(repo.lastModified) }}
+                  </div>
+                </div>
+              </div>
+              
+              <div v-if="repo.tags && repo.tags.length" class="flex gap-1 mb-2 flex-wrap">
+                <el-tag
+                  v-for="tag in repo.tags.slice(0, 2)"
+                  :key="tag"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ tag }}
+                </el-tag>
+              </div>
+              
+              <div class="flex items-center gap-3 text-xs text-gray-500">
+                <div class="flex items-center gap-1">
+                  <div class="i-carbon-download" />
+                  {{ repo.downloads || 0 }}
+                </div>
+                <div class="flex items-center gap-1">
+                  <div class="i-carbon-favorite" />
+                  {{ repo.likes || 0 }}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="text-center py-20 text-gray-500">
+            <div class="i-carbon-search text-6xl mb-4 inline-block" />
+            <p>No models found</p>
+          </div>
+        </div>
+
+        <!-- Datasets Tab -->
+        <div v-if="repoType === 'dataset'">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+              <div class="i-carbon-data-table text-green-500 text-3xl" />
+              <h1 class="text-3xl font-bold">All Datasets</h1>
+              <el-tag type="success" size="large">{{ getCount('dataset') }}</el-tag>
+            </div>
+            
+            <el-input
+              v-model="searchQuery"
+              placeholder="Search datasets..."
+              style="width: 300px"
+              clearable
+            >
+              <template #prefix>
+                <div class="i-carbon-search" />
+              </template>
+            </el-input>
+          </div>
+          
+          <div v-if="filteredRepos.length > 0" class="grid grid-cols-2 gap-4">
+            <div
+              v-for="repo in filteredRepos"
+              :key="repo.id"
+              class="card hover:shadow-md transition-shadow cursor-pointer"
+              @click="goToRepo('dataset', repo)"
+            >
+              <div class="flex items-start gap-2 mb-2">
+                <div class="i-carbon-data-table text-green-500 text-xl flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-semibold text-green-600 hover:underline truncate">
+                    {{ repo.id }}
+                  </h3>
+                  <div class="text-xs text-gray-600 mt-1">
+                    Updated {{ formatDate(repo.lastModified) }}
+                  </div>
+                </div>
+              </div>
+              
+              <div v-if="repo.tags && repo.tags.length" class="flex gap-1 mb-2 flex-wrap">
+                <el-tag
+                  v-for="tag in repo.tags.slice(0, 2)"
+                  :key="tag"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ tag }}
+                </el-tag>
+              </div>
+              
+              <div class="flex items-center gap-3 text-xs text-gray-500">
+                <div class="flex items-center gap-1">
+                  <div class="i-carbon-download" />
+                  {{ repo.downloads || 0 }}
+                </div>
+                <div class="flex items-center gap-1">
+                  <div class="i-carbon-favorite" />
+                  {{ repo.likes || 0 }}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="text-center py-20 text-gray-500">
+            <div class="i-carbon-search text-6xl mb-4 inline-block" />
+            <p>No datasets found</p>
+          </div>
+        </div>
+
+        <!-- Spaces Tab -->
+        <div v-if="repoType === 'space'">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+              <div class="i-carbon-application text-purple-500 text-3xl" />
+              <h1 class="text-3xl font-bold">All Spaces</h1>
+              <el-tag type="warning" size="large">{{ getCount('space') }}</el-tag>
+            </div>
+            
+            <el-input
+              v-model="searchQuery"
+              placeholder="Search spaces..."
+              style="width: 300px"
+              clearable
+            >
+              <template #prefix>
+                <div class="i-carbon-search" />
+              </template>
+            </el-input>
+          </div>
+          
+          <div v-if="filteredRepos.length > 0" class="grid grid-cols-2 gap-4">
+            <div
+              v-for="repo in filteredRepos"
+              :key="repo.id"
+              class="card hover:shadow-md transition-shadow cursor-pointer"
+              @click="goToRepo('space', repo)"
+            >
+              <div class="flex items-start gap-2 mb-2">
+                <div class="i-carbon-application text-purple-500 text-xl flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-semibold text-purple-600 hover:underline truncate">
+                    {{ repo.id }}
+                  </h3>
+                  <div class="text-xs text-gray-600 mt-1">
+                    Updated {{ formatDate(repo.lastModified) }}
+                  </div>
+                </div>
+              </div>
+              
+              <div v-if="repo.tags && repo.tags.length" class="flex gap-1 mb-2 flex-wrap">
+                <el-tag
+                  v-for="tag in repo.tags.slice(0, 2)"
+                  :key="tag"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ tag }}
+                </el-tag>
+              </div>
+              
+              <div class="flex items-center gap-3 text-xs text-gray-500">
+                <div class="flex items-center gap-1">
+                  <div class="i-carbon-download" />
+                  {{ repo.downloads || 0 }}
+                </div>
+                <div class="flex items-center gap-1">
+                  <div class="i-carbon-favorite" />
+                  {{ repo.likes || 0 }}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="text-center py-20 text-gray-500">
+            <div class="i-carbon-search text-6xl mb-4 inline-block" />
+            <p>No spaces found</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { repoAPI } from '@/utils/api'
+import dayjs from 'dayjs'
+
+const route = useRoute()
+const router = useRouter()
+
+const username = computed(() => route.params.username)
+const currentType = computed(() => route.params.type) // 'models', 'datasets', or 'spaces'
+
+const userInfo = ref(null)
+const repos = ref({ model: [], dataset: [], space: [] })
+const searchQuery = ref('')
+
+// Map route type to API type
+const repoType = computed(() => {
+  if (currentType.value === 'models') return 'model'
+  if (currentType.value === 'datasets') return 'dataset'
+  if (currentType.value === 'spaces') return 'space'
+  return 'model'
+})
+
+const filteredRepos = computed(() => {
+  const query = searchQuery.value.toLowerCase()
+  const allRepos = repos.value[repoType.value] || []
+  
+  if (!query) return allRepos
+  
+  return allRepos.filter(repo =>
+    repo.id.toLowerCase().includes(query) ||
+    repo.author?.toLowerCase().includes(query) ||
+    repo.tags?.some(tag => tag.toLowerCase().includes(query))
+  )
+})
+
+function getCount(type) {
+  return repos.value[type]?.length || 0
+}
+
+function formatDate(date) {
+  return date ? dayjs(date).format('MMM YYYY') : ''
+}
+
+function goToRepo(type, repo) {
+  const [namespace, name] = repo.id.split('/')
+  router.push(`/${type}s/${namespace}/${name}`)
+}
+
+async function loadRepos() {
+  try {
+    const [models, datasets, spaces] = await Promise.all([
+      repoAPI.listRepos('model', { author: username.value }),
+      repoAPI.listRepos('dataset', { author: username.value }),
+      repoAPI.listRepos('space', { author: username.value })
+    ])
+    
+    repos.value = {
+      model: models.data,
+      dataset: datasets.data,
+      space: spaces.data
+    }
+  } catch (err) {
+    console.error('Failed to load repos:', err)
+  }
+}
+
+// Reset search when type changes
+watch(currentType, () => {
+  searchQuery.value = ''
+})
+
+onMounted(() => {
+  loadRepos()
+})
+</script>

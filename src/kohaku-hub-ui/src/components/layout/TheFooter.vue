@@ -1,6 +1,6 @@
 <!-- src/kohaku-hub-ui/src/components/layout/TheFooter.vue -->
 <template>
-  <footer class="bg-gray-100 border-t border-gray-200 mt-20">
+  <footer class="bg-gray-100 border-t border-gray-200 mt-4">
     <div class="container-main py-8">
       <div class="grid grid-cols-4 gap-8">
         <div>
