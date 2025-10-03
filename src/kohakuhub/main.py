@@ -45,17 +45,21 @@ app.include_router(org_router, prefix="/org", tags=["organizations"])
 
 @app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
+@app.get("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+@app.head("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
 async def public_resolve(
-    namespace: str, name: str, revision: str, path: str, request: Request
+    namespace: str, name: str, revision: str, path: str, request: Request, type="model"
 ):
     """Public download endpoint without /api prefix."""
 
-    repo = Repository.get_or_none(name=name, namespace=namespace)
+    print(f"Resolving {type}/{namespace}/{name}/resolve/{revision}/{path}")
+
+    repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
     if not repo:
         raise HTTPException(404, detail={"error": "Repository not found"})
 
     return await resolve_file(
-        repo_type=repo.repo_type,
+        repo_type=type,
         namespace=namespace,
         name=name,
         revision=revision,

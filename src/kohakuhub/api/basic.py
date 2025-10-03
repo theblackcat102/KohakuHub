@@ -320,8 +320,10 @@ def list_repo_tree(
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
     client = get_lakefs_client()
 
-    # Clean path
+    # Clean path - ensure it ends with / if not empty
     prefix = path.lstrip("/") if path and path != "/" else ""
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
 
     try:
         # List objects from LakeFS
@@ -347,17 +349,21 @@ def list_repo_tree(
 
     # Convert LakeFS objects to HuggingFace format (flat list)
     result_list = []
+    prefix_len = len(prefix)
 
     for obj in result.results:
         if obj.path_type == "object":
             # File object
             is_lfs = obj.size_bytes > cfg.app.lfs_threshold_bytes
 
+            # Remove prefix from path to get relative path
+            relative_path = obj.path[prefix_len:] if prefix else obj.path
+
             file_obj = {
                 "type": "file",
                 "oid": obj.checksum,
                 "size": obj.size_bytes,
-                "path": obj.path,
+                "path": relative_path,
             }
 
             # Add LFS metadata if it's an LFS file
@@ -372,6 +378,9 @@ def list_repo_tree(
 
         elif obj.path_type == "common_prefix":
             # Directory object
+            # Remove prefix from path to get relative path
+            relative_path = obj.path[prefix_len:] if prefix else obj.path
+
             result_list.append(
                 {
                     "type": "directory",
@@ -381,7 +390,7 @@ def list_repo_tree(
                         else ""
                     ),
                     "size": 0,
-                    "path": obj.path.rstrip("/"),  # Remove trailing slash
+                    "path": relative_path.rstrip("/"),  # Remove trailing slash
                 }
             )
 

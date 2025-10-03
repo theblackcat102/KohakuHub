@@ -51,8 +51,7 @@ def get_user_organizations(user_id: int):
     Using FK + join allows attribute access like uo.organization.name.
     """
     query = (
-        UserOrganization
-        .select(UserOrganization, Organization)
+        UserOrganization.select(UserOrganization, Organization)
         .join(Organization)  # FK-based join now works implicitly
         .where(UserOrganization.user == user_id)
     )

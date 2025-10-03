@@ -362,7 +362,7 @@ async def resolve_file(
     return RedirectResponse(
         url=presigned_url,
         status_code=302,
-        headers=response_headers,
+        # headers=response_headers,
     )
 
 

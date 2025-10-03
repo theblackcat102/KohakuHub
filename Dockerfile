@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 COPY ./pyproject.toml .
-COPY ./src/ ./src/
+COPY ./src/kohakuhub ./src/kohakuhub
 COPY ./docker/startup.py /app/startup.py
 RUN chmod +x /app/startup.py
 
