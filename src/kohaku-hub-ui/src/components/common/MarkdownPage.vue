@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import MarkdownViewer from '@/components/common/MarkdownViewer.vue'
+import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
 
 /**
  * @typedef {Object} Props
@@ -19,9 +19,9 @@ import MarkdownViewer from '@/components/common/MarkdownViewer.vue'
 const props = defineProps({
   content: {
     type: String,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 </script>
 
 <style scoped>

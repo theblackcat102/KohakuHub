@@ -43,7 +43,9 @@
                     {{ namespace }}
                   </RouterLink>
                   <span class="text-gray-400 dark:text-gray-500">/</span>
-                  <span class="text-gray-700 dark:text-gray-300">{{ name }}</span>
+                  <span class="text-gray-700 dark:text-gray-300">{{
+                    name
+                  }}</span>
                 </div>
               </div>
             </div>
@@ -61,7 +63,9 @@
           </div>
 
           <!-- Stats -->
-          <div class="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+          <div
+            class="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400"
+          >
             <div class="flex items-center gap-1">
               <div class="i-carbon-download" />
               <span>{{ repoInfo?.downloads || 0 }} downloads</span>
@@ -99,16 +103,26 @@
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
-                activeTab === 'card' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                activeTab === 'card'
+                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
               ]"
               @click="navigateToTab('card')"
             >
-              {{ repoType === 'model' ? 'Model Card' : repoType === 'dataset' ? 'Dataset Card' : 'App' }}
+              {{
+                repoType === "model"
+                  ? "Model Card"
+                  : repoType === "dataset"
+                    ? "Dataset Card"
+                    : "App"
+              }}
             </button>
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
-                activeTab === 'files' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                activeTab === 'files'
+                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
               ]"
               @click="navigateToTab('files')"
             >
@@ -117,7 +131,9 @@
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
-                activeTab === 'commits' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                activeTab === 'commits'
+                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
               ]"
               @click="navigateToTab('commits')"
             >
@@ -132,7 +148,10 @@
             <div v-if="readmeContent">
               <MarkdownViewer :content="readmeContent" />
             </div>
-            <div v-else class="text-center py-12 text-gray-500 dark:text-gray-400">
+            <div
+              v-else
+              class="text-center py-12 text-gray-500 dark:text-gray-400"
+            >
               <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
               <p>No README.md found</p>
               <el-button
@@ -150,14 +169,20 @@
         <div v-if="activeTab === 'files'" class="card">
           <div class="mb-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <el-select v-model="currentBranch" size="small" style="width: 150px" @change="handleBranchChange">
+              <el-select
+                v-model="currentBranch"
+                size="small"
+                style="width: 150px"
+                @change="handleBranchChange"
+              >
                 <el-option label="main" value="main" />
               </el-select>
               <span class="text-sm text-gray-600 dark:text-gray-400">
-                {{ fileTree.length }} {{ fileTree.length === 1 ? 'file' : 'files' }}
+                {{ fileTree.length }}
+                {{ fileTree.length === 1 ? "file" : "files" }}
               </span>
             </div>
-            
+
             <el-input
               v-model="fileSearchQuery"
               placeholder="Search files..."
@@ -173,7 +198,10 @@
 
           <!-- Breadcrumb for current path -->
           <div v-if="currentPath" class="mb-3 text-sm">
-            <el-breadcrumb separator="/" class="text-gray-700 dark:text-gray-300">
+            <el-breadcrumb
+              separator="/"
+              class="text-gray-700 dark:text-gray-300"
+            >
               <el-breadcrumb-item>
                 <RouterLink
                   :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}`"
@@ -205,18 +233,27 @@
               @click="handleFileClick(file)"
             >
               <div
-                :class="file.type === 'directory' ? 'i-carbon-folder text-blue-500' : 'i-carbon-document text-gray-500 dark:text-gray-400'"
+                :class="
+                  file.type === 'directory'
+                    ? 'i-carbon-folder text-blue-500'
+                    : 'i-carbon-document text-gray-500 dark:text-gray-400'
+                "
                 class="text-xl flex-shrink-0"
               />
               <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">{{ getFileName(file.path) }}</div>
+                <div class="font-medium truncate">
+                  {{ getFileName(file.path) }}
+                </div>
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 {{ formatSize(file.size) }}
               </div>
             </div>
 
-            <div v-if="filteredFiles.length === 0" class="py-12 text-center text-gray-500 dark:text-gray-400">
+            <div
+              v-if="filteredFiles.length === 0"
+              class="py-12 text-center text-gray-500 dark:text-gray-400"
+            >
               <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
               <p>No files found</p>
             </div>
@@ -240,7 +277,9 @@
             :to="`/${namespace}`"
             class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded transition-colors"
           >
-            <div class="i-carbon-user-avatar text-3xl text-gray-400 dark:text-gray-500" />
+            <div
+              class="i-carbon-user-avatar text-3xl text-gray-400 dark:text-gray-500"
+            />
             <span class="font-medium">{{ namespace }}</span>
           </RouterLink>
         </div>
@@ -249,11 +288,7 @@
         <div v-if="repoInfo?.tags && repoInfo.tags.length" class="card">
           <h3 class="font-semibold mb-3">Tags</h3>
           <div class="flex flex-wrap gap-2">
-            <el-tag
-              v-for="tag in repoInfo.tags"
-              :key="tag"
-              size="small"
-            >
+            <el-tag v-for="tag in repoInfo.tags" :key="tag" size="small">
               {{ tag }}
             </el-tag>
           </div>
@@ -273,7 +308,9 @@
             </div>
             <div v-if="repoInfo?.sha">
               <span class="text-gray-600 dark:text-gray-400">Commit:</span>
-              <span class="ml-2 font-mono text-xs">{{ repoInfo.sha.slice(0, 7) }}</span>
+              <span class="ml-2 font-mono text-xs">{{
+                repoInfo.sha.slice(0, 7)
+              }}</span>
             </div>
           </div>
         </div>
@@ -285,11 +322,7 @@
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium mb-2">Clone with HTTPS</label>
-          <el-input
-            :value="cloneUrl"
-            readonly
-            class="font-mono text-sm"
-          >
+          <el-input :value="cloneUrl" readonly class="font-mono text-sm">
             <template #append>
               <el-button @click="copyCloneUrl">
                 <div class="i-carbon-copy" />
@@ -302,9 +335,14 @@
           <p class="mb-2 font-medium">Usage:</p>
           <pre class="text-xs overflow-x-auto">git clone {{ cloneUrl }}</pre>
           <p class="mt-3 text-gray-600 dark:text-gray-400">
-            Or use <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded">huggingface-cli</code>:
+            Or use
+            <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded"
+              >huggingface-cli</code
+            >:
           </p>
-          <pre class="text-xs overflow-x-auto mt-1">huggingface-cli download {{ repoInfo?.id }}</pre>
+          <pre class="text-xs overflow-x-auto mt-1">
+huggingface-cli download {{ repoInfo?.id }}</pre
+          >
         </div>
       </div>
     </el-dialog>
@@ -312,14 +350,14 @@
 </template>
 
 <script setup>
-import { repoAPI } from '@/utils/api'
-import { useAuthStore } from '@/stores/auth'
-import MarkdownViewer from '@/components/common/MarkdownViewer.vue'
-import { ElMessage } from 'element-plus'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
+import { repoAPI } from "@/utils/api";
+import { useAuthStore } from "@/stores/auth";
+import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
+import { ElMessage } from "element-plus";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
 
-dayjs.extend(relativeTime)
+dayjs.extend(relativeTime);
 
 /**
  * @typedef {Object} Props
@@ -334,117 +372,124 @@ const props = defineProps({
   repoType: { type: String, required: true },
   namespace: { type: String, required: true },
   name: { type: String, required: true },
-  branch: { type: String, default: 'main' },
-  currentPath: { type: String, default: '' },
-  tab: { type: String, default: 'card' }
-})
+  branch: { type: String, default: "main" },
+  currentPath: { type: String, default: "" },
+  tab: { type: String, default: "card" },
+});
 
-const router = useRouter()
-const authStore = useAuthStore()
+const router = useRouter();
+const authStore = useAuthStore();
 
 // State
-const loading = ref(true)
-const error = ref(null)
-const repoInfo = ref(null)
-const currentBranch = ref(props.branch)
-const fileTree = ref([])
-const readmeContent = ref('')
-const showCloneDialog = ref(false)
-const fileSearchQuery = ref('')
+const loading = ref(true);
+const error = ref(null);
+const repoInfo = ref(null);
+const currentBranch = ref(props.branch);
+const fileTree = ref([]);
+const readmeContent = ref("");
+const showCloneDialog = ref(false);
+const fileSearchQuery = ref("");
 
 // Computed
-const activeTab = computed(() => props.tab)
+const activeTab = computed(() => props.tab);
 
 const repoTypeLabel = computed(() => {
-  const labels = { model: 'Models', dataset: 'Datasets', space: 'Spaces' }
-  return labels[props.repoType] || 'Models'
-})
+  const labels = { model: "Models", dataset: "Datasets", space: "Spaces" };
+  return labels[props.repoType] || "Models";
+});
 
 const isOwner = computed(() => {
-  return authStore.username === props.namespace
-})
+  return authStore.username === props.namespace;
+});
 
 const cloneUrl = computed(() => {
-  const baseUrl = window.location.origin
-  return `${baseUrl}/${repoInfo.value?.id}.git`
-})
+  const baseUrl = window.location.origin;
+  return `${baseUrl}/${repoInfo.value?.id}.git`;
+});
 
 const pathSegments = computed(() => {
-  return props.currentPath ? props.currentPath.split('/').filter(Boolean) : []
-})
+  return props.currentPath ? props.currentPath.split("/").filter(Boolean) : [];
+});
 
 const filteredFiles = computed(() => {
-  if (!fileSearchQuery.value) return fileTree.value
-  
-  const query = fileSearchQuery.value.toLowerCase()
-  return fileTree.value.filter(file => 
-    getFileName(file.path).toLowerCase().includes(query)
-  )
-})
+  if (!fileSearchQuery.value) return fileTree.value;
+
+  const query = fileSearchQuery.value.toLowerCase();
+  return fileTree.value.filter((file) =>
+    getFileName(file.path).toLowerCase().includes(query),
+  );
+});
 
 // Methods
 function getIconClass(type) {
   const icons = {
-    model: 'i-carbon-model text-blue-500',
-    dataset: 'i-carbon-data-table text-green-500',
-    space: 'i-carbon-application text-purple-500'
-  }
-  return icons[type] || icons.model
+    model: "i-carbon-model text-blue-500",
+    dataset: "i-carbon-data-table text-green-500",
+    space: "i-carbon-application text-purple-500",
+  };
+  return icons[type] || icons.model;
 }
 
 function formatDate(date) {
-  return date ? dayjs(date).fromNow() : 'Unknown'
+  return date ? dayjs(date).fromNow() : "Unknown";
 }
 
 function formatSize(bytes) {
-  if (!bytes || bytes === 0) return '-'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
+  if (!bytes || bytes === 0) return "-";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  if (bytes < 1024 * 1024 * 1024)
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
 }
 
 function getFileName(path) {
-  const parts = path.split('/')
-  return parts[parts.length - 1] || path
+  const parts = path.split("/");
+  return parts[parts.length - 1] || path;
 }
 
 function navigateToTab(tab) {
-  if (tab === 'files') {
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`)
-  } else if (tab === 'commits') {
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}/commits/${currentBranch.value}`)
+  if (tab === "files") {
+    router.push(
+      `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`,
+    );
+  } else if (tab === "commits") {
+    router.push(
+      `/${props.repoType}s/${props.namespace}/${props.name}/commits/${currentBranch.value}`,
+    );
   } else {
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}`)
+    router.push(`/${props.repoType}s/${props.namespace}/${props.name}`);
   }
 }
 
 function navigateToSettings() {
-  router.push(`/${props.repoType}s/${props.namespace}/${props.name}/settings`)
+  router.push(`/${props.repoType}s/${props.namespace}/${props.name}/settings`);
 }
 
 function handleBranchChange() {
-  if (activeTab.value === 'files') {
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`)
+  if (activeTab.value === "files") {
+    router.push(
+      `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`,
+    );
   }
 }
 
 async function loadRepoInfo() {
-  loading.value = true
-  error.value = null
-  
+  loading.value = true;
+  error.value = null;
+
   try {
     const { data } = await repoAPI.getInfo(
       props.repoType,
       props.namespace,
-      props.name
-    )
-    repoInfo.value = data
+      props.name,
+    );
+    repoInfo.value = data;
   } catch (err) {
-    error.value = err.response?.data?.detail || 'Failed to load repository'
-    console.error('Failed to load repo info:', err)
+    error.value = err.response?.data?.detail || "Failed to load repository";
+    console.error("Failed to load repo info:", err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -455,110 +500,130 @@ async function loadFileTree() {
       props.namespace,
       props.name,
       currentBranch.value,
-      props.currentPath ? `/${props.currentPath}` : '',
-      { recursive: false }
-    )
-    
+      props.currentPath ? `/${props.currentPath}` : "",
+      { recursive: false },
+    );
+
     fileTree.value = data.sort((a, b) => {
-      if (a.type === 'directory' && b.type !== 'directory') return -1
-      if (a.type !== 'directory' && b.type === 'directory') return 1
-      return a.path.localeCompare(b.path)
-    })
+      if (a.type === "directory" && b.type !== "directory") return -1;
+      if (a.type !== "directory" && b.type === "directory") return 1;
+      return a.path.localeCompare(b.path);
+    });
   } catch (err) {
-    console.error('Failed to load file tree:', err)
-    fileTree.value = []
+    console.error("Failed to load file tree:", err);
+    fileTree.value = [];
   }
 }
 
 async function loadReadme() {
   try {
-    const readmeFile = fileTree.value.find(f => 
-      f.type === 'file' && 
-      f.path.toLowerCase().endsWith('readme.md')
-    )
-    
+    const readmeFile = fileTree.value.find(
+      (f) => f.type === "file" && f.path.toLowerCase().endsWith("readme.md"),
+    );
+
     if (!readmeFile) {
-      readmeContent.value = ''
-      return
+      readmeContent.value = "";
+      return;
     }
-    
-    const downloadUrl = `/${props.repoType}s/${props.namespace}/${props.name}/resolve/${currentBranch.value}/${readmeFile.path}`
-    const response = await fetch(downloadUrl)
-    
+
+    const downloadUrl = `/${props.repoType}s/${props.namespace}/${props.name}/resolve/${currentBranch.value}/${readmeFile.path}`;
+    const response = await fetch(downloadUrl);
+
     if (response.ok) {
-      readmeContent.value = await response.text()
+      readmeContent.value = await response.text();
     }
   } catch (err) {
-    console.error('Failed to load README:', err)
-    readmeContent.value = ''
+    console.error("Failed to load README:", err);
+    readmeContent.value = "";
   }
 }
 
 function handleFileClick(file) {
-  if (file.type === 'directory') {
+  if (file.type === "directory") {
     // Navigate to folder using tree route
-    const newPath = props.currentPath ? `${props.currentPath}/${file.path}` : file.path
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}/${newPath}`)
+    const newPath = props.currentPath
+      ? `${props.currentPath}/${file.path}`
+      : file.path;
+    router.push(
+      `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}/${newPath}`,
+    );
   } else {
     // Navigate to file viewer using blob route
-    const fullPath = props.currentPath ? `${props.currentPath}/${file.path}` : file.path
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}/blob/${currentBranch.value}/${fullPath}`)
+    const fullPath = props.currentPath
+      ? `${props.currentPath}/${file.path}`
+      : file.path;
+    router.push(
+      `/${props.repoType}s/${props.namespace}/${props.name}/blob/${currentBranch.value}/${fullPath}`,
+    );
   }
 }
 
 function downloadRepo() {
-  ElMessage.info('Download functionality coming soon')
+  ElMessage.info("Download functionality coming soon");
 }
 
 function createReadme() {
-  ElMessage.info('README creation coming soon')
+  ElMessage.info("README creation coming soon");
 }
 
 function copyCloneUrl() {
-  navigator.clipboard.writeText(cloneUrl.value)
-  ElMessage.success('Clone URL copied to clipboard')
+  navigator.clipboard.writeText(cloneUrl.value);
+  ElMessage.success("Clone URL copied to clipboard");
 }
 
 // Watchers
-watch(() => props.currentPath, () => {
-  if (activeTab.value === 'files') {
-    loadFileTree()
-  }
-})
-
-watch(() => props.branch, (newBranch) => {
-  currentBranch.value = newBranch
-  if (activeTab.value === 'files') {
-    loadFileTree()
-  }
-})
-
-watch(() => props.tab, async (newTab) => {
-  if (newTab === 'files' && fileTree.value.length === 0) {
-    await loadFileTree()
-  } else if (newTab === 'card' && !readmeContent.value) {
-    if (fileTree.value.length === 0) {
-      await loadFileTree()
+watch(
+  () => props.currentPath,
+  () => {
+    if (activeTab.value === "files") {
+      loadFileTree();
     }
-    await loadReadme()
-  }
-})
+  },
+);
 
-watch(fileTree, () => {
-  if (activeTab.value === 'card' && !readmeContent.value) {
-    loadReadme()
-  }
-}, { immediate: false })
+watch(
+  () => props.branch,
+  (newBranch) => {
+    currentBranch.value = newBranch;
+    if (activeTab.value === "files") {
+      loadFileTree();
+    }
+  },
+);
+
+watch(
+  () => props.tab,
+  async (newTab) => {
+    if (newTab === "files" && fileTree.value.length === 0) {
+      await loadFileTree();
+    } else if (newTab === "card" && !readmeContent.value) {
+      if (fileTree.value.length === 0) {
+        await loadFileTree();
+      }
+      await loadReadme();
+    }
+  },
+);
+
+watch(
+  fileTree,
+  () => {
+    if (activeTab.value === "card" && !readmeContent.value) {
+      loadReadme();
+    }
+  },
+  { immediate: false },
+);
 
 // Lifecycle
 onMounted(async () => {
-  await loadRepoInfo()
-  
-  if (activeTab.value === 'files') {
-    await loadFileTree()
-  } else if (activeTab.value === 'card') {
-    await loadFileTree()
-    await loadReadme()
+  await loadRepoInfo();
+
+  if (activeTab.value === "files") {
+    await loadFileTree();
+  } else if (activeTab.value === "card") {
+    await loadFileTree();
+    await loadReadme();
   }
-})
+});
 </script>

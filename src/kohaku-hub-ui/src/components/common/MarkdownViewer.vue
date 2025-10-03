@@ -4,7 +4,7 @@
 </template>
 
 <script setup>
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown } from "@/utils/markdown";
 
 /**
  * @typedef {Object} Props
@@ -14,19 +14,19 @@ import { renderMarkdown } from '@/utils/markdown'
 const props = defineProps({
   content: {
     type: String,
-    default: ''
+    default: "",
   },
   stripFrontmatter: {
     type: Boolean,
-    default: true
-  }
-})
+    default: true,
+  },
+});
 
 const renderedHTML = computed(() => {
   return renderMarkdown(props.content, {
-    stripFrontmatter: props.stripFrontmatter
-  })
-})
+    stripFrontmatter: props.stripFrontmatter,
+  });
+});
 </script>
 
 <style scoped>

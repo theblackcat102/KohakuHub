@@ -18,26 +18,26 @@
           <!-- Repository Type -->
           <el-form-item label="Repository Type" prop="type">
             <div class="w-full">
-                <el-radio-group v-model="form.type" size="large">
+              <el-radio-group v-model="form.type" size="large">
                 <el-radio-button value="model" class="flex-1">
-                    <div class="flex items-center justify-center gap-2 py-2">
+                  <div class="flex items-center justify-center gap-2 py-2">
                     <div class="i-carbon-model text-xl" />
                     <span>Model</span>
-                    </div>
+                  </div>
                 </el-radio-button>
                 <el-radio-button value="dataset" class="flex-1">
-                    <div class="flex items-center justify-center gap-2 py-2">
+                  <div class="flex items-center justify-center gap-2 py-2">
                     <div class="i-carbon-data-table text-xl" />
                     <span>Dataset</span>
-                    </div>
+                  </div>
                 </el-radio-button>
                 <el-radio-button value="space" class="flex-1">
-                    <div class="flex items-center justify-center gap-2 py-2">
+                  <div class="flex items-center justify-center gap-2 py-2">
                     <div class="i-carbon-application text-xl" />
                     <span>Space</span>
-                    </div>
+                  </div>
                 </el-radio-button>
-                </el-radio-group>
+              </el-radio-group>
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
               {{ getTypeDescription(form.type) }}
@@ -52,10 +52,7 @@
               size="large"
               class="w-full"
             >
-              <el-option
-                :label="currentUser"
-                :value="currentUser"
-              >
+              <el-option :label="currentUser" :value="currentUser">
                 <div class="flex items-center gap-2">
                   <div class="i-carbon-user-avatar" />
                   <span>{{ currentUser }}</span>
@@ -123,13 +120,10 @@
           </el-form-item>
 
           <!-- Actions -->
-          <div class="flex gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <el-button 
-              size="large"
-              @click="$router.back()"
-            >
-              Cancel
-            </el-button>
+          <div
+            class="flex gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700"
+          >
+            <el-button size="large" @click="$router.back()"> Cancel </el-button>
             <el-button
               type="primary"
               size="large"
@@ -147,80 +141,88 @@
 </template>
 
 <script setup>
-import { repoAPI, orgAPI } from '@/utils/api'
-import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { repoAPI, orgAPI } from "@/utils/api";
+import { useAuthStore } from "@/stores/auth";
+import { ElMessage } from "element-plus";
 
-const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
-const { username: currentUser } = storeToRefs(authStore)
+const router = useRouter();
+const route = useRoute();
+const authStore = useAuthStore();
+const { username: currentUser } = storeToRefs(authStore);
 
-const formRef = ref(null)
-const creating = ref(false)
-const userOrgs = ref([])
+const formRef = ref(null);
+const creating = ref(false);
+const userOrgs = ref([]);
 
 const form = reactive({
-  type: route.query.type || 'model',
+  type: route.query.type || "model",
   owner: currentUser.value,
-  name: '',
-  private: false
-})
+  name: "",
+  private: false,
+});
 
 const rules = {
   type: [
-    { required: true, message: 'Please select repository type', trigger: 'change' }
+    {
+      required: true,
+      message: "Please select repository type",
+      trigger: "change",
+    },
   ],
   owner: [
-    { required: true, message: 'Please select owner', trigger: 'change' }
+    { required: true, message: "Please select owner", trigger: "change" },
   ],
   name: [
-    { required: true, message: 'Please enter repository name', trigger: 'blur' },
-    { 
-      pattern: /^[a-zA-Z0-9_-]+$/, 
-      message: 'Only letters, numbers, hyphens and underscores allowed',
-      trigger: 'blur' 
+    {
+      required: true,
+      message: "Please enter repository name",
+      trigger: "blur",
+    },
+    {
+      pattern: /^[a-zA-Z0-9_-]+$/,
+      message: "Only letters, numbers, hyphens and underscores allowed",
+      trigger: "blur",
     },
     {
       min: 2,
-      message: 'Name must be at least 2 characters',
-      trigger: 'blur'
-    }
-  ]
-}
+      message: "Name must be at least 2 characters",
+      trigger: "blur",
+    },
+  ],
+};
 
 const typeLabel = computed(() => {
-  const labels = { model: 'Model', dataset: 'Dataset', space: 'Space' }
-  return labels[form.type] || 'Repository'
-})
+  const labels = { model: "Model", dataset: "Dataset", space: "Space" };
+  return labels[form.type] || "Repository";
+});
 
 function getTypeDescription(type) {
   const descriptions = {
-    model: 'Store and share machine learning models with the community',
-    dataset: 'Store and share datasets for training and evaluation',
-    space: 'Create interactive ML demos and applications'
-  }
-  return descriptions[type] || ''
+    model: "Store and share machine learning models with the community",
+    dataset: "Store and share datasets for training and evaluation",
+    space: "Create interactive ML demos and applications",
+  };
+  return descriptions[type] || "";
 }
 
 async function loadUserOrgs() {
-  if (!currentUser.value) return
-  
+  if (!currentUser.value) return;
+
   try {
-    const { data } = await orgAPI.getUserOrgs(currentUser.value)
-    userOrgs.value = data.organizations || []
+    const { data } = await orgAPI.getUserOrgs(currentUser.value);
+    userOrgs.value = data.organizations || [];
   } catch (err) {
-    console.error('Failed to load organizations:', err)
+    console.error("Failed to load organizations:", err);
   }
 }
 
 async function handleSubmit() {
-  if (!formRef.value) return
-  
+  if (!formRef.value) return;
+
   await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    
-    creating.value = true
+    if (!valid) return;
+
+    creating.value = true;
     try {
       // Backend expects:
       // {
@@ -234,34 +236,39 @@ async function handleSubmit() {
         type: form.type,
         name: form.name,
         organization: form.owner !== currentUser.value ? form.owner : null,
-        private: form.private
-      }
-      
-      const { data } = await repoAPI.create(payload)
-      
-      ElMessage.success(`${typeLabel.value} created successfully`)
-      
+        private: form.private,
+      };
+
+      const { data } = await repoAPI.create(payload);
+
+      ElMessage.success(`${typeLabel.value} created successfully`);
+
       // Navigate to the new repository
       // Backend returns: { url: string, repo_id: string }
-      const repoId = data.repo_id || `${form.owner}/${form.name}`
-      router.push(`/${form.type}s/${repoId}`)
+      const repoId = data.repo_id || `${form.owner}/${form.name}`;
+      router.push(`/${form.type}s/${repoId}`);
     } catch (err) {
-      ElMessage.error(err.response?.data?.detail || `Failed to create ${form.type}`)
-      console.error('Create repository error:', err)
+      ElMessage.error(
+        err.response?.data?.detail || `Failed to create ${form.type}`,
+      );
+      console.error("Create repository error:", err);
     } finally {
-      creating.value = false
+      creating.value = false;
     }
-  })
+  });
 }
 
 // Watch for type changes from query params
-watch(() => route.query.type, (newType) => {
-  if (newType && ['model', 'dataset', 'space'].includes(newType)) {
-    form.type = newType
-  }
-})
+watch(
+  () => route.query.type,
+  (newType) => {
+    if (newType && ["model", "dataset", "space"].includes(newType)) {
+      form.type = newType;
+    }
+  },
+);
 
 onMounted(() => {
-  loadUserOrgs()
-})
+  loadUserOrgs();
+});
 </script>

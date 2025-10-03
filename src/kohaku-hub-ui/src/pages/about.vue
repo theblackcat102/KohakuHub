@@ -1,6 +1,6 @@
 <!-- src/pages/about.vue -->
 <script setup>
-import MarkdownPage from '@/components/common/MarkdownPage.vue'
+import MarkdownPage from "@/components/common/MarkdownPage.vue";
 
 const content = `# About KohakuHub
 
@@ -189,7 +189,7 @@ This project is inspired by HuggingFace Hub and built with the goal of providing
 ---
 
 **Ready to get started?** Check out our [GitHub repository](https://github.com/KohakuBlueleaf/Kohaku-Hub) for installation instructions and documentation.
-`
+`;
 </script>
 
 <template>

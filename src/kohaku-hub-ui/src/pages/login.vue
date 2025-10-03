@@ -3,7 +3,7 @@
   <div class="min-h-[calc(100vh-16rem)] flex items-center justify-center">
     <div class="card w-full max-w-md">
       <h1 class="text-2xl font-bold mb-6 text-center">Login to KohakuHub</h1>
-      
+
       <el-form
         ref="formRef"
         :model="form"
@@ -18,7 +18,7 @@
             size="large"
           />
         </el-form-item>
-        
+
         <el-form-item label="Password" prop="password">
           <el-input
             v-model="form.password"
@@ -28,7 +28,7 @@
             show-password
           />
         </el-form-item>
-        
+
         <el-button
           type="primary"
           size="large"
@@ -39,10 +39,13 @@
           Login
         </el-button>
       </el-form>
-      
+
       <div class="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
         Don't have an account?
-        <RouterLink to="/register" class="text-blue-500 dark:text-blue-400 hover:underline">
+        <RouterLink
+          to="/register"
+          class="text-blue-500 dark:text-blue-400 hover:underline"
+        >
           Sign up
         </RouterLink>
       </div>
@@ -51,44 +54,44 @@
 </template>
 
 <script setup>
-import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { useAuthStore } from "@/stores/auth";
+import { ElMessage } from "element-plus";
 
-const router = useRouter()
-const authStore = useAuthStore()
-const formRef = ref(null)
-const loading = ref(false)
+const router = useRouter();
+const authStore = useAuthStore();
+const formRef = ref(null);
+const loading = ref(false);
 
 const form = reactive({
-  username: '',
-  password: ''
-})
+  username: "",
+  password: "",
+});
 
 const rules = {
   username: [
-    { required: true, message: 'Please enter username', trigger: 'blur' }
+    { required: true, message: "Please enter username", trigger: "blur" },
   ],
   password: [
-    { required: true, message: 'Please enter password', trigger: 'blur' }
-  ]
-}
+    { required: true, message: "Please enter password", trigger: "blur" },
+  ],
+};
 
 async function handleSubmit() {
-  if (!formRef.value) return
-  
+  if (!formRef.value) return;
+
   await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    
-    loading.value = true
+    if (!valid) return;
+
+    loading.value = true;
     try {
-      await authStore.login(form)
-      ElMessage.success('Login successful')
-      router.push('/')
+      await authStore.login(form);
+      ElMessage.success("Login successful");
+      router.push("/");
     } catch (err) {
-      ElMessage.error(err.response?.data?.detail || 'Login failed')
+      ElMessage.error(err.response?.data?.detail || "Login failed");
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  })
+  });
 }
 </script>

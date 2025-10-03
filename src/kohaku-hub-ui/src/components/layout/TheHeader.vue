@@ -1,6 +1,8 @@
 <!-- src/components/layout/TheHeader.vue -->
 <template>
-  <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-colors">
+  <header
+    class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-colors"
+  >
     <div class="container-main flex items-center justify-between h-12">
       <!-- Logo -->
       <RouterLink to="/" class="flex items-center gap-2">
@@ -10,13 +12,22 @@
 
       <!-- Navigation -->
       <nav class="flex items-center gap-6">
-        <RouterLink to="/models" class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
+        <RouterLink
+          to="/models"
+          class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+        >
           Models
         </RouterLink>
-        <RouterLink to="/datasets" class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
+        <RouterLink
+          to="/datasets"
+          class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+        >
           Datasets
         </RouterLink>
-        <RouterLink to="/spaces" class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
+        <RouterLink
+          to="/spaces"
+          class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+        >
           Spaces
         </RouterLink>
       </nav>
@@ -88,11 +99,9 @@
             </template>
           </el-dropdown>
         </template>
-        
+
         <template v-else>
-          <el-button @click="$router.push('/login')" text>
-            Login
-          </el-button>
+          <el-button @click="$router.push('/login')" text> Login </el-button>
           <el-button type="primary" @click="$router.push('/register')">
             Sign Up
           </el-button>
@@ -103,30 +112,30 @@
 </template>
 
 <script setup>
-import { storeToRefs } from 'pinia'
-import { useAuthStore } from '@/stores/auth'
-import { useThemeStore } from '@/stores/theme'
-import { ElMessage } from 'element-plus'
+import { storeToRefs } from "pinia";
+import { useAuthStore } from "@/stores/auth";
+import { useThemeStore } from "@/stores/theme";
+import { ElMessage } from "element-plus";
 
-const authStore = useAuthStore()
-const themeStore = useThemeStore()
-const { isAuthenticated, username } = storeToRefs(authStore)
-const router = useRouter()
+const authStore = useAuthStore();
+const themeStore = useThemeStore();
+const { isAuthenticated, username } = storeToRefs(authStore);
+const router = useRouter();
 
 function createNew(type) {
   router.push({
-    path: '/new',
-    query: { type }
-  })
+    path: "/new",
+    query: { type },
+  });
 }
 
 async function handleLogout() {
   try {
-    await authStore.logout()
-    ElMessage.success('Logged out successfully')
-    router.push('/')
+    await authStore.logout();
+    ElMessage.success("Logged out successfully");
+    router.push("/");
   } catch (err) {
-    ElMessage.error('Logout failed')
+    ElMessage.error("Logout failed");
   }
 }
 </script>

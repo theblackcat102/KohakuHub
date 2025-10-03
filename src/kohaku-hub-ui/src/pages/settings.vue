@@ -2,7 +2,7 @@
 <template>
   <div class="container-main">
     <h1 class="text-3xl font-bold mb-6">Settings</h1>
-    
+
     <el-tabs v-model="activeTab">
       <!-- Profile -->
       <el-tab-pane label="Profile" name="profile">
@@ -22,7 +22,7 @@
           </div>
         </div>
       </el-tab-pane>
-      
+
       <!-- API Tokens -->
       <el-tab-pane label="API Tokens" name="tokens">
         <div class="max-w-2xl">
@@ -38,17 +38,14 @@
               </el-button>
             </div>
           </div>
-          
+
           <div v-if="newToken" class="card mb-4 bg-yellow-50">
             <h3 class="font-semibold mb-2">New Token Created</h3>
             <p class="text-sm text-gray-600 mb-2">
-              Make sure to copy your token now. You won't be able to see it again!
+              Make sure to copy your token now. You won't be able to see it
+              again!
             </p>
-            <el-input
-              :value="newToken"
-              readonly
-              class="font-mono"
-            >
+            <el-input :value="newToken" readonly class="font-mono">
               <template #append>
                 <el-button @click="copyToken">
                   <div class="i-carbon-copy" />
@@ -56,7 +53,7 @@
               </template>
             </el-input>
           </div>
-          
+
           <div class="card">
             <h2 class="text-xl font-semibold mb-4">Active Tokens</h2>
             <div class="space-y-2">
@@ -79,8 +76,11 @@
                   Revoke
                 </el-button>
               </div>
-              
-              <div v-if="!tokens || tokens.length === 0" class="text-center py-8 text-gray-500">
+
+              <div
+                v-if="!tokens || tokens.length === 0"
+                class="text-center py-8 text-gray-500"
+              >
                 No active tokens
               </div>
             </div>
@@ -92,73 +92,73 @@
 </template>
 
 <script setup>
-import { useAuthStore } from '@/stores/auth'
-import { authAPI } from '@/utils/api'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import dayjs from 'dayjs'
+import { useAuthStore } from "@/stores/auth";
+import { authAPI } from "@/utils/api";
+import { ElMessage, ElMessageBox } from "element-plus";
+import dayjs from "dayjs";
 
-const authStore = useAuthStore()
-const { user } = storeToRefs(authStore)
+const authStore = useAuthStore();
+const { user } = storeToRefs(authStore);
 
-const activeTab = ref('profile')
-const newTokenName = ref('')
-const newToken = ref('')
-const tokens = ref([])
+const activeTab = ref("profile");
+const newTokenName = ref("");
+const newToken = ref("");
+const tokens = ref([]);
 
 function formatDate(date) {
-  return dayjs(date).format('MMM D, YYYY')
+  return dayjs(date).format("MMM D, YYYY");
 }
 
 async function loadTokens() {
   try {
-    const { data } = await authAPI.listTokens()
-    tokens.value = data.tokens
+    const { data } = await authAPI.listTokens();
+    tokens.value = data.tokens;
   } catch (err) {
-    console.error('Failed to load tokens:', err)
+    console.error("Failed to load tokens:", err);
   }
 }
 
 async function handleCreateToken() {
   if (!newTokenName.value) {
-    ElMessage.warning('Please enter token name')
-    return
+    ElMessage.warning("Please enter token name");
+    return;
   }
-  
+
   try {
-    const { data } = await authAPI.createToken({ name: newTokenName.value })
-    newToken.value = data.token
-    newTokenName.value = ''
-    await loadTokens()
-    ElMessage.success('Token created')
+    const { data } = await authAPI.createToken({ name: newTokenName.value });
+    newToken.value = data.token;
+    newTokenName.value = "";
+    await loadTokens();
+    ElMessage.success("Token created");
   } catch (err) {
-    ElMessage.error('Failed to create token')
+    ElMessage.error("Failed to create token");
   }
 }
 
 async function handleRevokeToken(id) {
   try {
     await ElMessageBox.confirm(
-      'This will permanently delete the token. Continue?',
-      'Warning',
-      { type: 'warning' }
-    )
-    
-    await authAPI.revokeToken(id)
-    await loadTokens()
-    ElMessage.success('Token revoked')
+      "This will permanently delete the token. Continue?",
+      "Warning",
+      { type: "warning" },
+    );
+
+    await authAPI.revokeToken(id);
+    await loadTokens();
+    ElMessage.success("Token revoked");
   } catch (err) {
-    if (err !== 'cancel') {
-      ElMessage.error('Failed to revoke token')
+    if (err !== "cancel") {
+      ElMessage.error("Failed to revoke token");
     }
   }
 }
 
 function copyToken() {
-  navigator.clipboard.writeText(newToken.value)
-  ElMessage.success('Token copied to clipboard')
+  navigator.clipboard.writeText(newToken.value);
+  ElMessage.success("Token copied to clipboard");
 }
 
 onMounted(() => {
-  loadTokens()
-})
+  loadTokens();
+});
 </script>

@@ -1,9 +1,9 @@
 // src/kohaku-hub-ui/src/stores/theme.js
-import { defineStore } from 'pinia'
+import { defineStore } from "pinia";
 
-export const useThemeStore = defineStore('theme', {
+export const useThemeStore = defineStore("theme", {
   state: () => ({
-    isDark: localStorage.getItem('theme') === 'dark' || false
+    isDark: localStorage.getItem("theme") === "dark" || false,
   }),
 
   actions: {
@@ -11,8 +11,8 @@ export const useThemeStore = defineStore('theme', {
      * Toggle between light and dark mode
      */
     toggle() {
-      this.isDark = !this.isDark
-      this.apply()
+      this.isDark = !this.isDark;
+      this.apply();
     },
 
     /**
@@ -20,22 +20,22 @@ export const useThemeStore = defineStore('theme', {
      * @param {boolean} isDark - Whether to enable dark mode
      */
     setTheme(isDark) {
-      this.isDark = isDark
-      this.apply()
+      this.isDark = isDark;
+      this.apply();
     },
 
     /**
      * Apply theme to document and save to localStorage
      */
     apply() {
-      const html = document.documentElement
+      const html = document.documentElement;
 
       if (this.isDark) {
-        html.classList.add('dark')
-        localStorage.setItem('theme', 'dark')
+        html.classList.add("dark");
+        localStorage.setItem("theme", "dark");
       } else {
-        html.classList.remove('dark')
-        localStorage.setItem('theme', 'light')
+        html.classList.remove("dark");
+        localStorage.setItem("theme", "light");
       }
     },
 
@@ -43,7 +43,7 @@ export const useThemeStore = defineStore('theme', {
      * Initialize theme on app load
      */
     init() {
-      this.apply()
-    }
-  }
-})
+      this.apply();
+    },
+  },
+});

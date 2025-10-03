@@ -1,6 +1,9 @@
 <!-- src/kohaku-hub-ui/src/App.vue -->
 <template>
-  <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors flex flex-col">
+  <div
+    id="app"
+    class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors flex flex-col"
+  >
     <TheHeader />
     <main class="flex-1 relative">
       <Transition name="fade" mode="out-in">
@@ -16,8 +19,8 @@
 </template>
 
 <script setup>
-import TheHeader from '@/components/layout/TheHeader.vue'
-import TheFooter from '@/components/layout/TheFooter.vue'
+import TheHeader from "@/components/layout/TheHeader.vue";
+import TheFooter from "@/components/layout/TheFooter.vue";
 
 // Theme is applied early via inline script in index.html to prevent flash
 // No need to initialize here
@@ -29,12 +32,14 @@ import TheFooter from '@/components/layout/TheFooter.vue'
  */
 function getRouteKey(route) {
   // Extract repo identifier from path
-  const match = route.path.match(/^\/(models|datasets|spaces)\/([^/]+)\/([^/]+)/)
+  const match = route.path.match(
+    /^\/(models|datasets|spaces)\/([^/]+)\/([^/]+)/,
+  );
   if (match) {
-    const [, type, namespace, name] = match
-    return `${type}-${namespace}-${name}`
+    const [, type, namespace, name] = match;
+    return `${type}-${namespace}-${name}`;
   }
-  return route.path
+  return route.path;
 }
 </script>
 

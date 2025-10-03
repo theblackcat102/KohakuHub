@@ -1,6 +1,6 @@
 <!-- src/pages/privacy.vue -->
 <script setup>
-import MarkdownPage from '@/components/common/MarkdownPage.vue'
+import MarkdownPage from "@/components/common/MarkdownPage.vue";
 
 const content = `# Privacy Policy
 
@@ -176,7 +176,7 @@ By using KohakuHub, you consent to this Privacy Policy and agree to its terms.
 ---
 
 **Self-Hosted Instances**: If you are using a self-hosted instance of KohakuHub, this privacy policy may not apply. Please contact your instance administrator for their privacy policy.
-`
+`;
 </script>
 
 <template>

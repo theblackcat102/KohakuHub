@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "prettier --write \"src/**/*.{js,vue,css,scss,json}\""
   },
   "dependencies": {
     "@unocss/preset-wind3": "^66.5.2",
@@ -27,6 +28,7 @@
     "@unocss/preset-icons": "^66.5.2",
     "@unocss/preset-uno": "^66.5.2",
     "@vitejs/plugin-vue": "^6.0.1",
+    "prettier": "^3.6.2",
     "unocss": "^66.5.2",
     "unplugin-auto-import": "^20.2.0",
     "unplugin-vue-components": "^29.1.0",

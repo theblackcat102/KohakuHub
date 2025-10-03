@@ -1,6 +1,6 @@
 <!-- src/pages/terms.vue -->
 <script setup>
-import MarkdownPage from '@/components/common/MarkdownPage.vue'
+import MarkdownPage from "@/components/common/MarkdownPage.vue";
 
 const content = `# Terms of Service
 
@@ -114,7 +114,7 @@ If you have any questions about these Terms, please contact us:
 ---
 
 By using KohakuHub, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.
-`
+`;
 </script>
 
 <template>
