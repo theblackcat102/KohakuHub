@@ -6,6 +6,7 @@
 
 **Join our community!: https://discord.gg/xWYrkyvJ2s**
 
+![1759506767828](image/README/1759506767828.png)
 
 KohakuHub is a minimal, self-hosted alternative to HuggingFace Hub that lets you host and version your own models, datasets, and other AI artifacts with full HuggingFace client compatibility.
 
@@ -28,8 +29,8 @@ KohakuHub provides a simple but functional solution for teams and individuals wh
 - ✅ **Version Control**: Git-like branching and commit history via LakeFS
 - ✅ **Authentication & Authorization**: Secure user registration, session management, and API tokens
 - ✅ **Organization Management**: Create organizations and manage member roles
-- ✅ **CLI Tool**: `kohub-cli` for easy user and organization management
-- 🚧 **Web UI**: Coming soon (contributions welcome!)
+- 🚧 **CLI Tool**: under development.
+- 🚧 **Web UI**: under development.
 
 ## Architecture
 
@@ -291,13 +292,17 @@ See [TODO.md](./TODO.md) for detailed development status.
 
 **Current Status:**
 - ✅ Core API (upload, download, version control)
+  - Some Path related API may not be 100% supported, report if they are important for you.
 - ✅ HuggingFace client compatibility
 - ✅ Large file support (Git LFS)
 - ✅ Docker deployment
-- ✅ Authentication & Authorization
+- 🚧 Authentication & Authorization
+  - Not all verification process are applied
 - ✅ Organization Management
-- ✅ CLI for administration
+- 🚧 CLI for administration
+  - Not fully functional, only core utils which usually require web interface.
 - 🚧 Web user interface
+  - Under dev, not stable.
 
 ## Contributing
 

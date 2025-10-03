@@ -21,8 +21,13 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
         - [ ] Move/Modify name
         - [ ] ...TBA...
     - [x] User Auth System
-    - [ ] Organization/Visibility
+    - [x] Organization
+    - [ ] Permission verification
     - [ ] ...TBA...
-- [ ] Basic webUI
-    - [ ] User dashboard
+- [x] Basic webUI
+    - [x] User system
+    - [x] Repo List
+    - [x] Repo creation
+    - [x] Repo Info page
+    - [x] Repo file list
     - [ ] ...TBA...
