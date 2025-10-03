@@ -48,6 +48,7 @@ See [API.md](./API.md) for detailed API documentation and workflow diagrams.
 ### Prerequisites
 
 - Docker and Docker Compose
+- Node.js and npm (or compatible package manager) for building the frontend
 - Python 3.10+ (for testing with `huggingface_hub` client)
 - [Optional]
     - S3 Storage (MinIO is default one which run with docker compose)
@@ -89,16 +90,17 @@ environment:
 
 The default setup exposes these ports:
 
-- `48888` - KohakuHub API (main interface)
+- `28080` - **KohakuHub Web UI (main user/API interface)**
+- `48888` - KohakuHub API (for clients like `huggingface_hub`)
 - `28000` - LakeFS Web UI + API
 - `29000` - MinIO Web Console
 - `29001` - MinIO S3 API
 - `25432` - PostgreSQL (optional, for external access)
 
 **For production deployment**, you should:
-1. **Only expose port 48888** (KohakuHub API) to users
-2. Keep other ports internal or behind a firewall
-3. Use a reverse proxy (nginx/traefik) with HTTPS
+1. **Only expose port 8080** (or 443 with HTTPS) to users.
+2. The Web UI will proxy requests to the API. Keep other ports internal or behind a firewall.
+3. Use a reverse proxy (nginx/traefik) with HTTPS.
 
 #### **Public Endpoint Configuration**
 
@@ -120,17 +122,23 @@ The S3 public endpoint is used for generating download URLs. It should point to 
 export UID=$(id -u)
 export GID=$(id -g)
 
-# Start all services
-docker compose up -d --build
+# Build Frontend and Start all services
+./deploy.sh
+
+## You can manually set them up
+# npm install --prefix ./src/kohaku-hub-ui
+# npm run build --prefix ./src/kohaku-hub-ui
+# docker compose up -d --build
 ```
 
 Services will start in this order:
 1. MinIO (S3 storage)
 2. PostgreSQL (metadata database)
 3. LakeFS (version control)
-4. KohakuHub API (main application)
+4. KohakuHub API (backend application)
+5. **KohakuHub Web UI (Nginx, fronten + reverse proxy to API server)**
 
-### 4. Verify Installation
+### 5. Verify Installation
 
 Check that all services are running:
 
@@ -139,11 +147,12 @@ docker compose ps
 ```
 
 Access the web interfaces:
-- **KohakuHub API**: http://localhost:48888/docs (API documentation)
+- **KohakuHub Web UI**: http://localhost:28080 (main interface, include API)
+- **KohakuHub API Docs**: http://localhost:48888/docs (API documentation)
 - **LakeFS Web UI**: http://localhost:28000 (repository browser)
 - **MinIO Console**: http://localhost:29000 (storage browser)
 
-### 5. Test with Python Client
+### 6. Test with Python Client
 
 ```bash
 # Install the official HuggingFace client

@@ -2,6 +2,18 @@
 version: "3.9"
 
 services:
+  hub-ui:
+    image: nginx:alpine
+    container_name: hub-ui
+    restart: always
+    ports:
+      - "28080:80" # Expose Web UI on host port 28080
+    volumes:
+      - ./src/kohaku-hub-ui/dist:/usr/share/nginx/html # Mount the built frontend assets
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf # Mount the Nginx configuration
+    depends_on:
+      - hub-api
+
   hub-api:
     build: . # Build the image from the Dockerfile in the current directory
     container_name: hub-api
@@ -27,7 +39,7 @@ services:
       - KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:28000
       - KOHAKU_HUB_LAKEFS_REPO_NAMESPACE=hf
       ## Application Configuration
-      - KOHAKU_HUB_BASE_URL=http://127.0.0.1:48888
+      - KOHAKU_HUB_BASE_URL=http://127.0.0.1:28080 # Web UI will proxy requests to hub-api, we use hub-ui url here
       - KOHAKU_HUB_DB_BACKEND=postgres
       - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/hubdb # Linking to the 'postgres' service
       ## SMTP Configuration (Email Verification - Optional)
