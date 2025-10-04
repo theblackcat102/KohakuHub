@@ -26,6 +26,7 @@ dependencies = [
     "bcrypt",
     "questionary",
     "rich",
+    "python-multipart",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 

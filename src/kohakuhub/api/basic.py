@@ -1,8 +1,8 @@
 """Basic repository management API endpoints."""
 
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Form
 from lakefs_client.models import RepositoryCreation
 from pydantic import BaseModel
 
@@ -98,6 +98,13 @@ class DeleteRepoPayload(BaseModel):
     name: str
     organization: Optional[str] = None
     sdk: Optional[str] = None
+
+
+class PathsInfoPayload(BaseModel):
+    """Payload for paths-info request."""
+
+    paths: list[str]
+    expand: bool = False
 
 
 @router.delete("/repos/delete")
@@ -395,6 +402,125 @@ def list_repo_tree(
             )
 
     return result_list
+
+
+@router.post("/{repo_type}s/{namespace}/{repo_name}/paths-info/{revision}")
+async def get_paths_info(
+    repo_type: str,
+    namespace: str,
+    repo_name: str,
+    revision: str,
+    paths: List[str] = Form(...),
+    expand: bool = Form(False),
+):
+    """Get information about specific paths in a repository.
+
+    This endpoint matches HuggingFace Hub API format:
+    POST /api/{repo_type}s/{namespace}/{repo_name}/paths-info/{revision}
+
+    Form data:
+        paths: List of paths to query
+        expand: Whether to include extended metadata
+
+    Args:
+        repo_type: Type of repository (model/dataset/space)
+        namespace: Repository namespace
+        repo_name: Repository name
+        revision: Branch name or commit hash
+        paths: List of paths to get information about
+        expand: Whether to fetch extended metadata
+
+    Returns:
+        List of path information objects (files and folders)
+    """
+    # Construct full repo ID
+    repo_id = f"{namespace}/{repo_name}"
+
+    # Check if repository exists
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+    client = get_lakefs_client()
+
+    # Get information for each path
+    result = []
+
+    for path in paths:
+        # Clean path
+        clean_path = path.lstrip("/")
+
+        try:
+            # Try to get object stats
+            obj_stats = client.objects.stat_object(
+                repository=lakefs_repo,
+                ref=revision,
+                path=clean_path,
+            )
+
+            # It's a file
+            is_lfs = obj_stats.size_bytes > cfg.app.lfs_threshold_bytes
+
+            file_info = {
+                "type": "file",
+                "path": clean_path,
+                "size": obj_stats.size_bytes,
+                "blob_id": obj_stats.checksum,
+                "lfs": None,
+                "last_commit": None,
+                "security": None,
+            }
+
+            # Add LFS metadata if applicable
+            if is_lfs:
+                file_info["lfs"] = {
+                    "oid": obj_stats.checksum,
+                    "size": obj_stats.size_bytes,
+                    "pointerSize": 134,
+                }
+
+            result.append(file_info)
+
+        except Exception as e:
+            # Check if it might be a directory by trying to list with prefix
+            if is_lakefs_not_found_error(e):
+                try:
+                    # Try to list objects with this path as prefix
+                    prefix = clean_path if clean_path.endswith("/") else clean_path + "/"
+                    list_result = client.objects.list_objects(
+                        repository=lakefs_repo,
+                        ref=revision,
+                        prefix=prefix,
+                        amount=1,  # Just check if any objects exist
+                    )
+
+                    # If we get results, it's a directory
+                    if list_result.results:
+                        # Try to get an oid from the first result if available
+                        oid = ""
+                        if list_result.results and hasattr(list_result.results[0], "checksum"):
+                            oid = list_result.results[0].checksum or ""
+
+                        result.append(
+                            {
+                                "type": "directory",
+                                "path": clean_path,
+                                "oid": oid,
+                                "tree_id": oid,
+                                "last_commit": None,
+                            }
+                        )
+                    # else: path doesn't exist, skip it (as per HF behavior)
+                except Exception:
+                    # Path doesn't exist, skip it (as per HF behavior)
+                    pass
+            # For other errors, also skip the path
+
+    return result
 
 
 @router.get("/models")
