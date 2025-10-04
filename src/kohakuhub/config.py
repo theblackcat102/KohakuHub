@@ -45,7 +45,9 @@ class AppConfig(BaseModel):
     api_base: str = "/api"
     db_backend: str = "sqlite"
     database_url: str = "sqlite:///./hub.db"
-    lfs_threshold_bytes: int = 10 * 1024 * 1024
+    # Lower threshold to 5MB to account for base64 encoding overhead (~33%)
+    # 5MB file -> ~6.7MB base64, leaving room for multiple files in one commit
+    lfs_threshold_bytes: int = 5 * 1024 * 1024
     debug_log_payloads: bool = False
 
 

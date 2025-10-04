@@ -338,7 +338,9 @@
     <el-dialog v-model="showCloneDialog" title="Clone Repository" width="600px">
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium mb-2">Clone with HTTPS</label>
+          <label class="block text-sm font-medium mb-2"
+            >Clone with HTTPS (Currently Not supported)</label
+          >
           <el-input :value="cloneUrl" readonly class="font-mono text-sm">
             <template #append>
               <el-button @click="copyCloneUrl">
@@ -350,9 +352,12 @@
 
         <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded text-sm">
           <p class="mb-2 font-medium">Usage:</p>
-          <pre class="text-xs overflow-x-auto">git clone {{ cloneUrl }}</pre>
-          <p class="mt-3 text-gray-600 dark:text-gray-400">
-            Or use
+          <p class="mb-2 text-gray-600 dark:text-gray-400">Set the endpoint:</p>
+          <pre class="text-xs overflow-x-auto mb-3">
+export HF_ENDPOINT={{ baseUrl }}</pre
+          >
+          <p class="text-gray-600 dark:text-gray-400">
+            Use
             <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded"
               >huggingface-cli</code
             >:
@@ -407,6 +412,8 @@ const readmeContent = ref("");
 const showCloneDialog = ref(false);
 const fileSearchQuery = ref("");
 
+const baseUrl = window.location.origin;
+
 // Computed
 const activeTab = computed(() => props.tab);
 
@@ -420,7 +427,6 @@ const isOwner = computed(() => {
 });
 
 const cloneUrl = computed(() => {
-  const baseUrl = window.location.origin;
   return `${baseUrl}/${repoInfo.value?.id}.git`;
 });
 

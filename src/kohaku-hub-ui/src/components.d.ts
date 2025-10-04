@@ -32,7 +32,6 @@ declare module 'vue' {
     ElTabPane: typeof import('element-plus/es')['ElTabPane']
     ElTabs: typeof import('element-plus/es')['ElTabs']
     ElTag: typeof import('element-plus/es')['ElTag']
-    ElUpload: typeof import('element-plus/es')['ElUpload']
     FileUploader: typeof import('./components/repo/FileUploader.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     MarkdownPage: typeof import('./components/common/MarkdownPage.vue')['default']

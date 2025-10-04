@@ -4,7 +4,7 @@
     class="bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-4 transition-colors"
   >
     <div class="container-main py-8">
-      <div class="grid grid-cols-4 gap-8">
+      <div class="grid grid-cols-5 gap-8">
         <div>
           <h3 class="font-semibold mb-3">KohakuHub</h3>
           <p class="text-sm text-gray-600 dark:text-gray-400">
@@ -24,6 +24,22 @@
               href="/about"
               class="text-gray-600 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
               >About</a
+            >
+          </div>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-3">Start</h3>
+          <div class="flex flex-col gap-2 text-sm">
+            <a
+              href="/get-started"
+              class="text-gray-600 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+              >Get started</a
+            >
+            <a
+              href="/self-hosted"
+              class="text-gray-600 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+              >Self-host</a
             >
           </div>
         </div>
