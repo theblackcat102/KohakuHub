@@ -485,8 +485,8 @@ async function loadRepos() {
 
 async function loadOrgCard() {
   try {
-    // Try to fetch README from OrgName/OrgName dataset repo
-    const url = `/datasets/${orgname.value}/${orgname.value}/resolve/main/README.md`;
+    // Try to fetch README from OrgName/OrgName space repo
+    const url = `/spaces/${orgname.value}/${orgname.value}/resolve/main/README.md`;
     const response = await axios.get(url);
     orgCard.value = response.data;
   } catch (err) {

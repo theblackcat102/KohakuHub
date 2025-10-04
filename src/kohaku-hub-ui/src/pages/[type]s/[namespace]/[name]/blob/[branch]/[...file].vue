@@ -182,15 +182,27 @@
                 >Source</el-radio-button
               >
             </el-radio-group>
-            <el-button
-              v-if="markdownView === 'source'"
-              size="small"
-              @click="copyContent"
-              class="w-full sm:w-auto"
-            >
-              <div class="i-carbon-copy inline-block mr-1" />
-              Copy
-            </el-button>
+            <div class="flex gap-2 w-full sm:w-auto">
+              <el-button
+                v-if="canEdit"
+                size="small"
+                type="primary"
+                @click="editFile"
+                class="flex-1 sm:flex-initial"
+              >
+                <div class="i-carbon-edit inline-block mr-1" />
+                Edit
+              </el-button>
+              <el-button
+                v-if="markdownView === 'source'"
+                size="small"
+                @click="copyContent"
+                class="flex-1 sm:flex-initial"
+              >
+                <div class="i-carbon-copy inline-block mr-1" />
+                Copy
+              </el-button>
+            </div>
           </div>
 
           <div v-if="markdownView === 'preview'">
@@ -431,9 +443,10 @@ const tooLargeMessage = computed(() => {
 
 const canEdit = computed(() => {
   // Only allow editing text files that are not too large
+  // Check if user can write to this namespace (own repo or org member)
   return (
     authStore.isAuthenticated &&
-    authStore.username === namespace.value &&
+    authStore.canWriteToNamespace(namespace.value) &&
     (isTextFile.value || isMarkdown.value) &&
     fileSize.value <= maxPreviewSize
   );

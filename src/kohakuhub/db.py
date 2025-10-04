@@ -91,12 +91,13 @@ class Repository(BaseModel):
     repo_type = CharField(index=True)
     namespace = CharField(index=True)
     name = CharField(index=True)
-    full_id = CharField(unique=True, index=True)
+    full_id = CharField(index=True)  # Not unique - same full_id can exist across types
     private = BooleanField(default=False)
     owner_id = IntegerField(index=True, default=1)
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
     class Meta:
+        # Unique constraint on (repo_type, namespace, name) allows same name across types
         indexes = ((("repo_type", "namespace", "name"), True),)
 
 

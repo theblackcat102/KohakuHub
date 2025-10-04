@@ -113,9 +113,11 @@ import { useRouter, useRoute, onBeforeRouteLeave } from "vue-router";
 import { ElMessage } from "element-plus";
 import CodeEditor from "@/components/common/CodeEditor.vue";
 import { repoAPI } from "@/utils/api";
+import { useAuthStore } from "@/stores/auth";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 // Route params
 const repoType = computed(() => {
@@ -262,6 +264,19 @@ function cancelEdit() {
 
 // Lifecycle
 onMounted(() => {
+  // Check if user has permission to edit
+  if (!authStore.isAuthenticated) {
+    ElMessage.error("You must be logged in to edit files");
+    router.push(`/${repoType.value}s/${namespace.value}/${name.value}`);
+    return;
+  }
+
+  if (!authStore.canWriteToNamespace(namespace.value)) {
+    ElMessage.error("You don't have permission to edit this file");
+    router.push(blobUrl.value);
+    return;
+  }
+
   loadFileContent();
 });
 

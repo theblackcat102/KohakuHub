@@ -653,8 +653,36 @@ function downloadRepo() {
   ElMessage.info("Download functionality coming soon");
 }
 
-function createReadme() {
-  ElMessage.info("README creation coming soon");
+async function createReadme() {
+  try {
+    const readmeContent = `# ${props.name}\n\nAdd your project description here.\n`;
+
+    // Commit the README file using the commit API
+    await repoAPI.commitFiles(
+      props.repoType,
+      props.namespace,
+      props.name,
+      currentBranch.value,
+      {
+        message: "Create README.md",
+        files: [
+          {
+            path: "README.md",
+            content: readmeContent,
+          },
+        ],
+      }
+    );
+
+    ElMessage.success("README.md created successfully");
+
+    // Reload file tree and README
+    await loadFileTree();
+    await loadReadme();
+  } catch (err) {
+    console.error("Failed to create README:", err);
+    ElMessage.error("Failed to create README.md");
+  }
 }
 
 function copyCloneUrl() {

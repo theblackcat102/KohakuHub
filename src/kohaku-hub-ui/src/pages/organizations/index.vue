@@ -52,6 +52,7 @@
                 class="text-sm text-gray-600 dark:text-gray-400 mt-1"
                 style="
                   display: -webkit-box;
+                  line-clamp: 2;
                   -webkit-line-clamp: 2;
                   -webkit-box-orient: vertical;
                   overflow: hidden;

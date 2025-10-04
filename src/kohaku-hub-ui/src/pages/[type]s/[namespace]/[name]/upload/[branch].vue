@@ -186,13 +186,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { repoAPI } from "@/utils/api";
+import { useAuthStore } from "@/stores/auth";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 // Route params
 const repoType = computed(() => {
@@ -312,6 +314,22 @@ async function handleUpload() {
 function goBack() {
   router.push(`/${repoType.value}s/${namespace.value}/${name.value}`);
 }
+
+// Lifecycle
+onMounted(() => {
+  // Check if user has permission to upload
+  if (!authStore.isAuthenticated) {
+    ElMessage.error("You must be logged in to upload files");
+    router.push(`/${repoType.value}s/${namespace.value}/${name.value}`);
+    return;
+  }
+
+  if (!authStore.canWriteToNamespace(namespace.value)) {
+    ElMessage.error("You don't have permission to upload to this repository");
+    router.push(`/${repoType.value}s/${namespace.value}/${name.value}`);
+    return;
+  }
+});
 </script>
 
 <style scoped>
