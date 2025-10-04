@@ -74,11 +74,13 @@ class LFSBatchResponse(BaseModel):
     hash_algo: str = "sha256"
 
 
+@router.post("/{repo_type}s/{namespace}/{name}.git/info/lfs/objects/batch")
 @router.post("/{namespace}/{name}.git/info/lfs/objects/batch")
 async def lfs_batch(
     namespace: str,
     name: str,
     request: Request,
+    repo_type: Optional[str] = "model",
     user: User = Depends(get_optional_user),
 ):
     """Git LFS Batch API endpoint.
@@ -110,13 +112,9 @@ async def lfs_batch(
     # Check repository exists and permissions
     # Note: We need to infer repo_type from context or use a default
     # For LFS, we'll check all repo types
-    repo_row = None
-    for repo_type in ["model", "dataset", "space"]:
-        repo_row = Repository.get_or_none(
-            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-        )
-        if repo_row:
-            break
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
 
     if repo_row:
         operation = batch_req.operation
