@@ -8,7 +8,12 @@ from pydantic import BaseModel
 
 from ..config import cfg
 from ..db import Repository, init_db, File, StagingUpload, User
-from .auth import get_current_user
+from .auth import get_current_user, get_optional_user
+from ..auth.permissions import (
+    check_namespace_permission,
+    check_repo_read_permission,
+    check_repo_delete_permission,
+)
 from .hf_utils import (
     HFErrorCode,
     hf_error_response,
@@ -49,6 +54,10 @@ def create_repo(payload: CreateRepoPayload, user: User = Depends(get_current_use
         Created repository information
     """
     namespace = payload.organization or user.username
+
+    # Check if user has permission to use this namespace
+    check_namespace_permission(namespace, user)
+
     full_id = f"{namespace}/{payload.name}"
     lakefs_repo = lakefs_repo_name(payload.type, full_id)
 
@@ -138,6 +147,9 @@ async def delete_repo(
         # but 404 for getting repo not found. Use 400 with RepoNotFound code.
         return hf_repo_not_found(full_id, repo_type)
 
+    # 2. Check if user has permission to delete this repository
+    check_repo_delete_permission(repo_row, user)
+
     # 2. Delete LakeFS repository
     client = get_lakefs_client()
     try:
@@ -169,7 +181,12 @@ async def delete_repo(
 @router.get("/models/{namespace}/{repo_name}")
 @router.get("/datasets/{namespace}/{repo_name}")
 @router.get("/spaces/{namespace}/{repo_name}")
-def get_repo_info(namespace: str, repo_name: str, request: Request):
+def get_repo_info(
+    namespace: str,
+    repo_name: str,
+    request: Request,
+    user: User = Depends(get_optional_user),
+):
     """Get repository information (without revision).
 
     This endpoint matches HuggingFace Hub API format:
@@ -184,6 +201,7 @@ def get_repo_info(namespace: str, repo_name: str, request: Request):
         namespace: Repository namespace (user or organization)
         repo_name: Repository name
         request: FastAPI request object
+        user: Current authenticated user (optional)
 
     Returns:
         Repository metadata or error response with headers
@@ -213,6 +231,9 @@ def get_repo_info(namespace: str, repo_name: str, request: Request):
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
+
+    # Check read permission for private repos
+    check_repo_read_permission(repo_row, user)
 
     # Get LakeFS info for default branch
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
@@ -284,6 +305,7 @@ def list_repo_tree(
     path: str = "",
     recursive: bool = False,
     expand: bool = False,
+    user: User = Depends(get_optional_user),
 ):
     """List repository file tree.
 
@@ -309,6 +331,7 @@ def list_repo_tree(
         path: Path within repository (default: root)
         recursive: List recursively (default: False)
         expand: Include detailed metadata (default: False)
+        user: Current authenticated user (optional)
 
     Returns:
         Flat list of file/folder objects
@@ -323,6 +346,9 @@ def list_repo_tree(
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
+
+    # Check read permission for private repos
+    check_repo_read_permission(repo_row, user)
 
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
     client = get_lakefs_client()
@@ -412,6 +438,7 @@ async def get_paths_info(
     revision: str,
     paths: List[str] = Form(...),
     expand: bool = Form(False),
+    user: User = Depends(get_optional_user),
 ):
     """Get information about specific paths in a repository.
 
@@ -429,6 +456,7 @@ async def get_paths_info(
         revision: Branch name or commit hash
         paths: List of paths to get information about
         expand: Whether to fetch extended metadata
+        user: Current authenticated user (optional)
 
     Returns:
         List of path information objects (files and folders)
@@ -443,6 +471,9 @@ async def get_paths_info(
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
+
+    # Check read permission for private repos
+    check_repo_read_permission(repo_row, user)
 
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
     client = get_lakefs_client()
@@ -490,7 +521,9 @@ async def get_paths_info(
             if is_lakefs_not_found_error(e):
                 try:
                     # Try to list objects with this path as prefix
-                    prefix = clean_path if clean_path.endswith("/") else clean_path + "/"
+                    prefix = (
+                        clean_path if clean_path.endswith("/") else clean_path + "/"
+                    )
                     list_result = client.objects.list_objects(
                         repository=lakefs_repo,
                         ref=revision,
@@ -502,7 +535,9 @@ async def get_paths_info(
                     if list_result.results:
                         # Try to get an oid from the first result if available
                         oid = ""
-                        if list_result.results and hasattr(list_result.results[0], "checksum"):
+                        if list_result.results and hasattr(
+                            list_result.results[0], "checksum"
+                        ):
                             oid = list_result.results[0].checksum or ""
 
                         result.append(

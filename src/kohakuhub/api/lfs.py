@@ -7,12 +7,14 @@ large file uploads (>10MB). It provides presigned S3 URLs for direct uploads.
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..config import cfg
-from ..db import File
+from ..db import File, Repository, User
+from .auth import get_current_user, get_optional_user
+from ..auth.permissions import check_repo_read_permission, check_repo_write_permission
 from .s3_utils import (
     generate_download_presigned_url,
     generate_upload_presigned_url,
@@ -73,15 +75,22 @@ class LFSBatchResponse(BaseModel):
 
 
 @router.post("/{namespace}/{name}.git/info/lfs/objects/batch")
-async def lfs_batch(namespace: str, name: str, request: Request):
+async def lfs_batch(
+    namespace: str,
+    name: str,
+    request: Request,
+    user: User = Depends(get_optional_user),
+):
     """Git LFS Batch API endpoint.
 
     Handles LFS batch requests for upload/download operations.
     Returns presigned URLs for S3 direct upload/download.
 
     Args:
-        repo_id: Repository ID (e.g., "org/repo")
+        namespace: Repository namespace
+        name: Repository name
         request: FastAPI request with LFS batch payload
+        user: Current authenticated user (optional for downloads)
 
     Returns:
         LFS batch response with actions
@@ -90,12 +99,37 @@ async def lfs_batch(namespace: str, name: str, request: Request):
         HTTPException: If operation fails
     """
     repo_id = f"{namespace}/{name}"
+
     # Parse request
     try:
         body = await request.json()
         batch_req = LFSBatchRequest(**body)
     except Exception as e:
         raise HTTPException(400, detail={"error": f"Invalid LFS batch request: {e}"})
+
+    # Check repository exists and permissions
+    # Note: We need to infer repo_type from context or use a default
+    # For LFS, we'll check all repo types
+    repo_row = None
+    for repo_type in ["model", "dataset", "space"]:
+        repo_row = Repository.get_or_none(
+            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+        )
+        if repo_row:
+            break
+
+    if repo_row:
+        operation = batch_req.operation
+        if operation == "upload":
+            # Upload requires authentication and write permission
+            if not user:
+                raise HTTPException(
+                    401, detail={"error": "Authentication required for upload"}
+                )
+            check_repo_write_permission(repo_row, user)
+        elif operation == "download":
+            # Download requires read permission (may be public)
+            check_repo_read_permission(repo_row, user)
 
     if cfg.app.debug_log_payloads:
         print("==== LFS Batch Request ====")

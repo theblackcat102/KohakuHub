@@ -13,7 +13,8 @@ from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadat
 
 from ..config import cfg
 from ..db import File, Repository, StagingUpload, User
-from .auth import get_current_user
+from .auth import get_current_user, get_optional_user
+from ..auth.permissions import check_repo_read_permission, check_repo_write_permission
 from .lakefs_utils import get_lakefs_client, lakefs_repo_name
 from .s3_utils import get_s3_client
 from .hf_utils import (
@@ -41,7 +42,12 @@ class RepoType(str, Enum):
 
 @router.post("/{repo_type}s/{namespace}/{name}/preupload/{revision}")
 async def preupload(
-    repo_type: RepoType, namespace: str, name: str, revision: str, request: Request
+    repo_type: RepoType,
+    namespace: str,
+    name: str,
+    revision: str,
+    request: Request,
+    user: User = Depends(get_current_user),
 ):
     """Check files before upload and determine upload mode.
 
@@ -54,6 +60,7 @@ async def preupload(
         repo_id: Full repository ID
         revision: Branch name
         request: FastAPI request with file metadata
+        user: Current authenticated user
 
     Returns:
         Upload instructions for each file
@@ -63,10 +70,14 @@ async def preupload(
     """
     repo_id = f"{namespace}/{name}"
     # Verify repository exists
-    if not Repository.get_or_none(
+    repo_row = Repository.get_or_none(
         (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
-    ):
+    )
+    if not repo_row:
         raise HTTPException(404, detail={"error": "Repository not found"})
+
+    # Check write permission
+    check_repo_write_permission(repo_row, user)
 
     # Parse request body
     try:
@@ -165,6 +176,7 @@ def get_revision(
     name: str,
     revision: str,
     expand: Optional[str] = None,
+    user: User = Depends(get_optional_user),
 ):
     """Get revision information for a repository.
 
@@ -173,6 +185,7 @@ def get_revision(
         repo_id: Full repository ID
         revision: Branch name or commit hash
         expand: Optional fields to expand
+        user: Current authenticated user (optional)
 
     Returns:
         Revision metadata
@@ -185,6 +198,9 @@ def get_revision(
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type.value)
+
+    # Check read permission for private repos
+    check_repo_read_permission(repo_row, user)
 
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
     client = get_lakefs_client()
@@ -255,6 +271,7 @@ async def resolve_file(
     revision: str,
     path: str,
     request: Request,
+    user: User = Depends(get_optional_user),
 ):
     """Resolve file path to download URL.
 
@@ -275,6 +292,7 @@ async def resolve_file(
         revision: Branch name or commit hash
         path: File path within repository
         request: FastAPI request object
+        user: Current authenticated user (optional)
 
     Returns:
         HEAD: Response with headers only
@@ -286,7 +304,16 @@ async def resolve_file(
     from fastapi.responses import Response, RedirectResponse
     from .s3_utils import generate_download_presigned_url, parse_s3_uri
 
-    lakefs_repo = lakefs_repo_name(repo_type, f"{namespace}/{name}")
+    repo_id = f"{namespace}/{name}"
+
+    # Check repository exists and read permission
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
+    if repo_row:
+        check_repo_read_permission(repo_row, user)
+
+    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
     client = get_lakefs_client()
 
     try:
@@ -397,6 +424,16 @@ async def commit(
         HTTPException: If commit fails
     """
     repo_id = f"{namespace}/{name}"
+
+    # Check repository exists and write permission
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
+    )
+    if not repo_row:
+        raise HTTPException(404, detail={"error": "Repository not found"})
+
+    check_repo_write_permission(repo_row, user)
+
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
     client = get_lakefs_client()
 
