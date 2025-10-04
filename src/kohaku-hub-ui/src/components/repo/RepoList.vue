@@ -7,12 +7,12 @@
       class="card hover:shadow-md transition-shadow cursor-pointer"
       @click="goToRepo(repo)"
     >
-      <div class="flex items-start justify-between">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-2">
+      <div class="flex flex-col sm:flex-row items-start justify-between gap-3">
+        <div class="flex-1 w-full">
+          <div class="flex items-center gap-2 mb-2 flex-wrap">
             <div :class="getIconClass(type)" />
             <h3
-              class="text-lg font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              class="text-base sm:text-lg font-semibold text-blue-600 dark:text-blue-400 hover:underline break-all"
             >
               {{ repo.id }}
             </h3>
@@ -22,7 +22,7 @@
           </div>
 
           <div
-            class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-4"
+            class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4"
           >
             <span>by {{ repo.author }}</span>
             <span v-if="repo.lastModified">
@@ -30,7 +30,7 @@
             </span>
           </div>
 
-          <div v-if="repo.tags && repo.tags.length" class="mt-2 flex gap-2">
+          <div v-if="repo.tags && repo.tags.length" class="mt-2 flex gap-2 flex-wrap">
             <el-tag
               v-for="tag in repo.tags.slice(0, 3)"
               :key="tag"
@@ -43,7 +43,7 @@
         </div>
 
         <div
-          class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400"
+          class="flex items-center gap-4 text-xs sm:text-sm text-gray-500 dark:text-gray-400 w-full sm:w-auto justify-end"
         >
           <div class="flex items-center gap-1">
             <div class="i-carbon-download" />

@@ -68,9 +68,21 @@ const renderedHTML = computed(() => {
 
 /* GitHub-like markdown styles */
 .markdown-body {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   word-wrap: break-word;
+}
+
+@media (min-width: 640px) {
+  .markdown-body {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 768px) {
+  .markdown-body {
+    font-size: 16px;
+  }
 }
 
 .markdown-body :deep(h1),
@@ -86,19 +98,37 @@ const renderedHTML = computed(() => {
 }
 
 .markdown-body :deep(h1) {
-  font-size: 2em;
+  font-size: 1.6em;
   border-bottom: 1px solid #eaecef;
   padding-bottom: 0.3em;
+}
+
+@media (min-width: 768px) {
+  .markdown-body :deep(h1) {
+    font-size: 2em;
+  }
 }
 
 .markdown-body :deep(h2) {
-  font-size: 1.5em;
+  font-size: 1.3em;
   border-bottom: 1px solid #eaecef;
   padding-bottom: 0.3em;
 }
 
+@media (min-width: 768px) {
+  .markdown-body :deep(h2) {
+    font-size: 1.5em;
+  }
+}
+
 .markdown-body :deep(h3) {
-  font-size: 1.25em;
+  font-size: 1.15em;
+}
+
+@media (min-width: 768px) {
+  .markdown-body :deep(h3) {
+    font-size: 1.25em;
+  }
 }
 
 .markdown-body :deep(p) {
@@ -109,20 +139,33 @@ const renderedHTML = computed(() => {
 .markdown-body :deep(code) {
   padding: 0.2em 0.4em;
   margin: 0;
-  font-size: 85%;
+  font-size: 80%;
   background-color: rgba(175, 184, 193, 0.2);
   border-radius: 6px;
   font-family: ui-monospace, monospace;
 }
 
+@media (min-width: 768px) {
+  .markdown-body :deep(code) {
+    font-size: 85%;
+  }
+}
+
 .markdown-body :deep(pre) {
-  padding: 16px;
+  padding: 12px;
   overflow: auto;
-  font-size: 85%;
+  font-size: 80%;
   line-height: 1.45;
   background-color: #f6f8fa;
   border-radius: 6px;
   margin-bottom: 16px;
+}
+
+@media (min-width: 768px) {
+  .markdown-body :deep(pre) {
+    padding: 16px;
+    font-size: 85%;
+  }
 }
 
 .markdown-body :deep(pre code) {

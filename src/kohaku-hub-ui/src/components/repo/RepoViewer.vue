@@ -25,16 +25,16 @@
       <el-button @click="$router.back()">Go Back</el-button>
     </div>
 
-    <div v-else class="grid grid-cols-[1fr_300px] gap-6">
+    <div v-else class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
       <!-- Main Content -->
       <main class="min-w-0">
         <!-- Repo Header -->
         <div class="card mb-6">
-          <div class="flex items-start justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <div :class="getIconClass(repoType)" class="text-4xl" />
-              <div>
-                <h1 class="text-3xl font-bold">{{ repoInfo?.id }}</h1>
+          <div class="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
+            <div class="flex items-start gap-3">
+              <div :class="getIconClass(repoType)" class="text-3xl sm:text-4xl flex-shrink-0" />
+              <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold break-words">{{ repoInfo?.id }}</h1>
                 <div class="flex items-center gap-2 mt-1">
                   <RouterLink
                     :to="`/${namespace}`"
@@ -64,7 +64,7 @@
 
           <!-- Stats -->
           <div
-            class="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400"
+            class="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm text-gray-600 dark:text-gray-400"
           >
             <div class="flex items-center gap-1">
               <div class="i-carbon-download" />
@@ -81,7 +81,7 @@
           </div>
 
           <!-- Actions -->
-          <div class="flex gap-2 mt-4">
+          <div class="flex flex-wrap gap-2 mt-4">
             <el-button type="primary" @click="showCloneDialog = true">
               <div class="i-carbon-download inline-block mr-1" />
               Clone
@@ -98,8 +98,8 @@
         </div>
 
         <!-- Navigation Tabs -->
-        <div class="mb-6">
-          <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+        <div class="mb-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+          <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700 min-w-max sm:min-w-0">
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
@@ -181,28 +181,29 @@
         </div>
 
         <div v-if="activeTab === 'files'" class="card">
-          <div class="mb-4 flex items-center justify-between">
+          <div class="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <el-select
                 v-model="currentBranch"
                 size="small"
-                style="width: 150px"
+                class="w-full sm:w-37"
                 @change="handleBranchChange"
               >
                 <el-option label="main" value="main" />
               </el-select>
-              <span class="text-sm text-gray-600 dark:text-gray-400">
+              <span class="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                 {{ fileTree.length }}
                 {{ fileTree.length === 1 ? "file" : "files" }}
               </span>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <el-button
                 v-if="isOwner"
                 size="small"
                 type="primary"
                 @click="navigateToUpload"
+                class="w-full sm:w-auto"
               >
                 <div class="i-carbon-cloud-upload inline-block mr-1" />
                 Upload Files
@@ -211,7 +212,7 @@
                 v-model="fileSearchQuery"
                 placeholder="Search files..."
                 size="small"
-                style="width: 200px"
+                class="w-full sm:w-50"
                 clearable
               >
                 <template #prefix>
@@ -306,7 +307,7 @@
       </main>
 
       <!-- Sidebar -->
-      <aside class="space-y-4">
+      <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <!-- Owner Info -->
         <div class="card">
           <h3 class="font-semibold mb-3">Owner</h3>

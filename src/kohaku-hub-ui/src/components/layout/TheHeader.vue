@@ -3,15 +3,15 @@
   <header
     class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-colors"
   >
-    <div class="container-main flex items-center justify-between h-12">
+    <div class="container-main flex items-center justify-between h-12 md:h-16">
       <!-- Logo -->
       <RouterLink to="/" class="flex items-center gap-2">
-        <div class="i-carbon-cube text-3xl text-blue-500" />
-        <span class="text-xl font-bold">KohakuHub</span>
+        <div class="i-carbon-cube text-2xl md:text-3xl text-blue-500" />
+        <span class="text-lg md:text-xl font-bold">KohakuHub</span>
       </RouterLink>
 
-      <!-- Navigation -->
-      <nav class="flex items-center gap-6">
+      <!-- Desktop Navigation - hidden on mobile -->
+      <nav class="hidden md:flex items-center gap-6">
         <RouterLink
           to="/models"
           class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
@@ -32,8 +32,8 @@
         </RouterLink>
       </nav>
 
-      <!-- User Menu -->
-      <div class="flex items-center gap-4">
+      <!-- Desktop User Menu - hidden on mobile -->
+      <div class="hidden md:flex items-center gap-4">
         <!-- Dark Mode Toggle -->
         <el-button
           @click="themeStore.toggle()"
@@ -107,7 +107,173 @@
           </el-button>
         </template>
       </div>
+
+      <!-- Mobile Menu Button -->
+      <div class="flex md:hidden items-center gap-2">
+        <!-- Dark Mode Toggle - Mobile -->
+        <el-button
+          @click="themeStore.toggle()"
+          circle
+          text
+          size="small"
+          class="!text-gray-700 dark:!text-gray-300"
+        >
+          <div v-if="themeStore.isDark" class="i-carbon-moon text-lg" />
+          <div v-else class="i-carbon-asleep text-lg" />
+        </el-button>
+
+        <!-- Hamburger Menu -->
+        <el-button
+          @click="mobileMenuOpen = !mobileMenuOpen"
+          circle
+          text
+          class="!text-gray-700 dark:!text-gray-300"
+        >
+          <div class="i-carbon-menu text-2xl" />
+        </el-button>
+      </div>
     </div>
+
+    <!-- Mobile Menu Drawer -->
+    <el-drawer
+      v-model="mobileMenuOpen"
+      direction="rtl"
+      size="280px"
+      :show-close="false"
+    >
+      <div class="flex flex-col h-full">
+        <!-- Navigation Links -->
+        <nav class="flex flex-col gap-1 mb-6">
+          <RouterLink
+            to="/models"
+            @click="mobileMenuOpen = false"
+            class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+          >
+            <div class="flex items-center gap-2">
+              <div class="i-carbon-model text-blue-500" />
+              Models
+            </div>
+          </RouterLink>
+          <RouterLink
+            to="/datasets"
+            @click="mobileMenuOpen = false"
+            class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+          >
+            <div class="flex items-center gap-2">
+              <div class="i-carbon-data-table text-green-500" />
+              Datasets
+            </div>
+          </RouterLink>
+          <RouterLink
+            to="/spaces"
+            @click="mobileMenuOpen = false"
+            class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+          >
+            <div class="flex items-center gap-2">
+              <div class="i-carbon-application text-purple-500" />
+              Spaces
+            </div>
+          </RouterLink>
+        </nav>
+
+        <!-- Divider -->
+        <div class="border-t border-gray-200 dark:border-gray-700 mb-4"></div>
+
+        <!-- User Menu -->
+        <template v-if="isAuthenticated">
+          <!-- Create New Options -->
+          <div class="mb-4">
+            <div class="px-4 text-xs text-gray-500 dark:text-gray-400 mb-2">
+              CREATE NEW
+            </div>
+            <div
+              @click="createNew('model'); mobileMenuOpen = false"
+              class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-model text-blue-500" />
+                New Model
+              </div>
+            </div>
+            <div
+              @click="createNew('dataset'); mobileMenuOpen = false"
+              class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-data-table text-green-500" />
+                New Dataset
+              </div>
+            </div>
+            <div
+              @click="createNew('space'); mobileMenuOpen = false"
+              class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-application text-purple-500" />
+                New Space
+              </div>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div class="border-t border-gray-200 dark:border-gray-700 mb-4"></div>
+
+          <!-- User Options -->
+          <div>
+            <div class="px-4 text-xs text-gray-500 dark:text-gray-400 mb-2">
+              {{ username }}
+            </div>
+            <div
+              @click="$router.push(`/${username}`); mobileMenuOpen = false"
+              class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-user" />
+                Profile
+              </div>
+            </div>
+            <div
+              @click="$router.push('/settings'); mobileMenuOpen = false"
+              class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-settings" />
+                Settings
+              </div>
+            </div>
+            <div
+              @click="handleLogout(); mobileMenuOpen = false"
+              class="px-4 py-3 text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-logout" />
+                Logout
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Not authenticated -->
+        <template v-else>
+          <div class="flex flex-col gap-2 px-4">
+            <el-button
+              @click="$router.push('/login'); mobileMenuOpen = false"
+              text
+              class="w-full"
+            >
+              Login
+            </el-button>
+            <el-button
+              type="primary"
+              @click="$router.push('/register'); mobileMenuOpen = false"
+              class="w-full"
+            >
+              Sign Up
+            </el-button>
+          </div>
+        </template>
+      </div>
+    </el-drawer>
   </header>
 </template>
 
@@ -121,6 +287,7 @@ const authStore = useAuthStore();
 const themeStore = useThemeStore();
 const { isAuthenticated, username } = storeToRefs(authStore);
 const router = useRouter();
+const mobileMenuOpen = ref(false);
 
 function createNew(type) {
   router.push({

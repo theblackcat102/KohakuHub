@@ -1,9 +1,9 @@
 <!-- src/pages/[username]/index.vue -->
 <template>
   <div class="container-main">
-    <div class="grid grid-cols-[280px_1fr] gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       <!-- Sidebar -->
-      <aside class="space-y-4">
+      <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div class="card">
           <div class="flex items-center gap-3 mb-4">
             <div class="i-carbon-user-avatar text-5xl text-gray-400" />
@@ -105,15 +105,15 @@
             class="flex items-center justify-between mb-4 pb-3 border-b-2 border-blue-500"
           >
             <div class="flex items-center gap-2">
-              <div class="i-carbon-model text-blue-500 text-2xl" />
-              <h2 class="text-2xl font-bold">Models</h2>
+              <div class="i-carbon-model text-blue-500 text-xl md:text-2xl" />
+              <h2 class="text-xl md:text-2xl font-bold">Models</h2>
             </div>
             <el-tag type="info" size="large">{{ getCount("model") }}</el-tag>
           </div>
 
           <div v-if="getCount('model') > 0" class="space-y-4">
             <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div
                 v-for="repo in displayedRepos('model')"
                 :key="repo.id"
@@ -188,8 +188,8 @@
             class="flex items-center justify-between mb-4 pb-3 border-b-2 border-green-500"
           >
             <div class="flex items-center gap-2">
-              <div class="i-carbon-data-table text-green-500 text-2xl" />
-              <h2 class="text-2xl font-bold">Datasets</h2>
+              <div class="i-carbon-data-table text-green-500 text-xl md:text-2xl" />
+              <h2 class="text-xl md:text-2xl font-bold">Datasets</h2>
             </div>
             <el-tag type="success" size="large">{{
               getCount("dataset")
@@ -198,7 +198,7 @@
 
           <div v-if="getCount('dataset') > 0" class="space-y-4">
             <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div
                 v-for="repo in displayedRepos('dataset')"
                 :key="repo.id"
@@ -273,15 +273,15 @@
             class="flex items-center justify-between mb-4 pb-3 border-b-2 border-purple-500"
           >
             <div class="flex items-center gap-2">
-              <div class="i-carbon-application text-purple-500 text-2xl" />
-              <h2 class="text-2xl font-bold">Spaces</h2>
+              <div class="i-carbon-application text-purple-500 text-xl md:text-2xl" />
+              <h2 class="text-xl md:text-2xl font-bold">Spaces</h2>
             </div>
             <el-tag type="warning" size="large">{{ getCount("space") }}</el-tag>
           </div>
 
           <div v-if="getCount('space') > 0" class="space-y-4">
             <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div
                 v-for="repo in displayedRepos('space')"
                 :key="repo.id"

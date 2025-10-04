@@ -2,8 +2,8 @@
 <template>
   <div class="container-main">
     <div class="max-w-3xl mx-auto">
-      <h1 class="text-3xl font-bold mb-2">Create New Repository</h1>
-      <p class="text-gray-600 dark:text-gray-400 mb-8">
+      <h1 class="text-2xl md:text-3xl font-bold mb-2">Create New Repository</h1>
+      <p class="text-sm md:text-base text-gray-600 dark:text-gray-400 mb-6 md:mb-8">
         A repository contains all project files, including revision history.
       </p>
 
@@ -18,20 +18,20 @@
           <!-- Repository Type -->
           <el-form-item label="Repository Type" prop="type">
             <div class="w-full">
-              <el-radio-group v-model="form.type" size="large">
-                <el-radio-button value="model" class="flex-1">
+              <el-radio-group v-model="form.type" size="large" class="w-full grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <el-radio-button value="model">
                   <div class="flex items-center justify-center gap-2 py-2">
                     <div class="i-carbon-model text-xl" />
                     <span>Model</span>
                   </div>
                 </el-radio-button>
-                <el-radio-button value="dataset" class="flex-1">
+                <el-radio-button value="dataset">
                   <div class="flex items-center justify-center gap-2 py-2">
                     <div class="i-carbon-data-table text-xl" />
                     <span>Dataset</span>
                   </div>
                 </el-radio-button>
-                <el-radio-button value="space" class="flex-1">
+                <el-radio-button value="space">
                   <div class="flex items-center justify-center gap-2 py-2">
                     <div class="i-carbon-application text-xl" />
                     <span>Space</span>
@@ -121,14 +121,15 @@
 
           <!-- Actions -->
           <div
-            class="flex gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700"
+            class="flex flex-col-reverse sm:flex-row gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700"
           >
-            <el-button size="large" @click="$router.back()"> Cancel </el-button>
+            <el-button size="large" @click="$router.back()" class="w-full sm:w-auto"> Cancel </el-button>
             <el-button
               type="primary"
               size="large"
               :loading="creating"
               @click="handleSubmit"
+              class="w-full sm:w-auto"
             >
               <div class="i-carbon-add inline-block mr-1" />
               Create {{ typeLabel }}

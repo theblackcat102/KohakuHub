@@ -4,15 +4,16 @@
     <div
       class="flex items-center justify-between mb-3 pb-3 border-b border-gray-200 dark:border-gray-700"
     >
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
         <el-tag size="small" type="info">{{ language }}</el-tag>
-        <span class="text-sm text-gray-600 dark:text-gray-400"
+        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap"
           >{{ lineCount }} lines</span
         >
       </div>
-      <el-button size="small" @click="copyCode">
+      <el-button size="small" @click="copyCode" class="flex-shrink-0">
         <div class="i-carbon-copy inline-block mr-1" />
-        Copy
+        <span class="hidden sm:inline">Copy</span>
+        <span class="sm:hidden">Copy</span>
       </el-button>
     </div>
 
@@ -169,11 +170,23 @@ onMounted(() => {
   font-family:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
-  font-size: 14px;
+  font-size: 11px;
   line-height: 1.5;
   background: transparent !important;
   padding: 0 !important;
   color: #24292f;
+}
+
+@media (min-width: 640px) {
+  .code-container :deep(code) {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  .code-container :deep(code) {
+    font-size: 14px;
+  }
 }
 
 .dark .code-container :deep(code) {
