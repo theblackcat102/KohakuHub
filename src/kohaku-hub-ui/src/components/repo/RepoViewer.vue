@@ -189,17 +189,28 @@
               </span>
             </div>
 
-            <el-input
-              v-model="fileSearchQuery"
-              placeholder="Search files..."
-              size="small"
-              style="width: 200px"
-              clearable
-            >
-              <template #prefix>
-                <div class="i-carbon-search" />
-              </template>
-            </el-input>
+            <div class="flex items-center gap-2">
+              <el-button
+                v-if="isOwner"
+                size="small"
+                type="primary"
+                @click="navigateToUpload"
+              >
+                <div class="i-carbon-cloud-upload inline-block mr-1" />
+                Upload Files
+              </el-button>
+              <el-input
+                v-model="fileSearchQuery"
+                placeholder="Search files..."
+                size="small"
+                style="width: 200px"
+                clearable
+              >
+                <template #prefix>
+                  <div class="i-carbon-search" />
+                </template>
+              </el-input>
+            </div>
           </div>
 
           <!-- Breadcrumb for current path -->
@@ -470,6 +481,12 @@ function navigateToTab(tab) {
 
 function navigateToSettings() {
   router.push(`/${props.repoType}s/${props.namespace}/${props.name}/settings`);
+}
+
+function navigateToUpload() {
+  router.push(
+    `/${props.repoType}s/${props.namespace}/${props.name}/upload/${currentBranch.value}`,
+  );
 }
 
 function handleBranchChange() {

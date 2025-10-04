@@ -1,9 +1,54 @@
 // src/kohaku-hub-ui/src/utils/markdown.js
 import MarkdownIt from "markdown-it";
 import DOMPurify from "isomorphic-dompurify";
+import hljs from "highlight.js/lib/core";
+
+// Import only the languages you need (reduces bundle size)
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import python from "highlight.js/lib/languages/python";
+import java from "highlight.js/lib/languages/java";
+import cpp from "highlight.js/lib/languages/cpp";
+import csharp from "highlight.js/lib/languages/csharp";
+import go from "highlight.js/lib/languages/go";
+import rust from "highlight.js/lib/languages/rust";
+import php from "highlight.js/lib/languages/php";
+import ruby from "highlight.js/lib/languages/ruby";
+import swift from "highlight.js/lib/languages/swift";
+import kotlin from "highlight.js/lib/languages/kotlin";
+import shell from "highlight.js/lib/languages/shell";
+import bash from "highlight.js/lib/languages/bash";
+import json from "highlight.js/lib/languages/json";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
+import markdown from "highlight.js/lib/languages/markdown";
+import css from "highlight.js/lib/languages/css";
+import sql from "highlight.js/lib/languages/sql";
+
+// Register languages
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("java", java);
+hljs.registerLanguage("cpp", cpp);
+hljs.registerLanguage("csharp", csharp);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("php", php);
+hljs.registerLanguage("ruby", ruby);
+hljs.registerLanguage("swift", swift);
+hljs.registerLanguage("kotlin", kotlin);
+hljs.registerLanguage("shell", shell);
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("yaml", yaml);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("sql", sql);
 
 /**
- * Create markdown renderer with XSS protection
+ * Create markdown renderer with XSS protection and syntax highlighting
  * Using blacklist approach to allow HTML+CSS galleries
  */
 const md = new MarkdownIt({
@@ -11,6 +56,18 @@ const md = new MarkdownIt({
   linkify: true, // Auto-convert URLs to links
   typographer: true, // Enable smart quotes and other typographic replacements
   breaks: true, // Convert \n to <br>
+  highlight: function (code, lang) {
+    // Use highlight.js for syntax highlighting
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(code, { language: lang }).value;
+      } catch (e) {
+        console.error("Highlight error:", e);
+      }
+    }
+    // Fallback to plain code
+    return md.utils.escapeHtml(code);
+  },
 });
 
 /**

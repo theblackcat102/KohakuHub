@@ -23,8 +23,10 @@ declare module 'vue-router/auto-routes' {
     '/[type]s/[namespace]/[name]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/', '/:type()s/:namespace/:name', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/blob/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/blob/[branch]/[...file]', '/:type()s/:namespace/:name/blob/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/commits/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/commits/[branch]/', '/:type()s/:namespace/:name/commits/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/edit/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/edit/[branch]/[...file]', '/:type()s/:namespace/:name/edit/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/tree/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/', '/:type()s/:namespace/:name/tree/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/tree/[branch]/[...path]': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/[...path]', '/:type()s/:namespace/:name/tree/:branch/:path(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, path: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, path: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/upload/[branch]': RouteRecordInfo<'/[type]s/[namespace]/[name]/upload/[branch]', '/:type()s/:namespace/:name/upload/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[username]/': RouteRecordInfo<'/[username]/', '/:username', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/[username]/[type]': RouteRecordInfo<'/[username]/[type]', '/:username/:type', { username: ParamValue<true>, type: ParamValue<true> }, { username: ParamValue<false>, type: ParamValue<false> }>,
     '/about': RouteRecordInfo<'/about', '/about', Record<never, never>, Record<never, never>>,
@@ -68,12 +70,20 @@ declare module 'vue-router/auto-routes' {
       routes: '/[type]s/[namespace]/[name]/commits/[branch]/'
       views: never
     }
+    'src/pages/[type]s/[namespace]/[name]/edit/[branch]/[...file].vue': {
+      routes: '/[type]s/[namespace]/[name]/edit/[branch]/[...file]'
+      views: never
+    }
     'src/pages/[type]s/[namespace]/[name]/tree/[branch]/index.vue': {
       routes: '/[type]s/[namespace]/[name]/tree/[branch]/'
       views: never
     }
     'src/pages/[type]s/[namespace]/[name]/tree/[branch]/[...path].vue': {
       routes: '/[type]s/[namespace]/[name]/tree/[branch]/[...path]'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/upload/[branch].vue': {
+      routes: '/[type]s/[namespace]/[name]/upload/[branch]'
       views: never
     }
     'src/pages/[username]/index.vue': {

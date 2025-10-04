@@ -98,6 +98,122 @@ export const repoAPI = {
     api.get(`/${type}s/${namespace}/${name}/tree/${revision}${path}`, {
       params,
     }),
+
+  /**
+   * Upload files to repository
+   * @param {string} type - Repository type
+   * @param {string} namespace - Owner namespace
+   * @param {string} name - Repository name
+   * @param {string} revision - Branch name
+   * @param {Object} data - { files: Array<{path, content}>, message: string, description?: string }
+   * @param {Function} onProgress - Progress callback
+   * @returns {Promise} - Commit result
+   */
+  uploadFiles: async (type, namespace, name, revision, data, onProgress) => {
+    // Convert files to NDJSON format for commit API
+    const ndjsonLines = [];
+
+    // Header
+    ndjsonLines.push({
+      key: "header",
+      value: {
+        summary: data.message,
+        description: data.description || "",
+      },
+    });
+
+    // Files
+    for (const file of data.files) {
+      const reader = new FileReader();
+      const content = await new Promise((resolve, reject) => {
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file.file);
+      });
+
+      // Extract base64 content (remove data:...;base64, prefix)
+      const base64Content = content.split(",")[1];
+
+      ndjsonLines.push({
+        key: "file",
+        value: {
+          path: file.path,
+          content: base64Content,
+          encoding: "base64",
+        },
+      });
+    }
+
+    // Convert to NDJSON
+    const ndjson = ndjsonLines.map((line) => JSON.stringify(line)).join("\n");
+
+    return api.post(
+      `/${type}s/${namespace}/${name}/commit/${revision}`,
+      ndjson,
+      {
+        headers: {
+          "Content-Type": "application/x-ndjson",
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const progress = progressEvent.loaded / progressEvent.total;
+            onProgress(progress);
+          }
+        },
+      },
+    );
+  },
+
+  /**
+   * Commit file changes to repository
+   * @param {string} type - Repository type
+   * @param {string} namespace - Owner namespace
+   * @param {string} name - Repository name
+   * @param {string} revision - Branch name
+   * @param {Object} data - { files: Array<{path, content}>, message: string, description?: string }
+   * @returns {Promise} - Commit result
+   */
+  commitFiles: async (type, namespace, name, revision, data) => {
+    // Convert files to NDJSON format for commit API
+    const ndjsonLines = [];
+
+    // Header
+    ndjsonLines.push({
+      key: "header",
+      value: {
+        summary: data.message,
+        description: data.description || "",
+      },
+    });
+
+    // Files
+    for (const file of data.files) {
+      // Encode content as base64
+      const base64Content = btoa(unescape(encodeURIComponent(file.content)));
+
+      ndjsonLines.push({
+        key: "file",
+        value: {
+          path: file.path,
+          content: base64Content,
+          encoding: "base64",
+        },
+      });
+    }
+
+    // Convert to NDJSON
+    const ndjson = ndjsonLines.map((line) => JSON.stringify(line)).join("\n");
+
+    return api.post(
+      `/${type}s/${namespace}/${name}/commit/${revision}`,
+      ndjson,
+      {
+        headers: {
+          "Content-Type": "application/x-ndjson",
+        },
+      },
+    );
+  },
 };
 
 /**

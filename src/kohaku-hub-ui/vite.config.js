@@ -17,9 +17,9 @@ export default defineConfig({
       extensions: ['.vue'],
       exclude: ['**/components/**']
     }),
-    
+
     vue(),
-    
+
     // Auto import APIs
     AutoImport({
       imports: [
@@ -36,21 +36,27 @@ export default defineConfig({
         enabled: true
       }
     }),
-    
+
     // Auto import components
     Components({
       resolvers: [ElementPlusResolver()],
       dts: 'src/components.d.ts',
       dirs: ['src/components']
     }),
-    
+
     UnoCSS()
   ],
-  
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
+  },
+
+  optimizeDeps: {
+    include: [
+      'highlight.js',
+    ],
   },
   
   server: {

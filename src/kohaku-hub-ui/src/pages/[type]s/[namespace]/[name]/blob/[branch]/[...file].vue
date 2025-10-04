@@ -46,6 +46,10 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <el-button v-if="canEdit" @click="editFile">
+              <div class="i-carbon-edit inline-block mr-1" />
+              Edit
+            </el-button>
             <el-button @click="copyFileUrl">
               <div class="i-carbon-link inline-block mr-1" />
               Copy URL
@@ -131,24 +135,7 @@
 
         <!-- Text/Code Preview -->
         <div v-else-if="canPreviewText">
-          <div
-            class="flex items-center justify-between mb-3 pb-3 border-b border-gray-200 dark:border-gray-700"
-          >
-            <div class="flex items-center gap-2">
-              <el-tag size="small" type="info">{{ languageLabel }}</el-tag>
-              <span class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ lineCount }} lines</span
-              >
-            </div>
-            <el-button size="small" @click="copyContent">
-              <div class="i-carbon-copy inline-block mr-1" />
-              Copy
-            </el-button>
-          </div>
-
-          <pre
-            class="text-sm overflow-x-auto bg-gray-50 dark:bg-gray-900 p-4 rounded"
-          ><code>{{ fileContent }}</code></pre>
+          <CodeViewer :code="fileContent" :language="fileExtension" />
         </div>
 
         <!-- Markdown Preview -->
@@ -205,10 +192,13 @@
 
 <script setup>
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
+import CodeViewer from "@/components/common/CodeViewer.vue";
 import { ElMessage } from "element-plus";
+import { useAuthStore } from "@/stores/auth";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 // Route params
 const repoType = computed(() => {
@@ -403,6 +393,16 @@ const tooLargeMessage = computed(() => {
   return "Binary File";
 });
 
+const canEdit = computed(() => {
+  // Only allow editing text files that are not too large
+  return (
+    authStore.isAuthenticated &&
+    authStore.username === namespace.value &&
+    (isTextFile.value || isMarkdown.value) &&
+    fileSize.value <= maxPreviewSize
+  );
+});
+
 // Methods
 function getFileIcon(filename) {
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -479,6 +479,12 @@ function navigateToFolder(folderPath) {
   // Navigate back to tree viewer with the folder path
   router.push(
     `/${repoType.value}s/${namespace.value}/${name.value}/tree/${branch.value}/${folderPath}`,
+  );
+}
+
+function editFile() {
+  router.push(
+    `/${repoType.value}s/${namespace.value}/${name.value}/edit/${branch.value}/${filePath.value}`,
   );
 }
 
