@@ -1,7 +1,8 @@
 <!-- src/components/layout/TheHeader.vue -->
 <template>
   <header
-    class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-colors"
+    class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 transition-colors"
+    style="z-index: 1000"
   >
     <div class="container-main flex items-center justify-between h-12 md:h-16">
       <!-- Logo -->
@@ -109,7 +110,10 @@
       </div>
 
       <!-- Mobile Menu Button -->
-      <div class="flex md:hidden items-center gap-2">
+      <div
+        class="flex md:hidden items-center gap-2"
+        style="position: relative; z-index: 1001"
+      >
         <!-- Dark Mode Toggle - Mobile -->
         <el-button
           @click="themeStore.toggle()"
@@ -121,13 +125,12 @@
           <div v-if="themeStore.isDark" class="i-carbon-moon text-lg" />
           <div v-else class="i-carbon-asleep text-lg" />
         </el-button>
-
         <!-- Hamburger Menu -->
         <el-button
           @click="mobileMenuOpen = !mobileMenuOpen"
           circle
           text
-          class="!text-gray-700 dark:!text-gray-300"
+          class="!text-gray-700 dark:!text-gray-300 !min-w-10 !min-h-10"
         >
           <div class="i-carbon-menu text-2xl" />
         </el-button>
@@ -140,10 +143,11 @@
       direction="rtl"
       size="280px"
       :show-close="false"
+      :z-index="9999"
     >
       <div class="flex flex-col h-full">
         <!-- Navigation Links -->
-        <nav class="flex flex-col gap-1 mb-6">
+        <nav class="flex flex-col gap-1 mb-6 px-4 pt-4">
           <RouterLink
             to="/models"
             @click="mobileMenuOpen = false"
@@ -177,17 +181,22 @@
         </nav>
 
         <!-- Divider -->
-        <div class="border-t border-gray-200 dark:border-gray-700 mb-4"></div>
+        <div
+          class="border-t border-gray-200 dark:border-gray-700 mb-4 mx-4"
+        ></div>
 
         <!-- User Menu -->
         <template v-if="isAuthenticated">
           <!-- Create New Options -->
-          <div class="mb-4">
+          <div class="mb-4 px-4">
             <div class="px-4 text-xs text-gray-500 dark:text-gray-400 mb-2">
               CREATE NEW
             </div>
             <div
-              @click="createNew('model'); mobileMenuOpen = false"
+              @click="
+                createNew('model');
+                mobileMenuOpen = false;
+              "
               class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
             >
               <div class="flex items-center gap-2">
@@ -196,7 +205,10 @@
               </div>
             </div>
             <div
-              @click="createNew('dataset'); mobileMenuOpen = false"
+              @click="
+                createNew('dataset');
+                mobileMenuOpen = false;
+              "
               class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
             >
               <div class="flex items-center gap-2">
@@ -205,7 +217,10 @@
               </div>
             </div>
             <div
-              @click="createNew('space'); mobileMenuOpen = false"
+              @click="
+                createNew('space');
+                mobileMenuOpen = false;
+              "
               class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
             >
               <div class="flex items-center gap-2">
@@ -216,15 +231,20 @@
           </div>
 
           <!-- Divider -->
-          <div class="border-t border-gray-200 dark:border-gray-700 mb-4"></div>
+          <div
+            class="border-t border-gray-200 dark:border-gray-700 mb-4 mx-4"
+          ></div>
 
           <!-- User Options -->
-          <div>
+          <div class="px-4">
             <div class="px-4 text-xs text-gray-500 dark:text-gray-400 mb-2">
               {{ username }}
             </div>
             <div
-              @click="$router.push(`/${username}`); mobileMenuOpen = false"
+              @click="
+                $router.push(`/${username}`);
+                mobileMenuOpen = false;
+              "
               class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
             >
               <div class="flex items-center gap-2">
@@ -233,7 +253,10 @@
               </div>
             </div>
             <div
-              @click="$router.push('/settings'); mobileMenuOpen = false"
+              @click="
+                $router.push('/settings');
+                mobileMenuOpen = false;
+              "
               class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
             >
               <div class="flex items-center gap-2">
@@ -242,7 +265,10 @@
               </div>
             </div>
             <div
-              @click="handleLogout(); mobileMenuOpen = false"
+              @click="
+                handleLogout();
+                mobileMenuOpen = false;
+              "
               class="px-4 py-3 text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
             >
               <div class="flex items-center gap-2">
@@ -255,17 +281,26 @@
 
         <!-- Not authenticated -->
         <template v-else>
-          <div class="flex flex-col gap-2 px-4">
+          <div class="flex flex-col gap-1 px-4">
             <el-button
-              @click="$router.push('/login'); mobileMenuOpen = false"
-              text
+              @click="
+                $router.push('/login');
+                mobileMenuOpen = false;
+              "
+              size="large"
               class="w-full"
             >
               Login
             </el-button>
+            <div class="w-0 h-0 p-0 m-0"></div>
+            <!-- Avoid el-button+el-button spacing -->
             <el-button
               type="primary"
-              @click="$router.push('/register'); mobileMenuOpen = false"
+              @click="
+                $router.push('/register');
+                mobileMenuOpen = false;
+              "
+              size="large"
               class="w-full"
             >
               Sign Up
@@ -306,3 +341,12 @@ async function handleLogout() {
   }
 }
 </script>
+
+<style scoped>
+/* Ensure mobile menu buttons have proper touch targets */
+@media (max-width: 768px) {
+  :deep(.el-button) {
+    min-height: 44px;
+  }
+}
+</style>

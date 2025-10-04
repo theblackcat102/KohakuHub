@@ -30,7 +30,10 @@
             </span>
           </div>
 
-          <div v-if="repo.tags && repo.tags.length" class="mt-2 flex gap-2 flex-wrap">
+          <div
+            v-if="repo.tags && repo.tags.length"
+            class="mt-2 flex gap-2 flex-wrap"
+          >
             <el-tag
               v-for="tag in repo.tags.slice(0, 3)"
               :key="tag"

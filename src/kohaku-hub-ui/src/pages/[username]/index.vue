@@ -188,7 +188,9 @@
             class="flex items-center justify-between mb-4 pb-3 border-b-2 border-green-500"
           >
             <div class="flex items-center gap-2">
-              <div class="i-carbon-data-table text-green-500 text-xl md:text-2xl" />
+              <div
+                class="i-carbon-data-table text-green-500 text-xl md:text-2xl"
+              />
               <h2 class="text-xl md:text-2xl font-bold">Datasets</h2>
             </div>
             <el-tag type="success" size="large">{{
@@ -273,7 +275,9 @@
             class="flex items-center justify-between mb-4 pb-3 border-b-2 border-purple-500"
           >
             <div class="flex items-center gap-2">
-              <div class="i-carbon-application text-purple-500 text-xl md:text-2xl" />
+              <div
+                class="i-carbon-application text-purple-500 text-xl md:text-2xl"
+              />
               <h2 class="text-xl md:text-2xl font-bold">Spaces</h2>
             </div>
             <el-tag type="warning" size="large">{{ getCount("space") }}</el-tag>

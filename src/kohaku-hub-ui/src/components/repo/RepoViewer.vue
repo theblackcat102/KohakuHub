@@ -30,11 +30,20 @@
       <main class="min-w-0">
         <!-- Repo Header -->
         <div class="card mb-6">
-          <div class="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
+          <div
+            class="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4"
+          >
             <div class="flex items-start gap-3">
-              <div :class="getIconClass(repoType)" class="text-3xl sm:text-4xl flex-shrink-0" />
+              <div
+                :class="getIconClass(repoType)"
+                class="text-3xl sm:text-4xl flex-shrink-0"
+              />
               <div class="min-w-0">
-                <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold break-words">{{ repoInfo?.id }}</h1>
+                <h1
+                  class="text-xl sm:text-2xl lg:text-3xl font-bold break-words"
+                >
+                  {{ repoInfo?.id }}
+                </h1>
                 <div class="flex items-center gap-2 mt-1">
                   <RouterLink
                     :to="`/${namespace}`"
@@ -99,7 +108,9 @@
 
         <!-- Navigation Tabs -->
         <div class="mb-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
-          <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700 min-w-max sm:min-w-0">
+          <div
+            class="flex gap-1 border-b border-gray-200 dark:border-gray-700 min-w-max sm:min-w-0"
+          >
             <button
               :class="[
                 'px-4 py-2 font-medium transition-colors',
@@ -181,7 +192,9 @@
         </div>
 
         <div v-if="activeTab === 'files'" class="card">
-          <div class="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div
+            class="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+          >
             <div class="flex items-center gap-2">
               <el-select
                 v-model="currentBranch"
@@ -191,13 +204,17 @@
               >
                 <el-option label="main" value="main" />
               </el-select>
-              <span class="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+              <span
+                class="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap"
+              >
                 {{ fileTree.length }}
                 {{ fileTree.length === 1 ? "file" : "files" }}
               </span>
             </div>
 
-            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div
+              class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+            >
               <el-button
                 v-if="isOwner"
                 size="small"

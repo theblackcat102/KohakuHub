@@ -6,7 +6,8 @@
     >
       <div class="flex items-center gap-2 min-w-0 flex-1">
         <el-tag size="small" type="info">{{ language }}</el-tag>
-        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap"
+        <span
+          class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap"
           >{{ lineCount }} lines</span
         >
       </div>

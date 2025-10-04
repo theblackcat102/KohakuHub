@@ -1,10 +1,14 @@
 <!-- src/kohaku-hub-ui/src/pages/[type]s/index.vue -->
 <template>
   <div class="container-main">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div
+      class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"
+    >
       <div>
         <h1 class="text-2xl md:text-3xl font-bold mb-2">{{ pageTitle }}</h1>
-        <p class="text-sm md:text-base text-gray-600 dark:text-gray-400">{{ pageDescription }}</p>
+        <p class="text-sm md:text-base text-gray-600 dark:text-gray-400">
+          {{ pageDescription }}
+        </p>
       </div>
 
       <el-button
@@ -21,7 +25,9 @@
 
     <!-- Filters -->
     <div class="card mb-6">
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+      <div
+        class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4"
+      >
         <el-input
           v-model="searchQuery"
           :placeholder="`Search ${repoType}s...`"
@@ -33,7 +39,11 @@
           </template>
         </el-input>
 
-        <el-select v-model="sortBy" placeholder="Sort by" class="w-full sm:w-50">
+        <el-select
+          v-model="sortBy"
+          placeholder="Sort by"
+          class="w-full sm:w-50"
+        >
           <el-option label="Recently Updated" value="updated" />
           <el-option label="Recently Created" value="created" />
           <el-option label="Most Downloads" value="downloads" />

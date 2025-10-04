@@ -32,12 +32,21 @@
     <div v-else>
       <!-- File Header -->
       <div class="card mb-6">
-        <div class="flex flex-col sm:flex-row items-start justify-between gap-4">
+        <div
+          class="flex flex-col sm:flex-row items-start justify-between gap-4"
+        >
           <div class="flex items-start gap-3 min-w-0 flex-1">
-            <div :class="getFileIcon(fileName)" class="text-2xl sm:text-3xl flex-shrink-0" />
+            <div
+              :class="getFileIcon(fileName)"
+              class="text-2xl sm:text-3xl flex-shrink-0"
+            />
             <div class="min-w-0 flex-1">
-              <h1 class="text-lg sm:text-xl md:text-2xl font-bold break-words">{{ fileName }}</h1>
-              <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <h1 class="text-lg sm:text-xl md:text-2xl font-bold break-words">
+                {{ fileName }}
+              </h1>
+              <div
+                class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1"
+              >
                 {{ formatSize(fileSize) }}
                 <span v-if="fileSize" class="mx-2">•</span>
                 <span>{{ fileExtension || "No extension" }}</span>
@@ -45,18 +54,34 @@
             </div>
           </div>
 
-          <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-            <el-button v-if="canEdit" @click="editFile" size="small" class="flex-1 sm:flex-initial">
+          <div
+            class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto"
+          >
+            <el-button
+              v-if="canEdit"
+              @click="editFile"
+              size="small"
+              class="flex-1 sm:flex-initial"
+            >
               <div class="i-carbon-edit inline-block mr-1" />
               <span class="hidden sm:inline">Edit</span>
               <span class="sm:hidden">Edit</span>
             </el-button>
-            <el-button @click="copyFileUrl" size="small" class="flex-1 sm:flex-initial">
+            <el-button
+              @click="copyFileUrl"
+              size="small"
+              class="flex-1 sm:flex-initial"
+            >
               <div class="i-carbon-link inline-block mr-1" />
               <span class="hidden sm:inline">Copy URL</span>
               <span class="sm:hidden">Copy</span>
             </el-button>
-            <el-button type="primary" @click="downloadFile" size="small" class="flex-1 sm:flex-initial">
+            <el-button
+              type="primary"
+              @click="downloadFile"
+              size="small"
+              class="flex-1 sm:flex-initial"
+            >
               <div class="i-carbon-download inline-block mr-1" />
               Download
             </el-button>
@@ -145,9 +170,17 @@
           <div
             class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700"
           >
-            <el-radio-group v-model="markdownView" size="small" class="w-full sm:w-auto">
-              <el-radio-button label="preview" class="flex-1 sm:flex-initial">Preview</el-radio-button>
-              <el-radio-button label="source" class="flex-1 sm:flex-initial">Source</el-radio-button>
+            <el-radio-group
+              v-model="markdownView"
+              size="small"
+              class="w-full sm:w-auto"
+            >
+              <el-radio-button label="preview" class="flex-1 sm:flex-initial"
+                >Preview</el-radio-button
+              >
+              <el-radio-button label="source" class="flex-1 sm:flex-initial"
+                >Source</el-radio-button
+              >
             </el-radio-group>
             <el-button
               v-if="markdownView === 'source'"
