@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "include": [
+    "/api/*",
+    "/org/*",
+    "/*.git/info/lfs/*",
+    "/models/*/*/resolve/*",
+    "/datasets/*/*/resolve/*",
+    "/spaces/*/*/resolve/*",
+    "/*/*/resolve/*"
+  ],
+  "exclude": []
+}
