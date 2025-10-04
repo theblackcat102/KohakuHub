@@ -82,7 +82,7 @@ def generate_download_presigned_url(
 
     # Add Content-Disposition if filename specified
     if filename:
-        params["ResponseContentDisposition"] = f'inline; filename="{filename}"'
+        params["ResponseContentDisposition"] = f'attachment; filename="{filename}";'
 
     url = s3.generate_presigned_url(
         "get_object",

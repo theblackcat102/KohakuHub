@@ -399,6 +399,7 @@ async def resolve_file(
             if obj_stat.mtime
             else ""
         ),
+        "Content-Disposition": f'attachment; filename="{path}";',
     }
 
     # Handle HEAD request (metadata only)
