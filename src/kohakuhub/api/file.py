@@ -11,6 +11,25 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadata
 
+
+def calculate_git_blob_sha1(content: bytes) -> str:
+    """Calculate SHA1 hash in git blob format.
+
+    Git uses: sha1(f'blob {size}\\0' + content)
+
+    Args:
+        content: File content bytes
+
+    Returns:
+        SHA1 hex digest
+    """
+    size = len(content)
+    sha = hashlib.sha1()
+    sha.update(f"blob {size}\0".encode("utf-8"))
+    sha.update(content)
+    return sha.hexdigest()
+
+
 from ..config import cfg
 from ..db import File, Repository, StagingUpload, User
 from .auth import get_current_user, get_optional_user
@@ -354,20 +373,23 @@ async def resolve_file(
 
     # Prepare headers required by HuggingFace client
     file_size = obj_stat.size_bytes
-    file_checksum = obj_stat.checksum  # This is the ETag from LakeFS
 
-    # Normalize ETag (add quotes if not present)
-    if file_checksum and not file_checksum.startswith('"'):
-        etag_value = f'"{file_checksum}"'
-    else:
-        etag_value = file_checksum or '""'
+    # Get correct checksum from database
+    # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
+    file_record = File.get_or_none(
+        (File.repo_full_id == repo_id) & (File.path_in_repo == path)
+    )
+
+    # HuggingFace expects plain SHA256 hex (64 characters, unquoted)
+    # For non-LFS: use git blob SHA1, for LFS: use SHA256
+    etag_value = file_record.sha256 if file_record and file_record.sha256 else ""
 
     response_headers = {
         # Critical headers for HuggingFace client
         "X-Repo-Commit": commit_hash or "",
-        "X-Linked-Etag": etag_value,
+        "X-Linked-Etag": etag_value,  # Plain hex, not quoted
         "X-Linked-Size": str(file_size) if file_size else "0",
-        "ETag": etag_value,
+        "ETag": etag_value,  # Plain hex, not quoted
         "Content-Length": str(file_size) if file_size else "0",
         "Accept-Ranges": "bytes",  # Support resume
         # Additional useful headers
@@ -502,7 +524,8 @@ async def commit(
                     400, detail={"error": f"Failed to decode base64: {e}"}
                 )
 
-            new_sha256 = hashlib.sha256(data).hexdigest()
+            # Calculate git blob SHA1 for non-LFS files (HuggingFace format)
+            git_blob_sha1 = calculate_git_blob_sha1(data)
 
             # Check if file unchanged (deduplication)
             existing = File.get_or_none(
@@ -510,7 +533,7 @@ async def commit(
             )
             if (
                 existing
-                and existing.sha256 == new_sha256
+                and existing.sha256 == git_blob_sha1
                 and existing.size == len(data)
             ):
                 print(f"Skipping unchanged file: {path}")
@@ -533,17 +556,17 @@ async def commit(
                     500, detail={"error": f"Failed to upload {path}: {e}"}
                 )
 
-            # Update database
+            # Update database - store git blob SHA1 in sha256 column for non-LFS files
             File.insert(
                 repo_full_id=repo_id,
                 path_in_repo=path,
                 size=len(data),
-                sha256=new_sha256,
+                sha256=git_blob_sha1,  # Git blob SHA1 for non-LFS files
                 lfs=False,
             ).on_conflict(
                 conflict_target=(File.repo_full_id, File.path_in_repo),
                 update={
-                    File.sha256: new_sha256,
+                    File.sha256: git_blob_sha1,  # Git blob SHA1 for non-LFS files
                     File.size: len(data),
                     File.updated_at: datetime.now(timezone.utc),
                 },

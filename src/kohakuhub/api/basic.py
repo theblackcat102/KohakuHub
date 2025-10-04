@@ -398,9 +398,21 @@ async def list_repo_tree(
             # Remove prefix from path to get relative path
             relative_path = obj.path[prefix_len:] if prefix else obj.path
 
+            # Get correct checksum from database
+            # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
+            file_record = File.get_or_none(
+                (File.repo_full_id == repo_id) & (File.path_in_repo == obj.path)
+            )
+
+            checksum = (
+                file_record.sha256
+                if file_record and file_record.sha256
+                else obj.checksum
+            )
+
             file_obj = {
                 "type": "file",
-                "oid": obj.checksum,
+                "oid": checksum,  # Git blob SHA1 for non-LFS, SHA256 for LFS
                 "size": obj.size_bytes,
                 "path": relative_path,
             }
@@ -408,7 +420,7 @@ async def list_repo_tree(
             # Add LFS metadata if it's an LFS file
             if is_lfs:
                 file_obj["lfs"] = {
-                    "oid": obj.checksum,  # Use checksum as LFS oid
+                    "oid": checksum,  # SHA256 for LFS files
                     "size": obj.size_bytes,
                     "pointerSize": 134,  # Standard Git LFS pointer size
                 }
@@ -505,11 +517,23 @@ async def get_paths_info(
             # It's a file
             is_lfs = obj_stats.size_bytes > cfg.app.lfs_threshold_bytes
 
+            # Get correct checksum from database
+            # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
+            file_record = File.get_or_none(
+                (File.repo_full_id == repo_id) & (File.path_in_repo == clean_path)
+            )
+
+            checksum = (
+                file_record.sha256
+                if file_record and file_record.sha256
+                else obj_stats.checksum
+            )
+
             file_info = {
                 "type": "file",
                 "path": clean_path,
                 "size": obj_stats.size_bytes,
-                "blob_id": obj_stats.checksum,
+                "blob_id": checksum,  # Git blob SHA1 for non-LFS, SHA256 for LFS
                 "lfs": None,
                 "last_commit": None,
                 "security": None,
@@ -518,7 +542,7 @@ async def get_paths_info(
             # Add LFS metadata if applicable
             if is_lfs:
                 file_info["lfs"] = {
-                    "oid": obj_stats.checksum,
+                    "oid": checksum,  # SHA256 for LFS files
                     "size": obj_stats.size_bytes,
                     "pointerSize": 134,
                 }

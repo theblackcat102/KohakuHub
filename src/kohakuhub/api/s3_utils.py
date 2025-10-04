@@ -82,7 +82,7 @@ def generate_download_presigned_url(
 
     # Add Content-Disposition if filename specified
     if filename:
-        params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+        params["ResponseContentDisposition"] = f'inline; filename="{filename}"'
 
     url = s3.generate_presigned_url(
         "get_object",
@@ -98,6 +98,7 @@ def generate_upload_presigned_url(
     key: str,
     expires_in: int = 3600,
     content_type: str = "application/octet-stream",
+    checksum_sha256: str = None,
 ) -> dict:
     """Generate presigned URL for uploading to S3.
 
@@ -106,20 +107,29 @@ def generate_upload_presigned_url(
         key: Object key in S3
         expires_in: URL expiration time in seconds (default: 1 hour)
         content_type: Content type of the object
+        checksum_sha256: Base64-encoded SHA256 checksum for S3 to verify (optional)
 
     Returns:
         Dict with 'url', 'fields', and 'expires_at'
     """
     s3 = get_s3_client()
 
+    # Prepare params for presigned URL
+    params = {
+        "Bucket": bucket,
+        "Key": key,
+        # "ContentType": content_type,
+    }
+
+    # Add SHA256 checksum if provided (for LFS files)
+    # S3 will verify the checksum automatically
+    if checksum_sha256:
+        params["ChecksumSHA256"] = checksum_sha256
+
     # Generate presigned PUT URL
     url = s3.generate_presigned_url(
         "put_object",
-        Params={
-            "Bucket": bucket,
-            "Key": key,
-            # "ContentType": content_type,
-        },
+        Params=params,
         ExpiresIn=expires_in,
         HttpMethod="PUT",
     )
@@ -129,13 +139,19 @@ def generate_upload_presigned_url(
         "%Y-%m-%dT%H:%M:%S.%fZ"
     )
 
+    headers = {
+        "Content-Type": content_type,
+    }
+
+    # If checksum is required, client must send it
+    if checksum_sha256:
+        headers["x-amz-checksum-sha256"] = checksum_sha256
+
     return {
         "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),
         "expires_at": expires_at,
         "method": "PUT",
-        "headers": {
-            "Content-Type": content_type,
-        },
+        "headers": headers,
     }
 
 

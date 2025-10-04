@@ -4,6 +4,7 @@ This module implements the Git LFS Batch API specification for handling
 large file uploads (>10MB). It provides presigned S3 URLs for direct uploads.
 """
 
+import base64
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -180,11 +181,17 @@ async def lfs_batch(
                 else:
                     # Single PUT upload
                     try:
+                        # Convert SHA256 hex to base64 for S3 checksum verification
+                        checksum_sha256 = base64.b64encode(bytes.fromhex(oid)).decode(
+                            "utf-8"
+                        )
+
                         upload_info = generate_upload_presigned_url(
                             bucket=cfg.s3.bucket,
                             key=lfs_key,
                             expires_in=3600,  # 1 hour
                             content_type="application/octet-stream",
+                            checksum_sha256=checksum_sha256,
                         )
 
                         objects_response.append(
