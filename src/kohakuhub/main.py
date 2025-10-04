@@ -9,7 +9,7 @@ from .auth import router as auth_router
 from .org import router as org_router
 from .config import cfg
 from .db import Repository
-from .api.file import resolve_file
+from .api.file import resolve_file_head, resolve_file_get
 from .api.s3_utils import init_storage
 
 
@@ -43,28 +43,45 @@ app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
 app.include_router(org_router, prefix="/org", tags=["organizations"])
 
 
-@app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
-@app.get("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.head("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
-async def public_resolve(
-    namespace: str, name: str, revision: str, path: str, request: Request, type="model"
+async def public_resolve_head(
+    namespace: str, name: str, revision: str, path: str, type: str = "model"
 ):
-    """Public download endpoint without /api prefix."""
-
-    print(f"Resolving {type}/{namespace}/{name}/resolve/{revision}/{path}")
+    """Public HEAD endpoint without /api prefix - returns file metadata only."""
+    print(f"HEAD {type}/{namespace}/{name}/resolve/{revision}/{path}")
 
     repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
     if not repo:
         raise HTTPException(404, detail={"error": "Repository not found"})
 
-    return await resolve_file(
+    return await resolve_file_head(
         repo_type=type,
         namespace=namespace,
         name=name,
         revision=revision,
         path=path,
-        request=request,
+    )
+
+
+@app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
+@app.get("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+async def public_resolve_get(
+    namespace: str, name: str, revision: str, path: str, type: str = "model"
+):
+    """Public GET endpoint without /api prefix - redirects to S3 download."""
+    print(f"GET {type}/{namespace}/{name}/resolve/{revision}/{path}")
+
+    repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
+    if not repo:
+        raise HTTPException(404, detail={"error": "Repository not found"})
+
+    return await resolve_file_get(
+        repo_type=type,
+        namespace=namespace,
+        name=name,
+        revision=revision,
+        path=path,
     )
 
 

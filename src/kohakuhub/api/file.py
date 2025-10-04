@@ -284,46 +284,15 @@ async def get_revision(
 # ========== Download Endpoints ==========
 
 
-@router.head("/{repo_type}s/{namespace}/{repo_name}/resolve/{revision}/{path:path}")
-@router.get("/{repo_type}s/{namespace}/{repo_name}/resolve/{revision}/{path:path}")
-async def resolve_file(
+async def _get_file_metadata(
     repo_type: str,
     namespace: str,
     name: str,
     revision: str,
     path: str,
-    request: Request,
-    user: User = Depends(get_optional_user),
+    user: User,
 ):
-    """Resolve file path to download URL.
-
-    This endpoint MUST return specific headers for HuggingFace client compatibility:
-    - X-Repo-Commit: The commit hash
-    - X-Linked-Etag: ETag of the file (preferably with quotes)
-    - X-Linked-Size: Size of the file in bytes
-    - Location: Presigned download URL (for redirects)
-    - ETag: Standard ETag header
-    - Content-Length: File size
-
-    The client first makes a HEAD request to get metadata, then a GET request
-    to download. Both must return the same headers.
-
-    Args:
-        repo_type: Type of repository
-        repo_id: Full repository ID
-        revision: Branch name or commit hash
-        path: File path within repository
-        request: FastAPI request object
-        user: Current authenticated user (optional)
-
-    Returns:
-        HEAD: Response with headers only
-        GET: Redirect to presigned S3 URL
-
-    Raises:
-        HTTPException: If file not found
-    """
-    from fastapi.responses import Response, RedirectResponse
+    """Shared logic to get file metadata for HEAD/GET requests."""
     from .s3_utils import generate_download_presigned_url, parse_s3_uri
 
     repo_id = f"{namespace}/{name}"
@@ -402,22 +371,58 @@ async def resolve_file(
         "Content-Disposition": f'attachment; filename="{path}";',
     }
 
-    # Handle HEAD request (metadata only)
-    if request.method == "HEAD":
-        # Return metadata headers only, NO Location header
-        # This prevents browser from following redirect and causing CORS issues
-        return Response(
-            status_code=200,
-            headers=response_headers,
-        )
+    return presigned_url, response_headers
 
-    # Handle GET request (actual download)
+
+@router.head("/{repo_type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+async def resolve_file_head(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    revision: str,
+    path: str,
+    user: User = Depends(get_optional_user),
+):
+    """Get file metadata (HEAD request).
+
+    Returns only headers without body, for clients to check file info.
+    """
+    from fastapi.responses import Response
+
+    _, response_headers = await _get_file_metadata(
+        repo_type, namespace, name, revision, path, user
+    )
+
+    # Return metadata headers only, NO redirect
+    return Response(
+        status_code=200,
+        headers=response_headers,
+    )
+
+
+@router.get("/{repo_type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+async def resolve_file_get(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    revision: str,
+    path: str,
+    user: User = Depends(get_optional_user),
+):
+    """Download file (GET request).
+
+    Returns 302 redirect to presigned S3 URL for actual download.
+    """
+    from fastapi.responses import RedirectResponse
+
+    presigned_url, _ = await _get_file_metadata(
+        repo_type, namespace, name, revision, path, user
+    )
+
     # Return 302 redirect to presigned S3 URL
-    # The redirect includes Content-Disposition in the S3 URL parameters
     return RedirectResponse(
         url=presigned_url,
         status_code=302,
-        # Don't include headers in redirect - S3 will provide them
     )
 
 
