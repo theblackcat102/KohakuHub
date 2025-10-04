@@ -5,22 +5,28 @@
     <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
       <div class="container-main py-16 text-center">
         <h1 class="text-5xl font-bold mb-4">Welcome to KohakuHub</h1>
-        <p class="text-xl mb-4">
+        <p class="text-xl mb-8">
           Self-hosted HuggingFace Hub alternative for your AI models and
           datasets
         </p>
-        <!-- <div class="flex gap-4 justify-center">
-          <el-button size="large" type="primary" @click="$router.push('/models')">
-            Browse Models
-          </el-button>
-          <el-button 
-            v-if="!isAuthenticated"
-            size="large" 
-            @click="$router.push('/register')"
+        <div class="flex gap-4 justify-center">
+          <el-button
+            size="large"
+            type="default"
+            class="!bg-white !text-gray-900 hover:!bg-gray-100 !font-semibold !shadow-lg"
+            @click="$router.push('/get-started')"
           >
             Get Started
           </el-button>
-        </div> -->
+          <el-button
+            size="large"
+            plain
+            class="!text-white !border-white !border-2 hover:!bg-white/20 !font-semibold"
+            @click="$router.push('/self-hosted')"
+          >
+            Host Your Own Hub
+          </el-button>
+        </div>
       </div>
     </div>
 
