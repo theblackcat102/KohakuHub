@@ -67,8 +67,9 @@ export default defineConfig({
         target: 'http://localhost:48888',
         changeOrigin: true
       },
-      // Proxy organization endpoints
-      '/org': {
+      // Proxy organization API endpoints (must be more specific to avoid catching /organizations frontend routes)
+      // This matches /org/ followed by anything (but not /organizations)
+      '^/org/': {
         target: 'http://localhost:48888',
         changeOrigin: true
       },

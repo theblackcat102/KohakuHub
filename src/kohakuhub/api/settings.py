@@ -61,44 +61,6 @@ def update_user_settings(
 # Organization Settings API
 # ============================================================================
 
-@router.get("/organizations/{org_name}/members")
-def list_organization_members(
-    org_name: str,
-    user: User = Depends(get_optional_user)
-):
-    """List organization members.
-
-    Matches HuggingFace Hub API: GET /api/organizations/{org}/members
-
-    Args:
-        org_name: Organization name
-        user: Current authenticated user (optional)
-
-    Returns:
-        List of organization members with their roles
-    """
-    org = Organization.get_or_none(Organization.name == org_name)
-    if not org:
-        raise HTTPException(404, detail="Organization not found")
-
-    # Get all members
-    members = (
-        UserOrganization.select()
-        .join(User)
-        .where(UserOrganization.organization == org.id)
-    )
-
-    return {
-        "members": [
-            {
-                "user": m.user.username,
-                "role": m.role,
-            }
-            for m in members
-        ]
-    }
-
-
 class UpdateOrganizationSettingsRequest(BaseModel):
     description: Optional[str] = None
 
@@ -150,29 +112,29 @@ class UpdateRepoSettingsPayload(BaseModel):
     gated: Optional[str] = None  # "auto", "manual", or False/None
 
 
-@router.put("/repos/{repo_type}/{repo_id}/settings")
+@router.put("/{repo_type}s/{namespace}/{name}/settings")
 def update_repo_settings(
     repo_type: str,
-    repo_id: str,
+    namespace: str,
+    name: str,
     payload: UpdateRepoSettingsPayload,
     user: User = Depends(get_current_user),
 ):
     """Update repository settings.
 
-    Matches HuggingFace Hub API: PUT /api/repos/{type}/{repo_id}/settings
+    Matches pattern: PUT /api/{repo_type}s/{namespace}/{name}/settings
 
     Args:
         repo_type: Repository type (model/dataset/space)
-        repo_id: Full repository ID (namespace/name)
+        namespace: Repository namespace
+        name: Repository name
         payload: Settings to update
         user: Current authenticated user
 
     Returns:
         Success message
     """
-    # Remove 's' from repo_type if present (models -> model)
-    if repo_type.endswith('s'):
-        repo_type = repo_type[:-1]
+    repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
     repo_row = Repository.get_or_none(
@@ -299,10 +261,11 @@ class CreateBranchPayload(BaseModel):
     revision: Optional[str] = None  # Source revision (defaults to main)
 
 
-@router.post("/repos/{repo_type}/{repo_id}/branch")
+@router.post("/{repo_type}s/{namespace}/{name}/branch")
 def create_branch(
     repo_type: str,
-    repo_id: str,
+    namespace: str,
+    name: str,
     payload: CreateBranchPayload,
     user: User = Depends(get_current_user),
 ):
@@ -310,16 +273,15 @@ def create_branch(
 
     Args:
         repo_type: Repository type (model/dataset/space)
-        repo_id: Full repository ID (namespace/name)
+        namespace: Repository namespace
+        name: Repository name
         payload: Branch creation parameters
         user: Current authenticated user
 
     Returns:
         Success message
     """
-    # Remove 's' from repo_type if present
-    if repo_type.endswith('s'):
-        repo_type = repo_type[:-1]
+    repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
     repo_row = Repository.get_or_none(
@@ -359,10 +321,11 @@ def create_branch(
     return {"success": True, "message": f"Branch '{payload.branch}' created"}
 
 
-@router.delete("/repos/{repo_type}/{repo_id}/branch/{branch}")
+@router.delete("/{repo_type}s/{namespace}/{name}/branch/{branch}")
 def delete_branch(
     repo_type: str,
-    repo_id: str,
+    namespace: str,
+    name: str,
     branch: str,
     user: User = Depends(get_current_user),
 ):
@@ -370,16 +333,15 @@ def delete_branch(
 
     Args:
         repo_type: Repository type (model/dataset/space)
-        repo_id: Full repository ID (namespace/name)
+        namespace: Repository namespace
+        name: Repository name
         branch: Branch name to delete
         user: Current authenticated user
 
     Returns:
         Success message
     """
-    # Remove 's' from repo_type if present
-    if repo_type.endswith('s'):
-        repo_type = repo_type[:-1]
+    repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
     repo_row = Repository.get_or_none(
@@ -418,10 +380,11 @@ class CreateTagPayload(BaseModel):
     message: Optional[str] = None
 
 
-@router.post("/repos/{repo_type}/{repo_id}/tag")
+@router.post("/{repo_type}s/{namespace}/{name}/tag")
 def create_tag(
     repo_type: str,
-    repo_id: str,
+    namespace: str,
+    name: str,
     payload: CreateTagPayload,
     user: User = Depends(get_current_user),
 ):
@@ -429,16 +392,15 @@ def create_tag(
 
     Args:
         repo_type: Repository type (model/dataset/space)
-        repo_id: Full repository ID (namespace/name)
+        namespace: Repository namespace
+        name: Repository name
         payload: Tag creation parameters
         user: Current authenticated user
 
     Returns:
         Success message
     """
-    # Remove 's' from repo_type if present
-    if repo_type.endswith('s'):
-        repo_type = repo_type[:-1]
+    repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
     repo_row = Repository.get_or_none(
@@ -478,10 +440,11 @@ def create_tag(
     return {"success": True, "message": f"Tag '{payload.tag}' created"}
 
 
-@router.delete("/repos/{repo_type}/{repo_id}/tag/{tag}")
+@router.delete("/{repo_type}s/{namespace}/{name}/tag/{tag}")
 def delete_tag(
     repo_type: str,
-    repo_id: str,
+    namespace: str,
+    name: str,
     tag: str,
     user: User = Depends(get_current_user),
 ):
@@ -489,16 +452,15 @@ def delete_tag(
 
     Args:
         repo_type: Repository type (model/dataset/space)
-        repo_id: Full repository ID (namespace/name)
+        namespace: Repository namespace
+        name: Repository name
         tag: Tag name to delete
         user: Current authenticated user
 
     Returns:
         Success message
     """
-    # Remove 's' from repo_type if present
-    if repo_type.endswith('s'):
-        repo_type = repo_type[:-1]
+    repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
     repo_row = Repository.get_or_none(

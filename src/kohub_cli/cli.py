@@ -767,6 +767,294 @@ def update(ctx, org_name, username, role):
         handle_error(e, ctx)
 
 
+# ========== Settings Commands ==========
+
+
+@cli.group()
+def settings():
+    """Settings management for users, repos, and organizations."""
+    pass
+
+
+@settings.group()
+def user():
+    """User settings management."""
+    pass
+
+
+@user.command("update")
+@click.option("--email", help="New email address")
+@click.pass_context
+def update_user(ctx, email):
+    """Update user settings."""
+    client = ctx.obj["client"]
+    try:
+        user_info = client.whoami()
+        username = user_info["username"]
+
+        result = client.update_user_settings(username=username, email=email)
+        output_result(ctx, result, "User settings updated successfully")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@settings.group()
+def repo():
+    """Repository settings management."""
+    pass
+
+
+@repo.command("update")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--private/--public", default=None, help="Set repository visibility")
+@click.option(
+    "--gated",
+    type=click.Choice(["auto", "manual", "none"]),
+    help="Set gating mode",
+)
+@click.pass_context
+def update_repo(ctx, repo_id, repo_type, private, gated):
+    """Update repository settings.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        gated_value = None if gated == "none" else gated
+
+        result = client.update_repo_settings(
+            repo_id,
+            repo_type=repo_type,
+            private=private,
+            gated=gated_value,
+        )
+        output_result(ctx, result, f"Repository {repo_id} settings updated")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo.command("move")
+@click.argument("from_repo")
+@click.argument("to_repo")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.pass_context
+def move_repo(ctx, from_repo, to_repo, repo_type):
+    """Move/rename a repository.
+
+    FROM_REPO format: namespace/name
+    TO_REPO format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.move_repo(
+            from_repo=from_repo,
+            to_repo=to_repo,
+            repo_type=repo_type,
+        )
+        output_result(ctx, result, f"Repository moved from {from_repo} to {to_repo}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo.group()
+def branch():
+    """Branch management."""
+    pass
+
+
+@branch.command("create")
+@click.argument("repo_id")
+@click.argument("branch")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--revision", default=None, help="Source revision (defaults to main)")
+@click.pass_context
+def create_branch(ctx, repo_id, branch, repo_type, revision):
+    """Create a new branch.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.create_branch(
+            repo_id,
+            branch=branch,
+            repo_type=repo_type,
+            revision=revision,
+        )
+        output_result(ctx, result, f"Branch '{branch}' created in {repo_id}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@branch.command("delete")
+@click.argument("repo_id")
+@click.argument("branch")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.confirmation_option(prompt="Are you sure you want to delete this branch?")
+@click.pass_context
+def delete_branch(ctx, repo_id, branch, repo_type):
+    """Delete a branch.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.delete_branch(
+            repo_id,
+            branch=branch,
+            repo_type=repo_type,
+        )
+        output_result(ctx, result, f"Branch '{branch}' deleted from {repo_id}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo.group()
+def tag():
+    """Tag management."""
+    pass
+
+
+@tag.command("create")
+@click.argument("repo_id")
+@click.argument("tag")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--revision", default=None, help="Source revision (defaults to main)")
+@click.option("--message", "-m", help="Tag message")
+@click.pass_context
+def create_tag(ctx, repo_id, tag, repo_type, revision, message):
+    """Create a new tag.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.create_tag(
+            repo_id,
+            tag=tag,
+            repo_type=repo_type,
+            revision=revision,
+            message=message,
+        )
+        output_result(ctx, result, f"Tag '{tag}' created in {repo_id}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@tag.command("delete")
+@click.argument("repo_id")
+@click.argument("tag")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.confirmation_option(prompt="Are you sure you want to delete this tag?")
+@click.pass_context
+def delete_tag(ctx, repo_id, tag, repo_type):
+    """Delete a tag.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.delete_tag(
+            repo_id,
+            tag=tag,
+            repo_type=repo_type,
+        )
+        output_result(ctx, result, f"Tag '{tag}' deleted from {repo_id}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@settings.group()
+def organization():
+    """Organization settings management."""
+    pass
+
+
+@organization.command("update")
+@click.argument("org_name")
+@click.option("--description", help="New description")
+@click.pass_context
+def update_org(ctx, org_name, description):
+    """Update organization settings."""
+    client = ctx.obj["client"]
+    try:
+        result = client.update_organization_settings(
+            org_name,
+            description=description,
+        )
+        output_result(ctx, result, f"Organization {org_name} settings updated")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@organization.command("members")
+@click.argument("org_name")
+@click.pass_context
+def list_org_members(ctx, org_name):
+    """List organization members."""
+    client = ctx.obj["client"]
+    try:
+        members = client.list_organization_members(org_name)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, members)
+        else:
+            if not members:
+                console.print("[yellow]No members found[/yellow]")
+                return
+
+            table = Table(title=f"{org_name} Members")
+            table.add_column("Username", style="cyan")
+            table.add_column("Role", style="green")
+
+            for m in members:
+                table.add_row(
+                    m.get("user", ""),
+                    m.get("role", ""),
+                )
+
+            console.print(table)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
 # ========== Configuration Commands ==========
 
 

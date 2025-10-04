@@ -2,7 +2,6 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "/api",
   timeout: 30000,
   withCredentials: true,
 });
@@ -37,13 +36,13 @@ export default api;
  * Auth API
  */
 export const authAPI = {
-  register: (data) => api.post("/auth/register", data),
-  login: (data) => api.post("/auth/login", data),
-  logout: () => api.post("/auth/logout"),
-  me: () => api.get("/auth/me"),
-  createToken: (data) => api.post("/auth/tokens/create", data),
-  listTokens: () => api.get("/auth/tokens"),
-  revokeToken: (id) => api.delete(`/auth/tokens/${id}`),
+  register: (data) => api.post("/api/auth/register", data),
+  login: (data) => api.post("/api/auth/login", data),
+  logout: () => api.post("/api/auth/logout"),
+  me: () => api.get("/api/auth/me"),
+  createToken: (data) => api.post("/api/auth/tokens/create", data),
+  listTokens: () => api.get("/api/auth/tokens"),
+  revokeToken: (id) => api.delete(`/api/auth/tokens/${id}`),
 };
 
 /**
@@ -58,14 +57,14 @@ export const repoAPI = {
    * @param {Object} data - { type: string, name: string, organization: string|null, private: boolean }
    * @returns {Promise} - { url: string, repo_id: string }
    */
-  create: (data) => api.post("/repos/create", data),
+  create: (data) => api.post("/api/repos/create", data),
 
   /**
    * Delete a repository
    * @param {Object} data - { type: string, name: string, organization?: string }
    * @returns {Promise} - { message: string }
    */
-  delete: (data) => api.delete("/repos/delete", { data }),
+  delete: (data) => api.delete("/api/repos/delete", { data }),
 
   /**
    * Get repository info
@@ -74,7 +73,7 @@ export const repoAPI = {
    * @param {string} name - Repository name
    * @returns {Promise} - Repository metadata
    */
-  getInfo: (type, namespace, name) => api.get(`/${type}s/${namespace}/${name}`),
+  getInfo: (type, namespace, name) => api.get(`/api/${type}s/${namespace}/${name}`),
 
   /**
    * List repositories
@@ -82,7 +81,7 @@ export const repoAPI = {
    * @param {Object} params - Query parameters { author?, limit? }
    * @returns {Promise} - Array of repositories
    */
-  listRepos: (type, params) => api.get(`/${type}s`, { params }),
+  listRepos: (type, params) => api.get(`/api/${type}s`, { params }),
 
   /**
    * List repository file tree
@@ -95,7 +94,7 @@ export const repoAPI = {
    * @returns {Promise} - Array of files and directories
    */
   listTree: (type, namespace, name, revision, path, params) =>
-    api.get(`/${type}s/${namespace}/${name}/tree/${revision}${path}`, {
+    api.get(`/api/${type}s/${namespace}/${name}/tree/${revision}${path}`, {
       params,
     }),
 
@@ -148,7 +147,7 @@ export const repoAPI = {
     const ndjson = ndjsonLines.map((line) => JSON.stringify(line)).join("\n");
 
     return api.post(
-      `/${type}s/${namespace}/${name}/commit/${revision}`,
+      `/api/${type}s/${namespace}/${name}/commit/${revision}`,
       ndjson,
       {
         headers: {
@@ -205,7 +204,7 @@ export const repoAPI = {
     const ndjson = ndjsonLines.map((line) => JSON.stringify(line)).join("\n");
 
     return api.post(
-      `/${type}s/${namespace}/${name}/commit/${revision}`,
+      `/api/${type}s/${namespace}/${name}/commit/${revision}`,
       ndjson,
       {
         headers: {
@@ -267,4 +266,102 @@ export const orgAPI = {
    * @returns {Promise} - { organizations: Array<{ name, description, role }> }
    */
   getUserOrgs: (username) => api.get(`/org/users/${username}/orgs`),
+
+  /**
+   * Update organization settings
+   * @param {string} orgName - Organization name
+   * @param {Object} data - { description?: string }
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  updateSettings: (orgName, data) =>
+    api.put(`/api/organizations/${orgName}/settings`, data),
+
+  /**
+   * List organization members
+   * @param {string} orgName - Organization name
+   * @returns {Promise} - { members: Array<{ user: string, role: string }> }
+   */
+  listMembers: (orgName) => api.get(`/org/${orgName}/members`),
+};
+
+/**
+ * Settings API
+ */
+export const settingsAPI = {
+  /**
+   * Get current user info with organizations (HuggingFace compatible)
+   * @returns {Promise} - { type, name, fullname, email, emailVerified, orgs }
+   */
+  whoamiV2: () => api.get("/api/whoami-v2"),
+
+  /**
+   * Update user settings
+   * @param {string} username - Username
+   * @param {Object} data - { email?: string, fullname?: string }
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  updateUserSettings: (username, data) =>
+    api.put(`/api/users/${username}/settings`, data),
+
+  /**
+   * Update repository settings
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {Object} data - { private?: boolean, gated?: string }
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  updateRepoSettings: (repoType, namespace, name, data) =>
+    api.put(`/api/${repoType}s/${namespace}/${name}/settings`, data),
+
+  /**
+   * Move/rename repository
+   * @param {Object} data - { fromRepo: string, toRepo: string, type: string }
+   * @returns {Promise} - { success: boolean, url: string, message: string }
+   */
+  moveRepo: (data) => api.post("/api/repos/move", data),
+
+  /**
+   * Create branch
+   * @param {string} repoType - Repository type
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {Object} data - { branch: string, revision?: string }
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  createBranch: (repoType, namespace, name, data) =>
+    api.post(`/api/${repoType}s/${namespace}/${name}/branch`, data),
+
+  /**
+   * Delete branch
+   * @param {string} repoType - Repository type
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {string} branch - Branch name
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  deleteBranch: (repoType, namespace, name, branch) =>
+    api.delete(`/api/${repoType}s/${namespace}/${name}/branch/${branch}`),
+
+  /**
+   * Create tag
+   * @param {string} repoType - Repository type
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {Object} data - { tag: string, revision?: string, message?: string }
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  createTag: (repoType, namespace, name, data) =>
+    api.post(`/api/${repoType}s/${namespace}/${name}/tag`, data),
+
+  /**
+   * Delete tag
+   * @param {string} repoType - Repository type
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {string} tag - Tag name
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  deleteTag: (repoType, namespace, name, tag) =>
+    api.delete(`/api/${repoType}s/${namespace}/${name}/tag/${tag}`),
 };

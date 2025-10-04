@@ -603,6 +603,314 @@ class KohubClient:
         response = self._request("GET", api_path, params=params)
         return response.json()
 
+    # ========== Settings API ==========
+
+    def whoami_v2(self) -> Dict[str, Any]:
+        """Get current user information with organizations (HuggingFace compatible).
+
+        Returns:
+            User information including organizations
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = self._request("GET", "/api/whoami-v2")
+        return response.json()
+
+    def update_user_settings(
+        self,
+        username: str,
+        email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update user settings.
+
+        Args:
+            username: Username to update
+            email: New email address
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+        """
+        data = {}
+        if email is not None:
+            data["email"] = email
+
+        response = self._request("PUT", f"/api/users/{username}/settings", json=data)
+        return response.json()
+
+    def update_repo_settings(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+        private: Optional[bool] = None,
+        gated: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update repository settings.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+            private: Whether the repository is private
+            gated: Gating mode ("auto", "manual", or None)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        data = {}
+        if private is not None:
+            data["private"] = private
+        if gated is not None:
+            data["gated"] = gated
+
+        response = self._request(
+            "PUT",
+            f"/api/{repo_type}s/{namespace}/{name}/settings",
+            json=data,
+        )
+        return response.json()
+
+    def move_repo(
+        self,
+        from_repo: str,
+        to_repo: str,
+        repo_type: RepoType = "model",
+    ) -> Dict[str, Any]:
+        """Move/rename a repository.
+
+        Args:
+            from_repo: Source repository ID (format: "namespace/name")
+            to_repo: Destination repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            New repository URL
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If source repository not found
+            AlreadyExistsError: If destination repository already exists
+        """
+        response = self._request(
+            "POST",
+            "/api/repos/move",
+            json={
+                "fromRepo": from_repo,
+                "toRepo": to_repo,
+                "type": repo_type,
+            },
+        )
+        return response.json()
+
+    def create_branch(
+        self,
+        repo_id: str,
+        branch: str,
+        repo_type: RepoType = "model",
+        revision: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new branch.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            branch: Branch name to create
+            repo_type: Repository type (model, dataset, space)
+            revision: Source revision (defaults to main)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        data = {"branch": branch}
+        if revision:
+            data["revision"] = revision
+
+        response = self._request(
+            "POST",
+            f"/api/{repo_type}s/{namespace}/{name}/branch",
+            json=data,
+        )
+        return response.json()
+
+    def delete_branch(
+        self,
+        repo_id: str,
+        branch: str,
+        repo_type: RepoType = "model",
+    ) -> Dict[str, Any]:
+        """Delete a branch.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            branch: Branch name to delete
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository or branch not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        response = self._request(
+            "DELETE",
+            f"/api/{repo_type}s/{namespace}/{name}/branch/{branch}",
+        )
+        return response.json()
+
+    def create_tag(
+        self,
+        repo_id: str,
+        tag: str,
+        repo_type: RepoType = "model",
+        revision: Optional[str] = None,
+        message: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new tag.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            tag: Tag name to create
+            repo_type: Repository type (model, dataset, space)
+            revision: Source revision (defaults to main)
+            message: Tag message
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        data = {"tag": tag}
+        if revision:
+            data["revision"] = revision
+        if message:
+            data["message"] = message
+
+        response = self._request(
+            "POST",
+            f"/api/{repo_type}s/{namespace}/{name}/tag",
+            json=data,
+        )
+        return response.json()
+
+    def delete_tag(
+        self,
+        repo_id: str,
+        tag: str,
+        repo_type: RepoType = "model",
+    ) -> Dict[str, Any]:
+        """Delete a tag.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            tag: Tag name to delete
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository or tag not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        response = self._request(
+            "DELETE",
+            f"/api/{repo_type}s/{namespace}/{name}/tag/{tag}",
+        )
+        return response.json()
+
+    def update_organization_settings(
+        self,
+        org_name: str,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update organization settings.
+
+        Args:
+            org_name: Organization name
+            description: New description
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If organization not found
+        """
+        data = {}
+        if description is not None:
+            data["description"] = description
+
+        response = self._request(
+            "PUT",
+            f"/api/organizations/{org_name}/settings",
+            json=data,
+        )
+        return response.json()
+
+    def list_organization_members(
+        self,
+        org_name: str,
+    ) -> List[Dict[str, Any]]:
+        """List organization members.
+
+        Args:
+            org_name: Organization name
+
+        Returns:
+            List of members with roles
+
+        Raises:
+            NotFoundError: If organization not found
+        """
+        response = self._request("GET", f"/org/{org_name}/members")
+        data = response.json()
+        return data.get("members", [])
+
     # ========== Configuration ==========
 
     def save_config(

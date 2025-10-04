@@ -31,6 +31,12 @@
         >
           Spaces
         </RouterLink>
+        <RouterLink
+          to="/organizations"
+          class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+        >
+          Organizations
+        </RouterLink>
       </nav>
 
       <!-- Desktop User Menu - hidden on mobile -->
@@ -69,6 +75,12 @@
                   <div class="flex items-center gap-2">
                     <div class="i-carbon-application text-purple-500" />
                     <span>New Space</span>
+                  </div>
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="createOrganization">
+                  <div class="flex items-center gap-2">
+                    <div class="i-carbon-group text-orange-500" />
+                    <span>New Organization</span>
                   </div>
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -178,6 +190,16 @@
               Spaces
             </div>
           </RouterLink>
+          <RouterLink
+            to="/organizations"
+            @click="mobileMenuOpen = false"
+            class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+          >
+            <div class="flex items-center gap-2">
+              <div class="i-carbon-group text-orange-500" />
+              Organizations
+            </div>
+          </RouterLink>
         </nav>
 
         <!-- Divider -->
@@ -226,6 +248,18 @@
               <div class="flex items-center gap-2">
                 <div class="i-carbon-application text-purple-500" />
                 New Space
+              </div>
+            </div>
+            <div
+              @click="
+                createOrganization();
+                mobileMenuOpen = false;
+              "
+              class="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-group text-orange-500" />
+                New Organization
               </div>
             </div>
           </div>
@@ -329,6 +363,10 @@ function createNew(type) {
     path: "/new",
     query: { type },
   });
+}
+
+function createOrganization() {
+  router.push("/organizations/new");
 }
 
 async function handleLogout() {

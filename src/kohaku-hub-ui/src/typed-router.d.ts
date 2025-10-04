@@ -24,6 +24,7 @@ declare module 'vue-router/auto-routes' {
     '/[type]s/[namespace]/[name]/blob/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/blob/[branch]/[...file]', '/:type()s/:namespace/:name/blob/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/commits/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/commits/[branch]/', '/:type()s/:namespace/:name/commits/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/edit/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/edit/[branch]/[...file]', '/:type()s/:namespace/:name/edit/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/settings': RouteRecordInfo<'/[type]s/[namespace]/[name]/settings', '/:type()s/:namespace/:name/settings', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/tree/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/', '/:type()s/:namespace/:name/tree/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/tree/[branch]/[...path]': RouteRecordInfo<'/[type]s/[namespace]/[name]/tree/[branch]/[...path]', '/:type()s/:namespace/:name/tree/:branch/:path(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, path: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, path: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/upload/[branch]': RouteRecordInfo<'/[type]s/[namespace]/[name]/upload/[branch]', '/:type()s/:namespace/:name/upload/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
@@ -34,6 +35,11 @@ declare module 'vue-router/auto-routes' {
     '/get-started': RouteRecordInfo<'/get-started', '/get-started', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
+    '/organizations/': RouteRecordInfo<'/organizations/', '/organizations', Record<never, never>, Record<never, never>>,
+    '/organizations/[orgname]/': RouteRecordInfo<'/organizations/[orgname]/', '/organizations/:orgname', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
+    '/organizations/[orgname]/[type]': RouteRecordInfo<'/organizations/[orgname]/[type]', '/organizations/:orgname/:type', { orgname: ParamValue<true>, type: ParamValue<true> }, { orgname: ParamValue<false>, type: ParamValue<false> }>,
+    '/organizations/[orgname]/settings': RouteRecordInfo<'/organizations/[orgname]/settings', '/organizations/:orgname/settings', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
+    '/organizations/new': RouteRecordInfo<'/organizations/new', '/organizations/new', Record<never, never>, Record<never, never>>,
     '/privacy': RouteRecordInfo<'/privacy', '/privacy', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
     '/self-hosted': RouteRecordInfo<'/self-hosted', '/self-hosted', Record<never, never>, Record<never, never>>,
@@ -76,6 +82,10 @@ declare module 'vue-router/auto-routes' {
       routes: '/[type]s/[namespace]/[name]/edit/[branch]/[...file]'
       views: never
     }
+    'src/pages/[type]s/[namespace]/[name]/settings.vue': {
+      routes: '/[type]s/[namespace]/[name]/settings'
+      views: never
+    }
     'src/pages/[type]s/[namespace]/[name]/tree/[branch]/index.vue': {
       routes: '/[type]s/[namespace]/[name]/tree/[branch]/'
       views: never
@@ -114,6 +124,26 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/new.vue': {
       routes: '/new'
+      views: never
+    }
+    'src/pages/organizations/index.vue': {
+      routes: '/organizations/'
+      views: never
+    }
+    'src/pages/organizations/[orgname]/index.vue': {
+      routes: '/organizations/[orgname]/'
+      views: never
+    }
+    'src/pages/organizations/[orgname]/[type].vue': {
+      routes: '/organizations/[orgname]/[type]'
+      views: never
+    }
+    'src/pages/organizations/[orgname]/settings.vue': {
+      routes: '/organizations/[orgname]/settings'
+      views: never
+    }
+    'src/pages/organizations/new.vue': {
+      routes: '/organizations/new'
       views: never
     }
     'src/pages/privacy.vue': {

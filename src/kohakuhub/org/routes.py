@@ -141,3 +141,30 @@ def update_member_role(
 
     update_member_role_util(org.id, username, payload.role)
     return {"success": True, "message": "Member role updated successfully"}
+
+
+@router.get("/{org_name}/members")
+def list_organization_members(org_name: str):
+    """List organization members."""
+    from ..db import Organization
+
+    org = Organization.get_or_none(Organization.name == org_name)
+    if not org:
+        raise HTTPException(404, detail="Organization not found")
+
+    # Get all members
+    members = (
+        UserOrganization.select()
+        .join(User)
+        .where(UserOrganization.organization == org.id)
+    )
+
+    return {
+        "members": [
+            {
+                "user": m.user.username,
+                "role": m.role,
+            }
+            for m in members
+        ]
+    }

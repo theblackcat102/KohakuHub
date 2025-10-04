@@ -1,0 +1,357 @@
+<!-- src/pages/organizations/[orgname]/[type].vue -->
+<template>
+  <div class="container-main">
+    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+      <!-- Sidebar with members -->
+      <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <div class="card">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="i-carbon-group text-5xl text-gray-400" />
+            <div>
+              <h2 class="text-xl font-bold">{{ orgname }}</h2>
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                Organization
+              </p>
+            </div>
+          </div>
+
+          <div v-if="orgInfo" class="space-y-2 text-sm">
+            <div class="text-gray-600 dark:text-gray-400">
+              {{ orgInfo.description || "No description" }}
+            </div>
+            <div
+              class="flex items-center gap-2 text-gray-600 dark:text-gray-400"
+            >
+              <div class="i-carbon-calendar" />
+              Created {{ formatDate(orgInfo.created_at) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Members List -->
+        <div class="card">
+          <h3 class="font-semibold mb-3 flex items-center gap-2">
+            <div class="i-carbon-user-multiple" />
+            Members
+            <span class="text-sm text-gray-500"
+              >({{ members.length || 0 }})</span
+            >
+          </h3>
+          <div v-if="members.length > 0" class="space-y-2">
+            <div
+              v-for="member in members"
+              :key="member.user"
+              class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+              @click="goToUser(member.user)"
+            >
+              <div class="i-carbon-user-avatar text-2xl text-gray-400" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium truncate">
+                  {{ member.user }}
+                </div>
+                <div class="text-xs text-gray-500">
+                  {{ member.role }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            v-else
+            class="text-center py-4 text-sm text-gray-500 dark:text-gray-400"
+          >
+            No members yet
+          </div>
+        </div>
+
+        <!-- Stats Summary / Tab Navigation -->
+        <div class="card">
+          <h3 class="font-semibold mb-3">Repositories</h3>
+          <div class="space-y-1">
+            <RouterLink
+              :to="`/organizations/${orgname}`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                'hover:bg-gray-50 dark:hover:bg-gray-700',
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-grid text-gray-500 dark:text-gray-400" />
+                <span>Overview</span>
+              </div>
+            </RouterLink>
+
+            <RouterLink
+              :to="`/organizations/${orgname}/models`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                currentType === 'models' ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-model text-blue-500" />
+                <span :class="currentType === 'models' ? 'font-semibold' : ''">Models</span>
+              </div>
+              <span
+                class="text-sm font-semibold text-gray-600 dark:text-gray-400"
+              >
+                {{ repos.model?.length || 0 }}
+              </span>
+            </RouterLink>
+
+            <RouterLink
+              :to="`/organizations/${orgname}/datasets`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                currentType === 'datasets' ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-data-table text-green-500" />
+                <span :class="currentType === 'datasets' ? 'font-semibold' : ''">Datasets</span>
+              </div>
+              <span
+                class="text-sm font-semibold text-gray-600 dark:text-gray-400"
+              >
+                {{ repos.dataset?.length || 0 }}
+              </span>
+            </RouterLink>
+
+            <RouterLink
+              :to="`/organizations/${orgname}/spaces`"
+              :class="[
+                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                currentType === 'spaces' ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+              ]"
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <div class="i-carbon-application text-purple-500" />
+                <span :class="currentType === 'spaces' ? 'font-semibold' : ''">Spaces</span>
+              </div>
+              <span
+                class="text-sm font-semibold text-gray-600 dark:text-gray-400"
+              >
+                {{ repos.space?.length || 0 }}
+              </span>
+            </RouterLink>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="space-y-8">
+        <section>
+          <div
+            class="flex items-center justify-between mb-4 pb-3 border-b-2"
+            :class="borderColor"
+          >
+            <div class="flex items-center gap-2">
+              <div :class="iconClass" class="text-xl md:text-2xl" />
+              <h2 class="text-xl md:text-2xl font-bold">{{ typeTitle }}</h2>
+            </div>
+            <el-tag :type="tagType" size="large">{{ repoCount }}</el-tag>
+          </div>
+
+          <div v-if="repoCount > 0" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div
+                v-for="repo in currentRepos"
+                :key="repo.id"
+                class="card hover:shadow-md transition-shadow cursor-pointer"
+                @click="goToRepo(repo)"
+              >
+                <div class="flex items-start gap-2 mb-2">
+                  <div :class="iconClass" class="text-xl flex-shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <h3
+                      class="font-semibold hover:underline truncate"
+                      :class="titleColor"
+                    >
+                      {{ repo.id }}
+                    </h3>
+                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      Updated {{ formatDate(repo.lastModified) }}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="repo.tags && repo.tags.length"
+                  class="flex gap-1 mb-2 flex-wrap"
+                >
+                  <el-tag
+                    v-for="tag in repo.tags.slice(0, 2)"
+                    :key="tag"
+                    size="small"
+                    effect="plain"
+                  >
+                    {{ tag }}
+                  </el-tag>
+                </div>
+
+                <div
+                  class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
+                >
+                  <div class="flex items-center gap-1">
+                    <div class="i-carbon-download" />
+                    {{ repo.downloads || 0 }}
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <div class="i-carbon-favorite" />
+                    {{ repo.likes || 0 }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="text-center py-12 text-gray-500 dark:text-gray-400"
+          >
+            <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
+            <p>No {{ currentType }} yet</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { repoAPI, orgAPI } from "@/utils/api";
+import dayjs from "dayjs";
+
+const route = useRoute();
+const router = useRouter();
+const orgname = computed(() => route.params.orgname);
+const currentType = computed(() => route.params.type);
+
+const orgInfo = ref(null);
+const members = ref([]);
+const repos = ref({ model: [], dataset: [], space: [] });
+
+const typeMapping = {
+  models: "model",
+  datasets: "dataset",
+  spaces: "space",
+};
+
+const currentRepos = computed(() => {
+  const type = typeMapping[currentType.value] || "model";
+  return repos.value[type] || [];
+});
+
+const repoCount = computed(() => currentRepos.value.length);
+
+const typeTitle = computed(() => {
+  return currentType.value.charAt(0).toUpperCase() + currentType.value.slice(1);
+});
+
+const iconClass = computed(() => {
+  switch (currentType.value) {
+    case "models":
+      return "i-carbon-model text-blue-500";
+    case "datasets":
+      return "i-carbon-data-table text-green-500";
+    case "spaces":
+      return "i-carbon-application text-purple-500";
+    default:
+      return "i-carbon-model text-blue-500";
+  }
+});
+
+const titleColor = computed(() => {
+  switch (currentType.value) {
+    case "models":
+      return "text-blue-600 dark:text-blue-400";
+    case "datasets":
+      return "text-green-600 dark:text-green-400";
+    case "spaces":
+      return "text-purple-600 dark:text-purple-400";
+    default:
+      return "text-blue-600 dark:text-blue-400";
+  }
+});
+
+const borderColor = computed(() => {
+  switch (currentType.value) {
+    case "models":
+      return "border-blue-500";
+    case "datasets":
+      return "border-green-500";
+    case "spaces":
+      return "border-purple-500";
+    default:
+      return "border-blue-500";
+  }
+});
+
+const tagType = computed(() => {
+  switch (currentType.value) {
+    case "models":
+      return "info";
+    case "datasets":
+      return "success";
+    case "spaces":
+      return "warning";
+    default:
+      return "info";
+  }
+});
+
+function formatDate(date) {
+  return date ? dayjs(date).format("MMM YYYY") : "";
+}
+
+function goToRepo(repo) {
+  const type = typeMapping[currentType.value] || "model";
+  const [namespace, name] = repo.id.split("/");
+  router.push(`/${type}s/${namespace}/${name}`);
+}
+
+function goToUser(username) {
+  router.push(`/${username}`);
+}
+
+async function loadOrgInfo() {
+  try {
+    const { data } = await orgAPI.get(orgname.value);
+    orgInfo.value = data;
+  } catch (err) {
+    console.error("Failed to load org info:", err);
+  }
+}
+
+async function loadMembers() {
+  try {
+    const { data } = await orgAPI.listMembers(orgname.value);
+    members.value = data.members || [];
+  } catch (err) {
+    console.error("Failed to load members:", err);
+  }
+}
+
+async function loadRepos() {
+  try {
+    const [models, datasets, spaces] = await Promise.all([
+      repoAPI.listRepos("model", { author: orgname.value }),
+      repoAPI.listRepos("dataset", { author: orgname.value }),
+      repoAPI.listRepos("space", { author: orgname.value }),
+    ]);
+
+    repos.value = {
+      model: models.data,
+      dataset: datasets.data,
+      space: spaces.data,
+    };
+  } catch (err) {
+    console.error("Failed to load repos:", err);
+  }
+}
+
+onMounted(() => {
+  loadOrgInfo();
+  loadMembers();
+  loadRepos();
+});
+</script>
