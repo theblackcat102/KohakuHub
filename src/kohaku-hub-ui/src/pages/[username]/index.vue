@@ -99,6 +99,13 @@
 
       <!-- Main Content -->
       <main class="space-y-8">
+        <!-- User Card (from Username/Username space repo if exists) -->
+        <section v-if="userCard" class="card">
+          <div class="markdown-body">
+            <MarkdownViewer :content="userCard" />
+          </div>
+        </section>
+
         <!-- Models Section -->
         <section class="mb-8">
           <div
@@ -359,7 +366,9 @@
 </template>
 
 <script setup>
-import { repoAPI } from "@/utils/api";
+import { repoAPI, orgAPI } from "@/utils/api";
+import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
+import axios from "axios";
 import dayjs from "dayjs";
 
 const route = useRoute();
@@ -368,6 +377,7 @@ const username = computed(() => route.params.username);
 
 const userInfo = ref(null);
 const repos = ref({ model: [], dataset: [], space: [] });
+const userCard = ref("");
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 
@@ -392,6 +402,19 @@ function goToRepo(type, repo) {
   router.push(`/${type}s/${namespace}/${name}`);
 }
 
+async function checkIfOrganization() {
+  try {
+    // Check if this name is an organization
+    await orgAPI.get(username.value);
+    // If successful, it's an organization - redirect
+    router.replace(`/organizations/${username.value}`);
+    return true;
+  } catch (err) {
+    // Not an organization, continue as user
+    return false;
+  }
+}
+
 async function loadRepos() {
   try {
     const [models, datasets, spaces] = await Promise.all([
@@ -410,7 +433,25 @@ async function loadRepos() {
   }
 }
 
-onMounted(() => {
+async function loadUserCard() {
+  try {
+    // Try to fetch README from Username/Username space repo
+    const url = `/spaces/${username.value}/${username.value}/resolve/main/README.md`;
+    const response = await axios.get(url);
+    userCard.value = response.data;
+  } catch (err) {
+    // No user card available - this is fine
+    userCard.value = "";
+  }
+}
+
+onMounted(async () => {
+  // Check if this is actually an organization
+  const isOrg = await checkIfOrganization();
+  if (isOrg) return; // Already redirected
+
+  // Continue loading as user
   loadRepos();
+  loadUserCard();
 });
 </script>

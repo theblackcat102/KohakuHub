@@ -400,7 +400,7 @@
 </template>
 
 <script setup>
-import { repoAPI } from "@/utils/api";
+import { repoAPI, orgAPI } from "@/utils/api";
 import dayjs from "dayjs";
 
 const route = useRoute();
@@ -448,6 +448,19 @@ function goToRepo(type, repo) {
   router.push(`/${type}s/${namespace}/${name}`);
 }
 
+async function checkIfOrganization() {
+  try {
+    // Check if this name is an organization
+    await orgAPI.get(username.value);
+    // If successful, it's an organization - redirect
+    router.replace(`/organizations/${username.value}/${currentType.value}`);
+    return true;
+  } catch (err) {
+    // Not an organization, continue as user
+    return false;
+  }
+}
+
 async function loadRepos() {
   try {
     const [models, datasets, spaces] = await Promise.all([
@@ -471,7 +484,12 @@ watch(currentType, () => {
   searchQuery.value = "";
 });
 
-onMounted(() => {
+onMounted(async () => {
+  // Check if this is actually an organization
+  const isOrg = await checkIfOrganization();
+  if (isOrg) return; // Already redirected
+
+  // Continue loading as user
   loadRepos();
 });
 </script>

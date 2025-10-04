@@ -155,6 +155,7 @@
 </template>
 
 <script setup>
+import { useRoute, useRouter } from "vue-router";
 import { repoAPI, settingsAPI } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useAuthStore } from "@/stores/auth";

@@ -139,7 +139,7 @@
 
       <!-- Main Content -->
       <main class="space-y-8">
-        <!-- Organization Card (from OrgName/OrgName dataset repo card if exists) -->
+        <!-- Organization Card (from OrgName/OrgName space repo card if exists) -->
         <section v-if="orgCard" class="card">
           <div class="markdown-body">
             <MarkdownViewer :content="orgCard" />
