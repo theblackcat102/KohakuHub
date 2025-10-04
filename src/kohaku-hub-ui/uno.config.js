@@ -9,11 +9,11 @@ export default defineConfig({
     presetAttributify(),
     presetIcons({
       collections: {
-        ep: () => import('@iconify-json/ep/icons.json').then(i => i.default),
-        carbon: () => import('@iconify-json/carbon/icons.json').then(i => i.default)
+        ep: () => import('@iconify-json/ep/icons.json', { with: { type: 'json' } }).then(i => i.default),
+        carbon: () => import('@iconify-json/carbon/icons.json', { with: { type: 'json' } }).then(i => i.default)
       },
       scale: 1.2,
-      warn: true
+      warn: false
     })
   ],
 

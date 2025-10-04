@@ -139,7 +139,6 @@
 
 <script setup>
 import { useAuthStore } from "@/stores/auth";
-import { useRouter } from "vue-router";
 import { authAPI, settingsAPI } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";

@@ -109,7 +109,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { useRouter, useRoute, onBeforeRouteLeave } from "vue-router";
+import { onBeforeRouteLeave } from "vue-router";
 import { ElMessage } from "element-plus";
 import CodeEditor from "@/components/common/CodeEditor.vue";
 import { repoAPI } from "@/utils/api";

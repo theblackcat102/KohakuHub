@@ -58,7 +58,31 @@ export default defineConfig({
       'highlight.js',
     ],
   },
-  
+
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Split highlight.js into separate chunk (it's large)
+          if (id.includes('highlight.js')) {
+            return 'highlight';
+          }
+          // Split element-plus into separate chunk
+          if (id.includes('element-plus')) {
+            return 'element-plus';
+          }
+          // Split core vendor libraries
+          if (id.includes('node_modules/vue/') ||
+              id.includes('node_modules/vue-router/') ||
+              id.includes('node_modules/pinia/')) {
+            return 'vendor';
+          }
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000, // Increase limit to 1000kb to reduce warnings
+  },
+
   server: {
     port: 5173,
     proxy: {

@@ -97,7 +97,6 @@
 </template>
 
 <script setup>
-import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { orgAPI } from "@/utils/api";
 import { ElMessage } from "element-plus";
