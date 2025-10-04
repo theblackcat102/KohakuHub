@@ -585,6 +585,7 @@ When uploading LFS file:
 | `/api/{type}s/{id}` | GET | ○ | Get repo info |
 | `/api/{type}s/{id}/tree/{rev}/{path}` | GET | ○ | List files |
 | `/api/{type}s/{id}/revision/{rev}` | GET | ○ | Get revision info |
+| `/api/{type}s/{id}/paths-info/{rev}` | POST | ○ | Get info for specific paths |
 
 ### File Operations
 
@@ -594,6 +595,8 @@ When uploading LFS file:
 | `/api/{type}s/{id}/commit/{rev}` | POST | ✓ | Atomic commit |
 | `/{id}/resolve/{rev}/{file}` | GET | ○ | Download file |
 | `/{id}/resolve/{rev}/{file}` | HEAD | ○ | Get file metadata |
+| `/{type}s/{id}/resolve/{rev}/{file}` | GET | ○ | Download file (with type) |
+| `/{type}s/{id}/resolve/{rev}/{file}` | HEAD | ○ | Get file metadata (with type) |
 
 ### LFS Operations
 
@@ -602,6 +605,30 @@ When uploading LFS file:
 | `/{id}.git/info/lfs/objects/batch` | POST | ✓ | LFS batch API |
 | `/api/{id}.git/info/lfs/verify` | POST | ✓ | Verify upload |
 
+### Authentication Operations
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/auth/register` | POST | ✗ | Register new user |
+| `/api/auth/login` | POST | ✗ | Login and create session |
+| `/api/auth/logout` | POST | ✓ | Logout and destroy session |
+| `/api/auth/verify-email` | GET | ✗ | Verify email with token |
+| `/api/auth/me` | GET | ✓ | Get current user info |
+| `/api/auth/tokens` | GET | ✓ | List user's API tokens |
+| `/api/auth/tokens/create` | POST | ✓ | Create new API token |
+| `/api/auth/tokens/{id}` | DELETE | ✓ | Revoke API token |
+
+### Organization Operations
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/org/create` | POST | ✓ | Create new organization |
+| `/org/{name}` | GET | ✗ | Get organization details |
+| `/org/{name}/members` | POST | ✓ | Add member to organization |
+| `/org/{name}/members/{username}` | DELETE | ✓ | Remove member from organization |
+| `/org/{name}/members/{username}` | PUT | ✓ | Update member role |
+| `/org/users/{username}/orgs` | GET | ✗ | List user's organizations |
+
 ### Utility Operations
 
 | Endpoint | Method | Auth | Description |
@@ -609,6 +636,7 @@ When uploading LFS file:
 | `/api/validate-yaml` | POST | ✗ | Validate YAML content |
 | `/api/whoami-v2` | GET | ✓ | Get user info |
 | `/health` | GET | ✗ | Health check |
+| `/` | GET | ✗ | API information |
 
 **Auth Legend**:
 - ✓ = Required

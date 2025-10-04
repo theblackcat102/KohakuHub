@@ -89,7 +89,7 @@ huggingface-cli upload username/model-name ./my-model --repo-type model
 
 ### Option 2: hfutils
 
-A lightweight alternative with similar functionality.
+A powerful alternative from [deepghs/hfutils](https://github.com/deepghs/hfutils) with advanced features.
 
 #### Installation
 
@@ -100,38 +100,73 @@ pip install hfutils
 #### Usage
 
 \`\`\`bash
-# Set your token
+# Set your token for private repositories
 export HF_TOKEN=your_access_token_here
 
-# Download a repository
-hf download username/model-name
+# Download a single file
+hfutils download -r username/model-name -o ./local-file.txt -f remote-file.txt
 
-# Upload files
-hf upload username/model-name /path/to/files
+# Download entire directory
+hfutils download -r username/model-name -o ./local-dir -d remote-dir
+
+# Download archived directory
+hfutils download -r username/model-name -o ./local-dir -a archive.zip
+
+# Upload a single file
+hfutils upload -r username/model-name -i ./local-file.txt -f remote-file.txt
+
+# Upload directory as tree
+hfutils upload -r username/model-name -i ./local-dir -d remote-dir
+
+# Upload directory as archive
+hfutils upload -r username/model-name -i ./local-dir -a archive.zip
+\`\`\`
+
+#### Advanced Options
+
+\`\`\`bash
+# Enable transfer acceleration
+export HF_HUB_ENABLE_HF_TRANSFER=1
+
+# Specify repository type
+hfutils download -r username/dataset-name -t dataset -o ./output
+
+# Custom temporary directory
+export TMPDIR=/path/to/tmp
 \`\`\`
 
 ### Option 3: kohub-cli (KohakuHub Native)
 
-If available, kohub-cli provides KohakuHub-specific features.
+KohakuHub's native CLI tool for user and organization management.
 
 #### Installation
 
+Currently, you need to install from source:
+
 \`\`\`bash
-pip install kohub-cli
+# Clone the repository
+git clone https://github.com/KohakuBlueleaf/KohakuHub.git
+cd KohakuHub
+
+# Install dependencies and the CLI
+pip install -r requirements.txt
+pip install -e .
 \`\`\`
 
 #### Usage
 
+The CLI provides an interactive menu for managing users and organizations:
+
 \`\`\`bash
-# Login to KohakuHub
-kohub login
+# Run the interactive CLI
+kohub-cli
 
-# Download a repository
-kohub download username/model-name
-
-# Upload files
-kohub upload username/model-name /path/to/files
+# Available operations:
+# - User Management: Register, Login, Create Token
+# - Organization Management: Create Organization, Manage Members
 \`\`\`
+
+For file operations, use huggingface-cli or hfutils instead.
 
 ## Using the Python API
 

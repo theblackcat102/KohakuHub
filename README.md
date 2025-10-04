@@ -28,10 +28,13 @@ KohakuHub provides a simple but functional solution for teams and individuals wh
 - ✅ **File Operations**: Upload, download, copy, and delete files with automatic deduplication
 - ✅ **Large File Support**: Handles files of any size with Git LFS protocol
 - ✅ **Version Control**: Git-like branching and commit history via LakeFS
-- ✅ **Authentication & Authorization**: Secure user registration, session management, and API tokens
-- ✅ **Organization Management**: Create organizations and manage member roles
-- 🚧 **CLI Tool**: under development.
-- 🚧 **Web UI**: under development.
+- ✅ **Authentication & Authorization**: Complete user registration, session management, and API tokens
+- ✅ **Organization Management**: Full organization support with member roles (admin, super-admin, member)
+- ✅ **Permission System**: Namespace-based permissions for repositories and organizations
+- ✅ **Web UI**: Modern Vue 3 interface with file browsing, editing, and repository management
+- ✅ **Code Highlighting**: Syntax highlighting for code files with Monaco Editor integration
+- ✅ **Markdown Support**: Built-in markdown rendering for documentation
+- 🚧 **CLI Tool**: Basic functionality available (user/org management), more features in development
 
 ## Architecture
 
@@ -305,14 +308,27 @@ See [TODO.md](./TODO.md) for detailed development status.
   - Some Path related API may not be 100% supported, report if they are important for you.
 - ✅ HuggingFace client compatibility
 - ✅ Large file support (Git LFS)
-- ✅ Docker deployment
-- 🚧 Authentication & Authorization
-  - Not all verification process are applied
+- ✅ Docker deployment with docker-compose
+- ✅ Authentication & Authorization
+  - User registration with email verification (optional)
+  - Session-based authentication with secure cookies
+  - API token generation and management
+  - Permission system for repositories and organizations
 - ✅ Organization Management
+  - Create/delete organizations
+  - Member management with roles (admin, super-admin, member)
+  - Organization-based namespaces for repositories
+- ✅ Web User Interface
+  - Vue 3 + Vite frontend with modern UI
+  - Repository browsing and file viewing
+  - Code editor with syntax highlighting
+  - File upload/download interface
+  - Markdown documentation rendering
+  - User authentication pages (login/register)
+  - Settings and organization management pages
 - 🚧 CLI for administration
-  - Not fully functional, only core utils which usually require web interface.
-- 🚧 Web user interface
-  - Under dev, not stable.
+  - User and organization management functional
+  - Additional administrative features in development
 
 ## Contributing
 
