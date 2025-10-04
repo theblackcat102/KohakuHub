@@ -533,7 +533,7 @@ async def get_paths_info(
                 "type": "file",
                 "path": clean_path,
                 "size": obj_stats.size_bytes,
-                "blob_id": checksum,  # Git blob SHA1 for non-LFS, SHA256 for LFS
+                "oid": checksum,  # Git blob SHA1 for non-LFS, SHA256 for LFS
                 "lfs": None,
                 "last_commit": None,
                 "security": None,
