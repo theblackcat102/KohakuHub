@@ -479,7 +479,7 @@ const repoTypeLabel = computed(() => {
 });
 
 const isOwner = computed(() => {
-  return authStore.username === props.namespace;
+  return authStore.canWriteToNamespace(props.namespace);
 });
 
 const cloneUrl = computed(() => {

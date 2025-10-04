@@ -154,18 +154,17 @@
 </template>
 
 <script setup>
-import { repoAPI, orgAPI } from "@/utils/api";
+import { repoAPI } from "@/utils/api";
 import { useAuthStore } from "@/stores/auth";
 import { ElMessage } from "element-plus";
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
-const { username: currentUser } = storeToRefs(authStore);
+const { username: currentUser, organizations: userOrgs } = storeToRefs(authStore);
 
 const formRef = ref(null);
 const creating = ref(false);
-const userOrgs = ref([]);
 
 const form = reactive({
   type: route.query.type || "model",
@@ -216,17 +215,6 @@ function getTypeDescription(type) {
     space: "Create interactive ML demos and applications",
   };
   return descriptions[type] || "";
-}
-
-async function loadUserOrgs() {
-  if (!currentUser.value) return;
-
-  try {
-    const { data } = await orgAPI.getUserOrgs(currentUser.value);
-    userOrgs.value = data.organizations || [];
-  } catch (err) {
-    console.error("Failed to load organizations:", err);
-  }
 }
 
 async function handleSubmit() {
@@ -280,8 +268,4 @@ watch(
     }
   },
 );
-
-onMounted(() => {
-  loadUserOrgs();
-});
 </script>
