@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import basic, file, lfs, utils
+from .api import basic, file, lfs, utils, settings
 from .auth import router as auth_router
 from .org import router as org_router
 from .config import cfg
@@ -40,6 +40,7 @@ app.include_router(basic.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(file.router, prefix=cfg.app.api_base, tags=["files"])
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
+app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
 app.include_router(org_router, prefix="/org", tags=["organizations"])
 
 

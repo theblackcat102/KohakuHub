@@ -46,8 +46,22 @@ def whoami_v2(user: User = Depends(get_optional_user)):
     if not user:
         raise HTTPException(401, detail="Invalid user token")
 
-    # Get user's organizations (stub for now - can be implemented later)
-    orgs = []
+    # Get user's organizations
+    from ..db import Organization, UserOrganization
+
+    user_orgs = (
+        UserOrganization.select()
+        .join(Organization)
+        .where(UserOrganization.user == user.id)
+    )
+
+    orgs_list = []
+    for uo in user_orgs:
+        orgs_list.append({
+            "name": uo.organization.name,
+            "fullname": uo.organization.name,
+            "roleInOrg": uo.role,
+        })
 
     return {
         "type": "user",
@@ -58,7 +72,7 @@ def whoami_v2(user: User = Depends(get_optional_user)):
         "emailVerified": user.email_verified,
         "canPay": False,
         "isPro": False,
-        "orgs": orgs,
+        "orgs": orgs_list,
         "auth": {
             "type": "access_token",
             "accessToken": {"displayName": "Auto-generated token", "role": "write"},
