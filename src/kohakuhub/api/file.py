@@ -25,6 +25,7 @@ from .hf_utils import (
     hf_server_error,
     is_lakefs_not_found_error,
 )
+from ..async_utils import get_async_lakefs_client
 
 router = APIRouter()
 
@@ -128,7 +129,8 @@ async def preupload(
 
                 # Try to get existing file from LakeFS
                 try:
-                    obj_stat = client.objects.stat_object(
+                    async_client = get_async_lakefs_client()
+                    obj_stat = await async_client.stat_object(
                         repository=lakefs_repo, ref=revision, path=path
                     )
 
@@ -136,7 +138,7 @@ async def preupload(
                     if obj_stat.size_bytes == size:
                         # Get the actual content to compare
                         try:
-                            obj_content = client.objects.get_object(
+                            obj_content = await async_client.get_object(
                                 repository=lakefs_repo, ref=revision, path=path
                             )
                             # Read the content
@@ -170,7 +172,7 @@ async def preupload(
 
 
 @router.get("/{repo_type}s/{namespace}/{name}/revision/{revision}")
-def get_revision(
+async def get_revision(
     repo_type: RepoType,
     namespace: str,
     name: str,
@@ -219,7 +221,8 @@ def get_revision(
     # Get commit details if available
     if commit_id:
         try:
-            commit_info = client.commits.get_commit(
+            async_client = get_async_lakefs_client()
+            commit_info = await async_client.get_commit(
                 repository=lakefs_repo, commit_id=commit_id
             )
         except Exception as e:
@@ -318,7 +321,8 @@ async def resolve_file(
 
     try:
         # Get object metadata from LakeFS
-        obj_stat = client.objects.stat_object(
+        async_client = get_async_lakefs_client()
+        obj_stat = await async_client.stat_object(
             repository=lakefs_repo, ref=revision, path=path
         )
     except Exception as e:
@@ -515,9 +519,10 @@ async def commit(
             # File changed, need to upload
             files_changed = True
 
-            # Upload to LakeFS
+            # Upload to LakeFS (async to avoid blocking)
             try:
-                client.objects.upload_object(
+                async_client = get_async_lakefs_client()
+                await async_client.upload_object(
                     repository=lakefs_repo,
                     branch=revision,
                     path=path,
@@ -621,7 +626,9 @@ async def commit(
                     size_bytes=size,
                 )
 
-                client.staging.link_physical_address(
+                # Link physical address (async to avoid blocking)
+                async_client = get_async_lakefs_client()
+                await async_client.link_physical_address(
                     repository=lakefs_repo,
                     branch=revision,
                     path=path,
@@ -694,7 +701,8 @@ async def commit(
             print(f"Deleting file: {path}")
 
             try:
-                client.objects.delete_object(
+                async_client = get_async_lakefs_client()
+                await async_client.delete_object(
                     repository=lakefs_repo, branch=revision, path=path
                 )
                 print(f"Successfully deleted file from LakeFS: {path}")
@@ -725,7 +733,8 @@ async def commit(
 
             try:
                 # List all objects in the folder
-                objects = client.objects.list_objects(
+                async_client = get_async_lakefs_client()
+                objects = await async_client.list_objects(
                     repository=lakefs_repo,
                     ref=revision,
                     prefix=folder_path,
@@ -736,7 +745,7 @@ async def commit(
                 for obj in objects.results:
                     if obj.path_type == "object":
                         try:
-                            client.objects.delete_object(
+                            await async_client.delete_object(
                                 repository=lakefs_repo, branch=revision, path=obj.path
                             )
                             deleted_files.append(obj.path)
@@ -784,7 +793,8 @@ async def commit(
 
             try:
                 # Get source file metadata from LakeFS
-                src_obj = client.objects.stat_object(
+                async_client = get_async_lakefs_client()
+                src_obj = await async_client.stat_object(
                     repository=lakefs_repo, ref=src_revision, path=src_path
                 )
 
@@ -800,7 +810,8 @@ async def commit(
                     size_bytes=src_obj.size_bytes,
                 )
 
-                client.staging.link_physical_address(
+                # Link physical address for copy (async to avoid blocking)
+                await async_client.link_physical_address(
                     repository=lakefs_repo,
                     branch=revision,
                     path=dest_path,
@@ -886,7 +897,9 @@ async def commit(
     print(f"Commit message: {commit_msg}")
 
     try:
-        commit_result = client.commits.commit(
+        # Commit (async to avoid blocking)
+        async_client = get_async_lakefs_client()
+        commit_result = await async_client.commit(
             repository=lakefs_repo,
             branch=revision,
             commit_creation=CommitCreation(

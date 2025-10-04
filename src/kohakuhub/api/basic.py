@@ -181,7 +181,7 @@ async def delete_repo(
 @router.get("/models/{namespace}/{repo_name}")
 @router.get("/datasets/{namespace}/{repo_name}")
 @router.get("/spaces/{namespace}/{repo_name}")
-def get_repo_info(
+async def get_repo_info(
     namespace: str,
     repo_name: str,
     request: Request,
@@ -250,7 +250,10 @@ def get_repo_info(
         # Get commit details if available
         if commit_id:
             try:
-                commit_info = client.commits.get_commit(
+                from ..async_utils import get_async_lakefs_client
+
+                async_client = get_async_lakefs_client()
+                commit_info = await async_client.get_commit(
                     repository=lakefs_repo, commit_id=commit_id
                 )
                 if commit_info and commit_info.creation_date:
@@ -297,7 +300,7 @@ def get_repo_info(
 
 
 @router.get("/{repo_type}s/{namespace}/{repo_name}/tree/{revision}{path:path}")
-def list_repo_tree(
+async def list_repo_tree(
     repo_type: RepoType,
     namespace: str,
     repo_name: str,
@@ -360,7 +363,10 @@ def list_repo_tree(
 
     try:
         # List objects from LakeFS
-        result = client.objects.list_objects(
+        from ..async_utils import get_async_lakefs_client
+
+        async_client = get_async_lakefs_client()
+        result = await async_client.list_objects(
             repository=lakefs_repo,
             ref=revision,
             prefix=prefix,
@@ -487,7 +493,10 @@ async def get_paths_info(
 
         try:
             # Try to get object stats
-            obj_stats = client.objects.stat_object(
+            from ..async_utils import get_async_lakefs_client
+
+            async_client = get_async_lakefs_client()
+            obj_stats = await async_client.stat_object(
                 repository=lakefs_repo,
                 ref=revision,
                 path=clean_path,
@@ -524,7 +533,7 @@ async def get_paths_info(
                     prefix = (
                         clean_path if clean_path.endswith("/") else clean_path + "/"
                     )
-                    list_result = client.objects.list_objects(
+                    list_result = await async_client.list_objects(
                         repository=lakefs_repo,
                         ref=revision,
                         prefix=prefix,
