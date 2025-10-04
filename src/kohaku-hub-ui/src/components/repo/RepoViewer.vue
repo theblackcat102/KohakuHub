@@ -90,16 +90,32 @@
           </div>
 
           <!-- Actions -->
-          <div class="flex flex-wrap gap-2 mt-4">
-            <el-button type="primary" @click="showCloneDialog = true">
+          <div class="flex flex-col sm:flex-row gap-1 mt-4">
+            <el-button
+              type="primary"
+              @click="showCloneDialog = true"
+              size="small"
+              class="w-full sm:w-auto m-0 sm:m-1"
+            >
               <div class="i-carbon-download inline-block mr-1" />
               Clone
             </el-button>
-            <el-button @click="downloadRepo">
+            <div class="w-0 h-0 p-0 m-0"></div>
+            <el-button
+              @click="downloadRepo"
+              size="small"
+              class="w-full sm:w-auto m-0 sm:m-1"
+            >
               <div class="i-carbon-document-download inline-block mr-1" />
               Download
             </el-button>
-            <el-button v-if="isOwner" @click="navigateToSettings">
+            <div class="w-0 h-0 p-0 m-0"></div>
+            <el-button
+              v-if="isOwner"
+              @click="navigateToSettings"
+              size="small"
+              class="w-full sm:w-auto m-0 sm:m-1"
+            >
               <div class="i-carbon-settings inline-block mr-1" />
               Settings
             </el-button>
