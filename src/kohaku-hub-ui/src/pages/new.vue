@@ -161,7 +161,8 @@ import { ElMessage } from "element-plus";
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
-const { username: currentUser, organizations: userOrgs } = storeToRefs(authStore);
+const { username: currentUser, organizations: userOrgs } =
+  storeToRefs(authStore);
 
 const formRef = ref(null);
 const creating = ref(false);

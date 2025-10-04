@@ -671,7 +671,7 @@ async function createReadme() {
             content: readmeContent,
           },
         ],
-      }
+      },
     );
 
     ElMessage.success("README.md created successfully");
