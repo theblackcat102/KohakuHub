@@ -404,8 +404,8 @@ async def resolve_file(
 
     # Handle HEAD request (metadata only)
     if request.method == "HEAD":
-        # For HEAD, include Location header but don't redirect
-        response_headers["Location"] = presigned_url
+        # Return metadata headers only, NO Location header
+        # This prevents browser from following redirect and causing CORS issues
         return Response(
             status_code=200,
             headers=response_headers,
@@ -413,10 +413,11 @@ async def resolve_file(
 
     # Handle GET request (actual download)
     # Return 302 redirect to presigned S3 URL
+    # The redirect includes Content-Disposition in the S3 URL parameters
     return RedirectResponse(
         url=presigned_url,
         status_code=302,
-        # headers=response_headers,
+        # Don't include headers in redirect - S3 will provide them
     )
 
 
