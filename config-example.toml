@@ -8,11 +8,25 @@ region = "us-east-1"
 force_path_style = true
 
 [lakefs]
-public_endpoint  = "http://127.0.0.1:28000"
-internal_endpoint = "http://127.0.0.1:28000"
+endpoint = "http://127.0.0.1:28000"
 access_key = "xxx"
 secret_key = "yyy"
 repo_namespace = "hf"
+
+[smtp]
+enabled = false
+host = "smtp.gmail.com"
+port = 587
+username = "your-email@gmail.com"
+password = "your-app-password"
+from_email = "noreply@yourdomain.com"
+use_tls = true
+
+[auth]
+require_email_verification = false
+session_secret = "change-me-in-production"
+session_expire_hours = 168  # 7 days
+token_expire_days = 365
 
 [app]
 base_url = "http://127.0.0.1:48888"

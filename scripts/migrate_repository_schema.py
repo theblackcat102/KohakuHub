@@ -78,37 +78,52 @@ def migrate_sqlite():
 
 
 def migrate_postgres():
-    """Migrate PostgreSQL database - can drop constraint directly."""
+    """Migrate PostgreSQL database - drop unique index on full_id."""
     print("Migrating PostgreSQL database...")
 
     cursor = db.cursor()
 
-    # Check if unique constraint exists
+    # Check if unique index exists
     cursor.execute(
         """
-        SELECT constraint_name
-        FROM information_schema.table_constraints
-        WHERE table_name = 'repository'
-        AND constraint_type = 'UNIQUE'
-        AND constraint_name LIKE '%full_id%'
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE tablename = 'repository'
+        AND indexname = 'repository_full_id'
         """
     )
 
-    constraints = cursor.fetchall()
+    result = cursor.fetchone()
 
-    # Drop unique constraint on full_id if it exists
-    for constraint in constraints:
-        constraint_name = constraint[0]
-        print(f"Dropping constraint: {constraint_name}")
-        cursor.execute(f"ALTER TABLE repository DROP CONSTRAINT {constraint_name}")
+    if result:
+        indexdef = result[1] if len(result) > 1 else ""
+        print(f"Found index: {result[0]}")
+        print(f"Definition: {indexdef}")
 
-    # Ensure we have the regular index on full_id
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS repository_full_id
-        ON repository (full_id)
-        """
-    )
+        # Check if it's a unique index
+        if "UNIQUE" in indexdef.upper():
+            print("Dropping unique index: repository_full_id")
+            cursor.execute("DROP INDEX IF EXISTS repository_full_id")
+
+            # Create regular (non-unique) index
+            print("Creating regular index on full_id...")
+            cursor.execute(
+                """
+                CREATE INDEX repository_full_id
+                ON repository (full_id)
+                """
+            )
+            print("✓ Index recreated as non-unique")
+        else:
+            print("Index is already non-unique, no migration needed")
+    else:
+        print("Index repository_full_id not found, creating regular index...")
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS repository_full_id
+            ON repository (full_id)
+            """
+        )
 
     db.commit()
     print("✓ PostgreSQL migration completed successfully")
