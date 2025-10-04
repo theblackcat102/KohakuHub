@@ -347,6 +347,65 @@ X-Linked-Etag: "sha256:abc123..."
 
 **Key Point**: Client downloads directly from S3. Kohaku Hub only provides the redirect URL.
 
+## Repository Privacy & Filtering
+
+KohakuHub respects repository privacy settings when listing repositories. The visibility of repositories depends on authentication:
+
+### Privacy Rules
+
+**For Unauthenticated Users:**
+- Can only see **public** repositories
+
+**For Authenticated Users:**
+- Can see all **public** repositories
+- Can see their **own private** repositories
+- Can see **private repositories** in organizations they belong to
+
+### List Repositories Endpoint
+
+**Pattern**: `/api/{type}s` where type is `model`, `dataset`, or `space`
+
+**Query Parameters:**
+- `author`: Filter by author/namespace (username or organization)
+- `limit`: Maximum results (default: 50, max: 1000)
+
+**Examples:**
+```bash
+# List all public models
+GET /api/models
+
+# List models by author (respects privacy)
+GET /api/models?author=my-org
+
+# Authenticated user sees their private repos too
+GET /api/models?author=my-org
+Authorization: Bearer YOUR_TOKEN
+```
+
+### List User's All Repositories
+
+**Endpoint**: `GET /api/users/{username}/repos`
+
+Returns all repositories for a user/organization, grouped by type.
+
+**Response:**
+```json
+{
+  "models": [
+    {"id": "user/model-1", "private": false, ...},
+    {"id": "user/model-2", "private": true, ...}
+  ],
+  "datasets": [
+    {"id": "user/dataset-1", "private": false, ...}
+  ],
+  "spaces": []
+}
+```
+
+**Note**: Private repositories are only included if:
+1. The requesting user is the owner, OR
+2. The requesting user is a member of the organization
+
 ## Repository Management
 
 ### Create Repository
@@ -581,11 +640,12 @@ When uploading LFS file:
 |----------|--------|------|-------------|
 | `/api/repos/create` | POST | ✓ | Create new repository |
 | `/api/repos/delete` | DELETE | ✓ | Delete repository |
-| `/api/{type}s` | GET | ○ | List repositories |
+| `/api/{type}s` | GET | ○ | List repositories (respects privacy) |
 | `/api/{type}s/{id}` | GET | ○ | Get repo info |
 | `/api/{type}s/{id}/tree/{rev}/{path}` | GET | ○ | List files |
 | `/api/{type}s/{id}/revision/{rev}` | GET | ○ | Get revision info |
 | `/api/{type}s/{id}/paths-info/{rev}` | POST | ○ | Get info for specific paths |
+| `/api/users/{username}/repos` | GET | ○ | List all repos for a user/org (grouped by type) |
 
 ### File Operations
 

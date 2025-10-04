@@ -174,49 +174,113 @@ The test script will:
 
 ## `kohub-cli` Usage
 
-KohakuHub includes a command-line tool, `kohub-cli`, to simplify user and organization management.
+KohakuHub includes a powerful command-line tool with both a **Python API** for programmatic access and a **CLI** for interactive and scripted usage.
 
 ### Installation
 
-The CLI is included in the source code. To run it, first install the dependencies:
+The CLI is included in the source code. To install:
 
 ```bash
+# Clone and install
+git clone https://github.com/KohakuBlueleaf/KohakuHub.git
+cd KohakuHub
 pip install -r requirements.txt
 pip install -e .
 ```
 
-Then run the CLI:
+### Python API
+
+Use KohakuHub programmatically in your Python scripts:
+
+```python
+from kohub_cli import KohubClient
+
+# Initialize client
+client = KohubClient(endpoint="http://localhost:8000")
+
+# Login
+client.login(username="alice", password="secret")
+
+# Create a repository
+client.create_repo("my-org/my-model", repo_type="model", private=False)
+
+# List files
+files = client.list_repo_tree("my-org/my-model", repo_type="model")
+
+# Create an API token
+token_info = client.create_token(name="my-laptop")
+print(f"Token: {token_info['token']}")
+```
+
+See [CLI.md](./CLI.md) for complete Python API documentation.
+
+### Command-Line Interface
+
+`kohub-cli` supports both interactive and command-line modes.
+
+#### Interactive Mode (Default)
+
+Run without arguments to launch the interactive menu:
 
 ```bash
 kohub-cli
+# or explicitly
+kohub-cli interactive
 ```
 
-### User Management
+#### Command-Line Mode
 
-The CLI provides an interactive menu for user management.
+Use specific commands for scripting and automation:
 
-#### 1. Register a New User
+```bash
+# Authentication
+kohub-cli auth login
+kohub-cli auth whoami
+kohub-cli auth token create --name "my-laptop"
+kohub-cli auth token list
 
-- Run the CLI and select `User Management` -> `Register`.
-- Follow the prompts to enter a username, email, and password.
+# Repository management
+kohub-cli repo create my-org/my-model --type model
+kohub-cli repo list --type model --author my-org
+kohub-cli repo info my-org/my-model --type model
+kohub-cli repo files my-org/my-model --recursive
 
-#### 2. Login
+# Organization management
+kohub-cli org create my-org --description "My organization"
+kohub-cli org list
+kohub-cli org member add my-org bob --role member
 
-- Select `User Management` -> `Login`.
-- Enter your username and password to create a session.
+# Configuration
+kohub-cli config set endpoint http://localhost:8000
+kohub-cli config list
+```
 
-#### 3. Generate an API Token
+#### Global Options
 
-- After logging in, select `User Management` -> `Create Token`.
-- Give the token a name (e.g., "my-laptop").
-- The CLI will print a new API token. **Save this token securely!**
+All commands support these global options:
 
-### Organization Management
+```bash
+--endpoint URL          # Override endpoint (or use HF_ENDPOINT env var)
+--token TOKEN           # Override token (or use HF_TOKEN env var)
+--output {json,text}    # Output format (default: text)
+```
 
-You can also manage organizations and members.
+Examples:
+```bash
+kohub-cli --endpoint http://localhost:8000 auth whoami
+kohub-cli --output json repo list --type model
+```
 
-- **Create Organization**: `Organization Management` -> `Create Organization`
-- **Manage Members**: Add, remove, or update member roles within an organization.
+#### Getting Help
+
+```bash
+# General help
+kohub-cli --help
+
+# Command-specific help
+kohub-cli auth --help
+kohub-cli repo create --help
+```
 
 ## Using KohakuHub
 

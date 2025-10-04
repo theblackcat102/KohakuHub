@@ -589,10 +589,23 @@ def repo_tree(state: State):
 
 
 def main():
-    state = State()
-    # If you wire this via console_script entrypoint, you can also expose the TUI:
-    # python -m kohub_cli
-    main_menu(state)
+    """Main entry point for kohub-cli.
+
+    If called without arguments, launches interactive TUI mode.
+    Otherwise, uses Click CLI commands.
+    """
+    import sys
+
+    # Check if any arguments were provided (excluding script name)
+    # If no arguments, launch interactive mode
+    if len(sys.argv) == 1:
+        state = State()
+        main_menu(state)
+    else:
+        # Use Click CLI
+        from .cli import cli as click_cli
+
+        click_cli()
 
 
 if __name__ == "__main__":

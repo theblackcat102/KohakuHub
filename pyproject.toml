@@ -27,6 +27,8 @@ dependencies = [
     "questionary",
     "rich",
     "python-multipart",
+    "click>=8.0",
+    "requests",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 

@@ -1,0 +1,639 @@
+"""Python API client for KohakuHub."""
+
+import requests
+from typing import Optional, List, Dict, Any, Literal
+
+from .config import Config
+from .errors import (
+    handle_response_error,
+    NetworkError,
+)
+
+
+RepoType = Literal["model", "dataset", "space"]
+
+
+class KohubClient:
+    """Python API client for KohakuHub.
+
+    Example:
+        ```python
+        from kohub_cli import KohubClient
+
+        # Initialize client
+        client = KohubClient(endpoint="http://localhost:8000")
+
+        # Login
+        client.login(username="alice", password="secret")
+
+        # Create a repository
+        client.create_repo("my-org/my-model", repo_type="model")
+        ```
+    """
+
+    def __init__(
+        self,
+        endpoint: Optional[str] = None,
+        token: Optional[str] = None,
+        config: Optional[Config] = None,
+    ):
+        """Initialize KohubClient.
+
+        Args:
+            endpoint: KohakuHub endpoint URL. If None, uses HF_ENDPOINT env var or config.
+            token: API token. If None, uses HF_TOKEN env var or config.
+            config: Config object. If None, creates a new one.
+        """
+        self.config = config or Config()
+        self.endpoint = (endpoint or self.config.endpoint).rstrip("/")
+        self.session = requests.Session()
+
+        # Set token if provided
+        if token:
+            self.token = token
+        elif self.config.token:
+            self.token = self.config.token
+
+    @property
+    def token(self) -> Optional[str]:
+        """Get current API token."""
+        auth = self.session.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return auth[7:]
+        return None
+
+    @token.setter
+    def token(self, value: Optional[str]):
+        """Set API token for authentication."""
+        if value:
+            self.session.headers["Authorization"] = f"Bearer {value}"
+        else:
+            self.session.headers.pop("Authorization", None)
+
+    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
+        """Make HTTP request to KohakuHub API.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            path: API path (will be appended to endpoint)
+            **kwargs: Additional arguments passed to requests
+
+        Returns:
+            requests.Response object
+
+        Raises:
+            NetworkError: If network request fails
+            KohubError: If API returns an error
+        """
+        url = f"{self.endpoint}{path}"
+        try:
+            response = self.session.request(method, url, **kwargs)
+        except requests.RequestException as e:
+            raise NetworkError(f"Network request failed: {e}")
+
+        # Raise appropriate error if not successful
+        if not response.ok:
+            handle_response_error(response)
+
+        return response
+
+    # ========== Authentication ==========
+
+    def register(
+        self,
+        username: str,
+        email: str,
+        password: str,
+    ) -> Dict[str, Any]:
+        """Register a new user.
+
+        Args:
+            username: Username
+            email: Email address
+            password: Password
+
+        Returns:
+            Registration response with success message
+
+        Raises:
+            AlreadyExistsError: If username or email already exists
+            ValidationError: If input validation fails
+        """
+        response = self._request(
+            "POST",
+            "/api/auth/register",
+            json={"username": username, "email": email, "password": password},
+        )
+        return response.json()
+
+    def login(
+        self,
+        username: str,
+        password: str,
+    ) -> Dict[str, Any]:
+        """Login and create a session.
+
+        Args:
+            username: Username
+            password: Password
+
+        Returns:
+            Login response with session info
+
+        Raises:
+            AuthenticationError: If login fails
+        """
+        response = self._request(
+            "POST",
+            "/api/auth/login",
+            json={"username": username, "password": password},
+        )
+        return response.json()
+
+    def logout(self) -> Dict[str, Any]:
+        """Logout and destroy current session.
+
+        Returns:
+            Logout response
+
+        Raises:
+            AuthenticationError: If not logged in
+        """
+        response = self._request("POST", "/api/auth/logout")
+        return response.json()
+
+    def whoami(self) -> Dict[str, Any]:
+        """Get current user information.
+
+        Returns:
+            User information (username, email, etc.)
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = self._request("GET", "/api/auth/me")
+        return response.json()
+
+    # ========== Token Management ==========
+
+    def create_token(self, name: str) -> Dict[str, Any]:
+        """Create a new API token.
+
+        Args:
+            name: Token name/description
+
+        Returns:
+            Token information including the token string (only shown once!)
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = self._request(
+            "POST",
+            "/api/auth/tokens/create",
+            json={"name": name},
+        )
+        return response.json()
+
+    def list_tokens(self) -> List[Dict[str, Any]]:
+        """List all API tokens for current user.
+
+        Returns:
+            List of token information (without the token strings)
+
+        Raises:
+            AuthenticationError: If not authenticated
+        """
+        response = self._request("GET", "/api/auth/tokens")
+        data = response.json()
+        return data.get("tokens", [])
+
+    def revoke_token(self, token_id: int) -> Dict[str, Any]:
+        """Revoke an API token.
+
+        Args:
+            token_id: Token ID to revoke
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            NotFoundError: If token not found
+        """
+        response = self._request("DELETE", f"/api/auth/tokens/{token_id}")
+        return response.json()
+
+    # ========== Organization Operations ==========
+
+    def create_organization(
+        self,
+        name: str,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new organization.
+
+        Args:
+            name: Organization name
+            description: Organization description
+
+        Returns:
+            Organization information
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AlreadyExistsError: If organization already exists
+        """
+        response = self._request(
+            "POST",
+            "/org/create",
+            json={"name": name, "description": description},
+        )
+        return response.json()
+
+    def get_organization(self, org_name: str) -> Dict[str, Any]:
+        """Get organization information.
+
+        Args:
+            org_name: Organization name
+
+        Returns:
+            Organization details
+
+        Raises:
+            NotFoundError: If organization not found
+        """
+        response = self._request("GET", f"/org/{org_name}")
+        return response.json()
+
+    def list_user_organizations(
+        self,
+        username: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """List organizations for a user.
+
+        Args:
+            username: Username (if None, uses current user)
+
+        Returns:
+            List of organizations with roles
+
+        Raises:
+            AuthenticationError: If username is None and not authenticated
+            NotFoundError: If user not found
+        """
+        if username is None:
+            # Get current user
+            user_info = self.whoami()
+            username = user_info["username"]
+
+        response = self._request("GET", f"/org/users/{username}/orgs")
+        data = response.json()
+        return data.get("organizations", [])
+
+    def add_organization_member(
+        self,
+        org_name: str,
+        username: str,
+        role: str = "member",
+    ) -> Dict[str, Any]:
+        """Add a member to an organization.
+
+        Args:
+            org_name: Organization name
+            username: Username to add
+            role: Member role (member, admin, super-admin)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized to add members
+            NotFoundError: If organization or user not found
+        """
+        response = self._request(
+            "POST",
+            f"/org/{org_name}/members",
+            json={"username": username, "role": role},
+        )
+        return response.json()
+
+    def remove_organization_member(
+        self,
+        org_name: str,
+        username: str,
+    ) -> Dict[str, Any]:
+        """Remove a member from an organization.
+
+        Args:
+            org_name: Organization name
+            username: Username to remove
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized to remove members
+            NotFoundError: If organization or user not found
+        """
+        response = self._request("DELETE", f"/org/{org_name}/members/{username}")
+        return response.json()
+
+    def update_organization_member(
+        self,
+        org_name: str,
+        username: str,
+        role: str,
+    ) -> Dict[str, Any]:
+        """Update a member's role in an organization.
+
+        Args:
+            org_name: Organization name
+            username: Username
+            role: New role (member, admin, super-admin)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized to update roles
+            NotFoundError: If organization or user not found
+        """
+        response = self._request(
+            "PUT",
+            f"/org/{org_name}/members/{username}",
+            json={"role": role},
+        )
+        return response.json()
+
+    # ========== Repository Operations ==========
+
+    def create_repo(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+        private: bool = False,
+    ) -> Dict[str, Any]:
+        """Create a new repository.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name" or just "name")
+            repo_type: Repository type (model, dataset, space)
+            private: Whether the repository is private
+
+        Returns:
+            Repository information
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AlreadyExistsError: If repository already exists
+            ValidationError: If repo_id format is invalid
+        """
+        # Parse repo_id
+        if "/" in repo_id:
+            organization, name = repo_id.split("/", 1)
+        else:
+            organization = None
+            name = repo_id
+
+        response = self._request(
+            "POST",
+            "/api/repos/create",
+            json={
+                "type": repo_type,
+                "name": name,
+                "organization": organization,
+                "private": private,
+            },
+        )
+        return response.json()
+
+    def delete_repo(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+    ) -> Dict[str, Any]:
+        """Delete a repository.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized to delete
+            NotFoundError: If repository not found
+        """
+        # Parse repo_id
+        if "/" in repo_id:
+            organization, name = repo_id.split("/", 1)
+        else:
+            organization = None
+            name = repo_id
+
+        response = self._request(
+            "DELETE",
+            "/api/repos/delete",
+            json={
+                "type": repo_type,
+                "name": name,
+                "organization": organization,
+            },
+        )
+        return response.json()
+
+    def repo_info(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+        revision: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get repository information.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+            revision: Specific revision/branch (optional)
+
+        Returns:
+            Repository metadata
+
+        Raises:
+            NotFoundError: If repository not found
+        """
+        # Parse repo_id
+        if "/" in repo_id:
+            namespace, name = repo_id.split("/", 1)
+        else:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        if revision:
+            path = f"/api/{repo_type}s/{namespace}/{name}/revision/{revision}"
+        else:
+            path = f"/api/{repo_type}s/{namespace}/{name}"
+
+        response = self._request("GET", path)
+        return response.json()
+
+    def list_repos(
+        self,
+        repo_type: RepoType = "model",
+        author: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """List repositories.
+
+        Args:
+            repo_type: Repository type (model, dataset, space)
+            author: Filter by author/namespace
+            limit: Maximum number of results
+
+        Returns:
+            List of repositories
+
+        Raises:
+            ValidationError: If invalid parameters
+        """
+        params = {"limit": limit}
+        if author:
+            params["author"] = author
+
+        response = self._request("GET", f"/api/{repo_type}s", params=params)
+        return response.json()
+
+    def list_namespace_repos(
+        self,
+        namespace: str,
+        repo_type: Optional[RepoType] = None,
+    ) -> List[Dict[str, Any]]:
+        """List all repositories under a namespace (user or organization).
+
+        Args:
+            namespace: Namespace (username or organization name)
+            repo_type: Optional filter by repository type
+
+        Returns:
+            List of repositories grouped by type
+
+        Raises:
+            NotFoundError: If namespace not found
+        """
+        # Use the dedicated endpoint if available
+        try:
+            response = self._request("GET", f"/api/users/{namespace}/repos")
+            data = response.json()
+
+            # If repo_type specified, filter the results
+            if repo_type:
+                key = repo_type + "s"
+                repos = data.get(key, [])
+                for repo in repos:
+                    repo["repo_type"] = repo_type
+                return repos
+
+            # Otherwise return all
+            all_repos = []
+            for rtype in ["model", "dataset", "space"]:
+                key = rtype + "s"
+                repos = data.get(key, [])
+                for repo in repos:
+                    repo["repo_type"] = rtype
+                all_repos.extend(repos)
+
+            return all_repos
+
+        except Exception:
+            # Fallback to old method if endpoint doesn't exist
+            all_repos = []
+
+            if repo_type:
+                repos = self.list_repos(
+                    repo_type=repo_type, author=namespace, limit=1000
+                )
+                return repos
+
+            for rtype in ["model", "dataset", "space"]:
+                repos = self.list_repos(repo_type=rtype, author=namespace, limit=1000)
+                for repo in repos:
+                    repo["repo_type"] = rtype
+                all_repos.extend(repos)
+
+            return all_repos
+
+    def list_repo_tree(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+        revision: str = "main",
+        path: str = "",
+        recursive: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """List files in a repository.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+            revision: Branch or commit hash
+            path: Path within repository
+            recursive: List files recursively
+
+        Returns:
+            List of files and directories
+
+        Raises:
+            NotFoundError: If repository or path not found
+        """
+        # Parse repo_id
+        if "/" in repo_id:
+            namespace, name = repo_id.split("/", 1)
+        else:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        api_path = (
+            f"/api/{repo_type}s/{namespace}/{name}/tree/{revision}/{path}".rstrip("/")
+        )
+        params = {"recursive": str(recursive).lower()}
+
+        response = self._request("GET", api_path, params=params)
+        return response.json()
+
+    # ========== Configuration ==========
+
+    def save_config(
+        self,
+        endpoint: Optional[str] = None,
+        token: Optional[str] = None,
+    ):
+        """Save configuration to config file.
+
+        Args:
+            endpoint: Endpoint URL to save
+            token: API token to save
+        """
+        if endpoint is not None:
+            self.config.endpoint = endpoint
+        if token is not None:
+            self.config.token = token
+
+    def load_config(self) -> Dict[str, Any]:
+        """Load all configuration values.
+
+        Returns:
+            Dictionary of configuration values
+        """
+        return self.config.all()
+
+    @property
+    def config_path(self) -> str:
+        """Get configuration file path.
+
+        Returns:
+            Path to configuration file
+        """
+        return str(self.config.config_file)

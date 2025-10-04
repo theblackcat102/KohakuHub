@@ -137,7 +137,7 @@ export TMPDIR=/path/to/tmp
 
 ### Option 3: kohub-cli (KohakuHub Native)
 
-KohakuHub's native CLI tool for user and organization management.
+KohakuHub's native CLI tool with both Python API and command-line interface.
 
 #### Installation
 
@@ -153,20 +153,45 @@ pip install -r requirements.txt
 pip install -e .
 \`\`\`
 
-#### Usage
-
-The CLI provides an interactive menu for managing users and organizations:
+#### Command-Line Usage
 
 \`\`\`bash
-# Run the interactive CLI
-kohub-cli
+# Set your endpoint
+export HF_ENDPOINT=${baseUrl}
 
-# Available operations:
-# - User Management: Register, Login, Create Token
-# - Organization Management: Create Organization, Manage Members
+# Authentication
+kohub-cli auth login
+kohub-cli auth token create --name "my-laptop"
+
+# Repository management
+kohub-cli repo create my-org/my-model --type model
+kohub-cli repo list --type model --author my-org
+kohub-cli repo info my-org/my-model --type model
+kohub-cli repo files my-org/my-model --recursive
+
+# Organization management
+kohub-cli org create my-org --description "My organization"
+kohub-cli org member add my-org bob --role member
+
+# Interactive mode
+kohub-cli interactive
+# or just
+kohub-cli
 \`\`\`
 
-For file operations, use huggingface-cli or hfutils instead.
+#### Python API
+
+You can also use kohub-cli programmatically:
+
+\`\`\`python
+from kohub_cli import KohubClient
+
+client = KohubClient(endpoint="${baseUrl}")
+client.login(username="alice", password="secret")
+client.create_repo("my-org/my-model", repo_type="model")
+\`\`\`
+
+For file upload/download operations, use huggingface-cli or hfutils.
 
 ## Using the Python API
 

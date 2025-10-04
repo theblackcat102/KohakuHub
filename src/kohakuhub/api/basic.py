@@ -558,6 +558,50 @@ async def get_paths_info(
     return result
 
 
+def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = None):
+    """Helper to filter repositories by privacy settings.
+
+    Args:
+        q: Peewee query object
+        user: Current authenticated user (optional)
+        author: Target author/namespace being queried (optional)
+
+    Returns:
+        Filtered query
+    """
+    if user:
+        # Authenticated user can see:
+        # 1. All public repos
+        # 2. Their own private repos
+        # 3. Private repos in organizations they're a member of
+        from ..db import Organization, UserOrganization
+
+        # Get user's organizations
+        user_orgs = [
+            uo.organization.name
+            for uo in UserOrganization.select()
+            .join(Organization)
+            .where(UserOrganization.user == user.id)
+        ]
+
+        # Build query: public OR (private AND owned by user or user's orgs)
+        q = q.where(
+            (Repository.private == False)
+            | (
+                (Repository.private == True)
+                & (
+                    (Repository.namespace == user.username)
+                    | (Repository.namespace.in_(user_orgs))
+                )
+            )
+        )
+    else:
+        # Not authenticated: only show public repos
+        q = q.where(Repository.private == False)
+
+    return q
+
+
 @router.get("/models")
 @router.get("/datasets")
 @router.get("/spaces")
@@ -565,6 +609,7 @@ def list_repos(
     author: Optional[str] = None,
     limit: int = Query(50, ge=1, le=1000),
     request: Request = None,
+    user: User = Depends(get_optional_user),
 ):
     """List repositories of a specific type.
 
@@ -572,9 +617,10 @@ def list_repos(
         author: Filter by author/namespace
         limit: Maximum number of results
         request: FastAPI request object
+        user: Current authenticated user (optional)
 
     Returns:
-        List of repositories
+        List of repositories (respects privacy settings)
     """
     path = request.url.path
     if "models" in path:
@@ -592,9 +638,14 @@ def list_repos(
 
     # Query database
     q = Repository.select().where(Repository.repo_type == rt)
-    # [TODO] User auth system with correct namespace system
-    # if author:
-    #     q = q.where(Repository.namespace == author)
+
+    # Filter by author if specified
+    if author:
+        q = q.where(Repository.namespace == author)
+
+    # Apply privacy filtering
+    q = _filter_repos_by_privacy(q, user, author)
+
     rows = q.limit(limit)
 
     # Format response
@@ -615,3 +666,75 @@ def list_repos(
         }
         for r in rows
     ]
+
+
+@router.get("/users/{username}/repos")
+def list_user_repos(
+    username: str,
+    limit: int = Query(100, ge=1, le=1000),
+    user: User = Depends(get_optional_user),
+):
+    """List all repositories for a specific user/namespace.
+
+    This endpoint returns repositories grouped by type, similar to a profile page.
+
+    Args:
+        username: Username or organization name
+        limit: Maximum number of results per type
+        user: Current authenticated user (optional)
+
+    Returns:
+        Dict with models, datasets, and spaces lists
+    """
+    # Check if the username exists
+    target_user = User.get_or_none(User.username == username)
+    if not target_user:
+        # Could also be an organization
+        from ..db import Organization
+
+        target_org = Organization.get_or_none(Organization.name == username)
+        if not target_org:
+            return hf_error_response(
+                404,
+                HFErrorCode.INVALID_USERNAME,
+                f"User or organization '{username}' not found",
+            )
+
+    result = {
+        "models": [],
+        "datasets": [],
+        "spaces": [],
+    }
+
+    for repo_type in ["model", "dataset", "space"]:
+        q = Repository.select().where(
+            (Repository.repo_type == repo_type) & (Repository.namespace == username)
+        )
+
+        # Apply privacy filtering
+        q = _filter_repos_by_privacy(q, user, username)
+
+        rows = q.limit(limit)
+
+        key = repo_type + "s"
+        result[key] = [
+            {
+                "id": r.full_id,
+                "author": r.namespace,
+                "private": r.private,
+                "sha": None,
+                "lastModified": None,
+                "createdAt": (
+                    r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    if r.created_at
+                    else None
+                ),
+                "downloads": 0,
+                "likes": 0,
+                "gated": False,
+                "tags": [],
+            }
+            for r in rows
+        ]
+
+    return result
