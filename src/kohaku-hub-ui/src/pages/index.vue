@@ -208,12 +208,14 @@
 <script setup>
 import { repoAPI } from "@/utils/api";
 import { useAuthStore } from "@/stores/auth";
+import { ElMessage } from "element-plus";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
 dayjs.extend(relativeTime);
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const { isAuthenticated } = storeToRefs(authStore);
 
@@ -269,6 +271,21 @@ async function loadStats() {
 }
 
 onMounted(() => {
+  // Check for verification error messages in query params
+  if (route.query.error) {
+    const errorType = route.query.error;
+    const message = route.query.message || "An error occurred";
+
+    if (errorType === "invalid_token") {
+      ElMessage.error(decodeURIComponent(message));
+      // Clean up URL
+      router.replace("/");
+    } else if (errorType === "user_not_found") {
+      ElMessage.error("User account not found");
+      router.replace("/");
+    }
+  }
+
   loadStats();
 });
 </script>

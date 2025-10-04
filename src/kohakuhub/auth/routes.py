@@ -84,8 +84,9 @@ def register(req: RegisterRequest):
 
 
 @router.get("/verify-email")
-def verify_email(token: str):
-    """Verify email with token."""
+def verify_email(token: str, response: Response):
+    """Verify email with token and automatically log in user."""
+    from fastapi.responses import RedirectResponse
 
     verification = EmailVerification.get_or_none(
         (EmailVerification.token == token)
@@ -93,15 +94,45 @@ def verify_email(token: str):
     )
 
     if not verification:
-        raise HTTPException(400, detail="Invalid or expired verification token")
+        # Redirect to login with error message
+        return RedirectResponse(
+            url=f"/?error=invalid_token&message=Invalid+or+expired+verification+token",
+            status_code=302,
+        )
 
-    # Update user
+    # Get user
+    user = User.get_or_none(User.id == verification.user)
+    if not user:
+        return RedirectResponse(url="/?error=user_not_found", status_code=302)
+
+    # Update user email verification status
     User.update(email_verified=True).where(User.id == verification.user).execute()
 
     # Delete verification token
     EmailVerification.delete().where(EmailVerification.id == verification.id).execute()
 
-    return {"success": True, "message": "Email verified successfully"}
+    # Create session for auto-login
+    session_id = generate_token()
+    session_secret = generate_session_secret()
+
+    Session.create(
+        session_id=session_id,
+        user_id=user.id,
+        secret=session_secret,
+        expires_at=get_expiry_time(cfg.auth.session_expire_hours),
+    )
+
+    # Set session cookie
+    response = RedirectResponse(url=f"/{user.username}", status_code=302)
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        httponly=True,
+        max_age=cfg.auth.session_expire_hours * 3600,
+        samesite="lax",
+    )
+
+    return response
 
 
 @router.post("/login")
