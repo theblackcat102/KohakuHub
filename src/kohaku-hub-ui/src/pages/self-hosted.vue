@@ -213,6 +213,46 @@ export KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
 
 ## Production Deployment
 
+### Cloudflare Configuration
+
+**⚠️ IMPORTANT**: If you're using Cloudflare or similar CDN/proxy services, you **must** configure caching rules to prevent issues with file downloads.
+
+#### The Problem
+
+Cloudflare's cache layer converts HEAD requests to GET requests by default. This causes:
+- Large files being downloaded when only metadata was requested
+- CORS errors when previewing files in the browser
+- Inconsistent behavior between cached and non-cached requests
+
+#### The Solution
+
+Add a **Page Rule** or **Configuration Rule** to bypass cache for download endpoints:
+
+**Option 1: Page Rules (Classic)**
+
+1. Go to **Cloudflare Dashboard** → Your domain → **Rules** → **Page Rules**
+2. Click **Create Page Rule**
+3. Configure:
+   - **URL Pattern**: \`your-domain.com/*/resolve/*\`
+   - **Settings**: Cache Level = **Bypass**
+4. **Save and Deploy**
+
+**Option 2: Configuration Rules (Modern, Recommended)**
+
+1. Go to **Cloudflare Dashboard** → Your domain → **Rules** → **Configuration Rules**
+2. Click **Create Rule**
+3. Configure:
+   - **Rule name**: Bypass cache for file downloads
+   - **When incoming requests match**:
+     - Field: URI Path
+     - Operator: contains
+     - Value: \`/resolve/\`
+   - **Then the settings are**:
+     - Cache eligibility: **Bypass cache**
+4. **Deploy**
+
+This ensures HEAD requests remain as HEAD when reaching your server, preventing unnecessary downloads and CORS issues.
+
 ### Using a Reverse Proxy
 
 For production, use a reverse proxy like nginx or Caddy to handle HTTPS:

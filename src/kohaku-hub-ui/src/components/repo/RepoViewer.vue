@@ -145,7 +145,15 @@
         <!-- Tab Content -->
         <div v-if="activeTab === 'card'" class="card overflow-hidden">
           <div class="max-w-full overflow-x-auto">
-            <div v-if="readmeContent">
+            <div v-if="readmeLoading" class="text-center py-12">
+              <el-icon class="is-loading" :size="40">
+                <div class="i-carbon-loading" />
+              </el-icon>
+              <p class="mt-4 text-gray-500 dark:text-gray-400">
+                Loading README...
+              </p>
+            </div>
+            <div v-else-if="readmeContent">
               <MarkdownViewer
                 :content="readmeContent"
                 :repo-type="repoType"
@@ -243,37 +251,49 @@
 
           <!-- File List -->
           <div class="divide-y divide-gray-200 dark:divide-gray-700">
-            <div
-              v-for="file in filteredFiles"
-              :key="file.path"
-              class="py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 cursor-pointer transition-colors"
-              @click="handleFileClick(file)"
-            >
+            <div v-if="filesLoading" class="py-12 text-center">
+              <el-icon class="is-loading" :size="40">
+                <div class="i-carbon-loading" />
+              </el-icon>
+              <p class="mt-4 text-gray-500 dark:text-gray-400">
+                Loading files...
+              </p>
+            </div>
+            <template v-else>
               <div
-                :class="
-                  file.type === 'directory'
-                    ? 'i-carbon-folder text-blue-500'
-                    : 'i-carbon-document text-gray-500 dark:text-gray-400'
-                "
-                class="text-xl flex-shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">
-                  {{ getFileName(file.path) }}
+                v-for="file in filteredFiles"
+                :key="file.path"
+                class="py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 cursor-pointer transition-colors"
+                @click="handleFileClick(file)"
+              >
+                <div
+                  :class="
+                    file.type === 'directory'
+                      ? 'i-carbon-folder text-blue-500'
+                      : 'i-carbon-document text-gray-500 dark:text-gray-400'
+                  "
+                  class="text-xl flex-shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="font-medium truncate">
+                    {{ getFileName(file.path) }}
+                  </div>
+                </div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                  {{ formatSize(file.size) }}
                 </div>
               </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400">
-                {{ formatSize(file.size) }}
-              </div>
-            </div>
 
-            <div
-              v-if="filteredFiles.length === 0"
-              class="py-12 text-center text-gray-500 dark:text-gray-400"
-            >
-              <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
-              <p>No files found</p>
-            </div>
+              <div
+                v-if="filteredFiles.length === 0"
+                class="py-12 text-center text-gray-500 dark:text-gray-400"
+              >
+                <div
+                  class="i-carbon-document-blank text-6xl mb-4 inline-block"
+                />
+                <p>No files found</p>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -408,7 +428,9 @@ const error = ref(null);
 const repoInfo = ref(null);
 const currentBranch = ref(props.branch);
 const fileTree = ref([]);
+const filesLoading = ref(true);
 const readmeContent = ref("");
+const readmeLoading = ref(true);
 const showCloneDialog = ref(false);
 const fileSearchQuery = ref("");
 
@@ -523,6 +545,7 @@ async function loadRepoInfo() {
 }
 
 async function loadFileTree() {
+  filesLoading.value = true;
   try {
     const { data } = await repoAPI.listTree(
       props.repoType,
@@ -541,10 +564,13 @@ async function loadFileTree() {
   } catch (err) {
     console.error("Failed to load file tree:", err);
     fileTree.value = [];
+  } finally {
+    filesLoading.value = false;
   }
 }
 
 async function loadReadme() {
+  readmeLoading.value = true;
   try {
     const readmeFile = fileTree.value.find(
       (f) => f.type === "file" && f.path.toLowerCase().endsWith("readme.md"),
@@ -564,6 +590,8 @@ async function loadReadme() {
   } catch (err) {
     console.error("Failed to load README:", err);
     readmeContent.value = "";
+  } finally {
+    readmeLoading.value = false;
   }
 }
 

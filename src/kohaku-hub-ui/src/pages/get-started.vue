@@ -148,8 +148,7 @@ Currently, you need to install from source:
 git clone https://github.com/KohakuBlueleaf/KohakuHub.git
 cd KohakuHub
 
-# Install dependencies and the CLI
-pip install -r requirements.txt
+# Install the CLI (dependencies are in pyproject.toml)
 pip install -e .
 \`\`\`
 
