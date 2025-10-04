@@ -39,10 +39,7 @@
             <h2 class="text-xl font-semibold mb-4">Add Member</h2>
             <el-form inline>
               <el-form-item label="Username">
-                <el-input
-                  v-model="newMember.username"
-                  placeholder="username"
-                />
+                <el-input v-model="newMember.username" placeholder="username" />
               </el-form-item>
               <el-form-item label="Role">
                 <el-select v-model="newMember.role">
@@ -74,7 +71,9 @@
                   </div>
                 </div>
                 <div class="flex gap-2">
-                  <el-dropdown @command="(role) => handleUpdateRole(member, role)">
+                  <el-dropdown
+                    @command="(role) => handleUpdateRole(member, role)"
+                  >
                     <el-button size="small" type="primary" text>
                       Change Role
                       <div class="i-carbon-chevron-down ml-1" />
@@ -215,7 +214,7 @@ async function handleRemoveMember(member) {
         type: "warning",
         confirmButtonText: "Remove",
         cancelButtonText: "Cancel",
-      }
+      },
     );
 
     await orgAPI.removeMember(route.params.orgname, member.user);

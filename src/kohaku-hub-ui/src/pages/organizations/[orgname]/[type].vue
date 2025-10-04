@@ -84,12 +84,16 @@
               :to="`/organizations/${orgname}/models`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                currentType === 'models' ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                currentType === 'models'
+                  ? 'bg-gray-100 dark:bg-gray-700'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
                 <div class="i-carbon-model text-blue-500" />
-                <span :class="currentType === 'models' ? 'font-semibold' : ''">Models</span>
+                <span :class="currentType === 'models' ? 'font-semibold' : ''"
+                  >Models</span
+                >
               </div>
               <span
                 class="text-sm font-semibold text-gray-600 dark:text-gray-400"
@@ -102,12 +106,16 @@
               :to="`/organizations/${orgname}/datasets`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                currentType === 'datasets' ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                currentType === 'datasets'
+                  ? 'bg-gray-100 dark:bg-gray-700'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
                 <div class="i-carbon-data-table text-green-500" />
-                <span :class="currentType === 'datasets' ? 'font-semibold' : ''">Datasets</span>
+                <span :class="currentType === 'datasets' ? 'font-semibold' : ''"
+                  >Datasets</span
+                >
               </div>
               <span
                 class="text-sm font-semibold text-gray-600 dark:text-gray-400"
@@ -120,12 +128,16 @@
               :to="`/organizations/${orgname}/spaces`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                currentType === 'spaces' ? 'bg-gray-100 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                currentType === 'spaces'
+                  ? 'bg-gray-100 dark:bg-gray-700'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
                 <div class="i-carbon-application text-purple-500" />
-                <span :class="currentType === 'spaces' ? 'font-semibold' : ''">Spaces</span>
+                <span :class="currentType === 'spaces' ? 'font-semibold' : ''"
+                  >Spaces</span
+                >
               </div>
               <span
                 class="text-sm font-semibold text-gray-600 dark:text-gray-400"

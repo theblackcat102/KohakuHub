@@ -19,6 +19,7 @@ router = APIRouter()
 # ============================================================================
 # Note: /whoami-v2 is implemented in api/utils.py
 
+
 class UpdateUserSettingsRequest(BaseModel):
     email: Optional[EmailStr] = None
     fullname: Optional[str] = None
@@ -28,7 +29,7 @@ class UpdateUserSettingsRequest(BaseModel):
 def update_user_settings(
     username: str,
     req: UpdateUserSettingsRequest,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
 ):
     """Update user settings.
 
@@ -51,7 +52,9 @@ def update_user_settings(
         if existing:
             raise HTTPException(400, detail="Email already in use")
 
-        User.update(email=req.email, email_verified=False).where(User.id == user.id).execute()
+        User.update(email=req.email, email_verified=False).where(
+            User.id == user.id
+        ).execute()
         # TODO: Send new verification email
 
     return {"success": True, "message": "User settings updated successfully"}
@@ -61,6 +64,7 @@ def update_user_settings(
 # Organization Settings API
 # ============================================================================
 
+
 class UpdateOrganizationSettingsRequest(BaseModel):
     description: Optional[str] = None
 
@@ -69,7 +73,7 @@ class UpdateOrganizationSettingsRequest(BaseModel):
 def update_organization_settings(
     org_name: str,
     req: UpdateOrganizationSettingsRequest,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
 ):
     """Update organization settings.
 
@@ -87,11 +91,12 @@ def update_organization_settings(
 
     # Check if user is admin of the organization
     user_org = UserOrganization.get_or_none(
-        (UserOrganization.user == user.id)
-        & (UserOrganization.organization == org.id)
+        (UserOrganization.user == user.id) & (UserOrganization.organization == org.id)
     )
     if not user_org or user_org.role not in ["admin", "super-admin"]:
-        raise HTTPException(403, detail="Not authorized to update organization settings")
+        raise HTTPException(
+            403, detail="Not authorized to update organization settings"
+        )
 
     # Update fields if provided
     if req.description is not None:
@@ -106,8 +111,10 @@ def update_organization_settings(
 # Repository Settings API
 # ============================================================================
 
+
 class UpdateRepoSettingsPayload(BaseModel):
     """Payload for repository settings update."""
+
     private: Optional[bool] = None
     gated: Optional[str] = None  # "auto", "manual", or False/None
 
@@ -161,6 +168,7 @@ def update_repo_settings(
 
 class MoveRepoPayload(BaseModel):
     """Payload for repository move/rename."""
+
     fromRepo: str  # format: "namespace/repo-name"
     toRepo: str  # format: "namespace/repo-name"
     type: str = "model"
@@ -220,6 +228,7 @@ def move_repo(
 
     # Check if user has permission to use destination namespace
     from ..auth.permissions import check_namespace_permission
+
     check_namespace_permission(to_namespace, user)
 
     # Update database records
@@ -244,6 +253,7 @@ def move_repo(
     # Would require creating new LakeFS repo and migrating data
 
     from ..config import cfg
+
     return {
         "success": True,
         "url": f"{cfg.app.base_url}/{repo_type}s/{to_id}",
@@ -255,8 +265,10 @@ def move_repo(
 # Branch and Tag Management API
 # ============================================================================
 
+
 class CreateBranchPayload(BaseModel):
     """Payload for branch creation."""
+
     branch: str
     revision: Optional[str] = None  # Source revision (defaults to main)
 
@@ -375,6 +387,7 @@ def delete_branch(
 
 class CreateTagPayload(BaseModel):
     """Payload for tag creation."""
+
     tag: str
     revision: Optional[str] = None  # Source revision (defaults to main)
     message: Optional[str] = None

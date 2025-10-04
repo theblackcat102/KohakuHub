@@ -76,8 +76,8 @@
                   Delete this repository
                 </h3>
                 <p class="text-sm text-gray-600 mb-3">
-                  Once you delete a repository, there is no going back. Please be
-                  certain.
+                  Once you delete a repository, there is no going back. Please
+                  be certain.
                 </p>
                 <el-button type="danger" @click="handleDeleteRepo">
                   Delete Repository
@@ -179,9 +179,7 @@ const newTag = ref({
   message: "",
 });
 
-const repoId = computed(
-  () => `${route.params.namespace}/${route.params.name}`
-);
+const repoId = computed(() => `${route.params.namespace}/${route.params.name}`);
 const repoType = computed(() => route.params.type);
 
 async function loadRepoInfo() {
@@ -189,7 +187,7 @@ async function loadRepoInfo() {
     const { data } = await repoAPI.getInfo(
       repoType.value,
       route.params.namespace,
-      route.params.name
+      route.params.name,
     );
     settings.value.private = data.private || false;
     moveToRepo.value = repoId.value;
@@ -207,7 +205,7 @@ async function saveGeneralSettings() {
       route.params.name,
       {
         private: settings.value.private,
-      }
+      },
     );
     ElMessage.success("Settings updated successfully");
   } catch (err) {
@@ -230,7 +228,7 @@ async function handleMoveRepo() {
         type: "warning",
         confirmButtonText: "Move",
         cancelButtonText: "Cancel",
-      }
+      },
     );
 
     const { data } = await settingsAPI.moveRepo({
@@ -262,7 +260,7 @@ async function handleDeleteRepo() {
         confirmButtonText: "Delete",
         cancelButtonText: "Cancel",
         confirmButtonClass: "el-button--danger",
-      }
+      },
     );
 
     // Second confirmation
@@ -274,7 +272,7 @@ async function handleDeleteRepo() {
         cancelButtonText: "Cancel",
         inputPattern: new RegExp(`^${route.params.name}$`),
         inputErrorMessage: "Repository name does not match",
-      }
+      },
     );
 
     await repoAPI.delete({
@@ -307,7 +305,7 @@ async function handleCreateBranch() {
       {
         branch: newBranch.value.name,
         revision: newBranch.value.revision || undefined,
-      }
+      },
     );
 
     ElMessage.success(`Branch '${newBranch.value.name}' created successfully`);
@@ -333,7 +331,7 @@ async function handleCreateTag() {
         tag: newTag.value.name,
         revision: newTag.value.revision || undefined,
         message: newTag.value.message || undefined,
-      }
+      },
     );
 
     ElMessage.success(`Tag '${newTag.value.name}' created successfully`);

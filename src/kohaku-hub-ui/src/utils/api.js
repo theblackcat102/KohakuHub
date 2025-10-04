@@ -73,7 +73,8 @@ export const repoAPI = {
    * @param {string} name - Repository name
    * @returns {Promise} - Repository metadata
    */
-  getInfo: (type, namespace, name) => api.get(`/api/${type}s/${namespace}/${name}`),
+  getInfo: (type, namespace, name) =>
+    api.get(`/api/${type}s/${namespace}/${name}`),
 
   /**
    * List repositories

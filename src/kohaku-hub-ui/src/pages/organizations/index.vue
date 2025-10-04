@@ -43,16 +43,28 @@
           <div class="flex items-start gap-3 mb-3">
             <div class="i-carbon-group text-4xl text-blue-500 flex-shrink-0" />
             <div class="flex-1 min-w-0">
-              <h3 class="text-lg font-semibold text-blue-600 dark:text-blue-400 truncate">
+              <h3
+                class="text-lg font-semibold text-blue-600 dark:text-blue-400 truncate"
+              >
                 {{ org.name }}
               </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mt-1" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+              <p
+                class="text-sm text-gray-600 dark:text-gray-400 mt-1"
+                style="
+                  display: -webkit-box;
+                  -webkit-line-clamp: 2;
+                  -webkit-box-orient: vertical;
+                  overflow: hidden;
+                "
+              >
                 {{ org.description || "No description" }}
               </p>
             </div>
           </div>
 
-          <div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mt-3 pt-3 border-t">
+          <div
+            class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mt-3 pt-3 border-t"
+          >
             <div class="flex items-center gap-1">
               <div class="i-carbon-user-multiple" />
               <span>{{ org.memberCount || 0 }} members</span>
@@ -75,7 +87,7 @@
     <div v-else class="text-center py-12">
       <div class="i-carbon-group text-6xl text-gray-400 mb-4 inline-block" />
       <p class="text-gray-500 dark:text-gray-400 mb-4">
-        {{ searchQuery ? 'No organizations found' : 'No organizations yet' }}
+        {{ searchQuery ? "No organizations found" : "No organizations yet" }}
       </p>
       <el-button
         v-if="authStore.isAuthenticated && !searchQuery"
@@ -109,7 +121,7 @@ const filteredOrganizations = computed(() => {
   return organizations.value.filter(
     (org) =>
       org.name.toLowerCase().includes(query) ||
-      (org.description && org.description.toLowerCase().includes(query))
+      (org.description && org.description.toLowerCase().includes(query)),
   );
 });
 
@@ -166,7 +178,7 @@ async function loadOrganizations() {
               repoCount: 0,
             };
           }
-        })
+        }),
       );
 
       organizations.value = orgsWithDetails;
@@ -204,4 +216,3 @@ onMounted(() => {
   loadOrganizations();
 });
 </script>
-

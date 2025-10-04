@@ -77,7 +77,9 @@
               <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                 <li>• Create repositories under your organization namespace</li>
                 <li>• Add team members with different permission levels</li>
-                <li>• Manage access control for all organization repositories</li>
+                <li>
+                  • Manage access control for all organization repositories
+                </li>
                 <li>
                   • Create an organization card by making a
                   <code class="px-1 bg-gray-200 dark:bg-gray-700 rounded"
@@ -131,9 +133,7 @@ const rules = {
 };
 
 function validateOrgName() {
-  form.value.name = form.value.name
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "");
+  form.value.name = form.value.name.toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
 
 function handleCancel() {
@@ -160,7 +160,7 @@ async function handleSubmit() {
     } catch (err) {
       console.error("Failed to create organization:", err);
       ElMessage.error(
-        err.response?.data?.detail || "Failed to create organization"
+        err.response?.data?.detail || "Failed to create organization",
       );
     } finally {
       creating.value = false;

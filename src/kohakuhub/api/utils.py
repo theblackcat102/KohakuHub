@@ -57,11 +57,13 @@ def whoami_v2(user: User = Depends(get_optional_user)):
 
     orgs_list = []
     for uo in user_orgs:
-        orgs_list.append({
-            "name": uo.organization.name,
-            "fullname": uo.organization.name,
-            "roleInOrg": uo.role,
-        })
+        orgs_list.append(
+            {
+                "name": uo.organization.name,
+                "fullname": uo.organization.name,
+                "roleInOrg": uo.role,
+            }
+        )
 
     return {
         "type": "user",
