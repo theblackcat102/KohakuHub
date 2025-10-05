@@ -44,7 +44,7 @@
               :to="`/${username}/models`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'hover:bg-gray-50 dark:hover:bg-gray-700',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
@@ -62,7 +62,7 @@
               :to="`/${username}/datasets`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'hover:bg-gray-50 dark:hover:bg-gray-700',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
@@ -80,7 +80,7 @@
               :to="`/${username}/spaces`"
               :class="[
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'hover:bg-gray-50 dark:hover:bg-gray-700',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">

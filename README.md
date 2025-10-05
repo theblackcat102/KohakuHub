@@ -150,17 +150,10 @@ The S3 public endpoint is used for generating download URLs. It should point to 
 ### 3. Start the Services
 
 ```bash
-# Set user/group ID for proper permissions
-export UID=$(id -u)
-export GID=$(id -g)
-
-# Build Frontend and Start all services
-./deploy.sh
-
-## You can manually set them up
-# npm install --prefix ./src/kohaku-hub-ui
-# npm run build --prefix ./src/kohaku-hub-ui
-# docker compose up -d --build
+# Or run commands manually:
+npm install --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-ui
+docker-compose up -d --build
 ```
 
 Services will start in this order:

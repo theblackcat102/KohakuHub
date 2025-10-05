@@ -44,7 +44,7 @@
               <div
                 v-for="org in userOrgs"
                 :key="org.name"
-                class="flex items-center justify-between p-3 border rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                class="flex items-center justify-between p-3 border rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                 @click="goToOrganization(org.name)"
               >
                 <div class="flex items-center gap-3">

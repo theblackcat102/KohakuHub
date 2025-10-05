@@ -33,7 +33,7 @@
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
                 !currentType
                   ? 'bg-gray-100 dark:bg-gray-700'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
@@ -50,7 +50,7 @@
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
                 currentType === 'models'
                   ? 'bg-blue-50 dark:bg-blue-900/30'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
@@ -82,7 +82,7 @@
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
                 currentType === 'datasets'
                   ? 'bg-green-50 dark:bg-green-900/30'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
@@ -114,7 +114,7 @@
                 'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
                 currentType === 'spaces'
                   ? 'bg-purple-50 dark:bg-purple-900/30'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700',
               ]"
             >
               <div class="flex items-center gap-2 text-sm">
