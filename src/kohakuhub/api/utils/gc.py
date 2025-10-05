@@ -1,11 +1,11 @@
 """Garbage collection utilities for LFS objects."""
 
-from typing import List, Optional
 from datetime import datetime, timezone
+from typing import List, Optional
 
-from ..db import LFSObjectHistory, File
-from ..config import cfg
-from ..logger import get_logger
+from kohakuhub.config import cfg
+from kohakuhub.db import File, LFSObjectHistory
+from kohakuhub.logger import get_logger
 
 logger = get_logger("GC")
 

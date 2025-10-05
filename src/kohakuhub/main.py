@@ -1,17 +1,29 @@
 """Main FastAPI application for Kohaku Hub."""
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import basic, file, lfs, utils, settings, commits
-from .auth import router as auth_router
-from .org import router as org_router
-from .config import cfg
-from .db import Repository
-from .api.file import resolve_file_head, resolve_file_get
-from .api.s3_utils import init_storage
-from .logger import get_logger
+from kohakuhub.api.routers import (
+    branches,
+    commit_history,
+    commits,
+    files,
+    lfs,
+    misc,
+    repo_crud,
+    repo_info,
+    repo_tree,
+    settings,
+)
+from kohakuhub.api.routers.files import resolve_file_get, resolve_file_head
+from kohakuhub.api.utils.s3 import init_storage
+from kohakuhub.auth import router as auth_router
+from kohakuhub.config import cfg
+from kohakuhub.db import Repository
+from kohakuhub.logger import get_logger
+from kohakuhub.org import router as org_router
 
 logger = get_logger("MAIN")
 
@@ -39,12 +51,16 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix=cfg.app.api_base)
-app.include_router(basic.router, prefix=cfg.app.api_base, tags=["repositories"])
-app.include_router(file.router, prefix=cfg.app.api_base, tags=["files"])
-app.include_router(lfs.router, tags=["lfs"])
-app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
-app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
+app.include_router(repo_crud.router, prefix=cfg.app.api_base, tags=["repositories"])
+app.include_router(repo_info.router, prefix=cfg.app.api_base, tags=["repositories"])
+app.include_router(repo_tree.router, prefix=cfg.app.api_base, tags=["repositories"])
+app.include_router(files.router, prefix=cfg.app.api_base, tags=["files"])
 app.include_router(commits.router, prefix=cfg.app.api_base, tags=["commits"])
+app.include_router(commit_history.router, prefix=cfg.app.api_base, tags=["commits"])
+app.include_router(lfs.router, tags=["lfs"])
+app.include_router(branches.router, prefix=cfg.app.api_base, tags=["branches"])
+app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
+app.include_router(misc.router, prefix=cfg.app.api_base, tags=["utils"])
 app.include_router(org_router, prefix="/org", tags=["organizations"])
 
 

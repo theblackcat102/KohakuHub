@@ -1,10 +1,11 @@
 """LakeFS client utilities and helper functions."""
 
 import lakefs_client
+
 from lakefs_client.client import LakeFSClient
 
-from ..config import cfg
-from ..db import Repository
+from kohakuhub.config import cfg
+from kohakuhub.db import Repository
 
 
 def get_lakefs_client() -> LakeFSClient:

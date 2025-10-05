@@ -1,15 +1,16 @@
 """Commit history API endpoints."""
 
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 
-from ..db import User, Repository
-from .auth import get_optional_user
-from ..auth.permissions import check_repo_read_permission
-from .lakefs_utils import lakefs_repo_name
-from .hf_utils import hf_repo_not_found, hf_server_error
-from ..async_utils import get_async_lakefs_client
-from ..logger import get_logger
+from kohakuhub.api.utils.hf import hf_repo_not_found, hf_server_error
+from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.async_utils import get_async_lakefs_client, run_in_executor
+from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.db import Repository, User
+from kohakuhub.logger import get_logger
 
 logger = get_logger("COMMITS")
 router = APIRouter()
@@ -56,9 +57,6 @@ async def list_commits(
 
     try:
         # Get commits from LakeFS using refs.log_commits
-        from ..api.lakefs_utils import get_lakefs_client
-        from ..async_utils import run_in_executor
-
         client = get_lakefs_client()
 
         logger.debug(

@@ -150,6 +150,6 @@ def get_async_lakefs_client():
     Returns:
         AsyncLakeFSClient instance
     """
-    from .api.lakefs_utils import get_lakefs_client
+    from kohakuhub.api.utils.lakefs import get_lakefs_client
 
     return AsyncLakeFSClient(get_lakefs_client())

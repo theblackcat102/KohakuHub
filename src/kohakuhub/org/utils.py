@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException
 
-from ..db import User, Organization, UserOrganization
+from kohakuhub.db import User, Organization, UserOrganization
 
 
 def create_organization(name: str, description: str | None, user: User):

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 import boto3
 from botocore.config import Config as BotoConfig
 
-from ..config import cfg
-from ..logger import get_logger
+from kohakuhub.config import cfg
+from kohakuhub.logger import get_logger
 
 logger = get_logger("S3")
 

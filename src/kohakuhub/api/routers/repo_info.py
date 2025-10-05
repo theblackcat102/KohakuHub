@@ -1,0 +1,378 @@
+"""Repository information and listing endpoints."""
+
+from typing import Literal, Optional
+
+from fastapi import APIRouter, Depends, Query, Request
+
+from kohakuhub.api.utils.hf import (
+    HFErrorCode,
+    format_hf_datetime,
+    hf_error_response,
+    hf_repo_not_found,
+)
+from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.async_utils import get_async_lakefs_client
+from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.config import cfg
+from kohakuhub.db import Organization, Repository, User, UserOrganization
+from kohakuhub.logger import get_logger
+
+logger = get_logger("REPO")
+router = APIRouter()
+
+RepoType = Literal["model", "dataset", "space"]
+
+
+@router.get("/models/{namespace}/{repo_name}")
+@router.get("/datasets/{namespace}/{repo_name}")
+@router.get("/spaces/{namespace}/{repo_name}")
+async def get_repo_info(
+    namespace: str,
+    repo_name: str,
+    request: Request,
+    user: User = Depends(get_optional_user),
+):
+    """Get repository information (without revision).
+
+    This endpoint matches HuggingFace Hub API format:
+    - /api/models/{namespace}/{repo_name}
+    - /api/datasets/{namespace}/{repo_name}
+    - /api/spaces/{namespace}/{repo_name}
+
+    Note: For revision-specific info, use /{repo_type}s/{namespace}/{repo_name}/revision/{revision}
+          which is handled in files.py
+
+    Args:
+        namespace: Repository namespace (user or organization)
+        repo_name: Repository name
+        request: FastAPI request object
+        user: Current authenticated user (optional)
+
+    Returns:
+        Repository metadata or error response with headers
+    """
+    # Construct full repo ID
+    repo_id = f"{namespace}/{repo_name}"
+
+    # Determine repo type from path
+    path = request.url.path
+    if "/models/" in path:
+        repo_type = "model"
+    elif "/datasets/" in path:
+        repo_type = "dataset"
+    elif "/spaces/" in path:
+        repo_type = "space"
+    else:
+        return hf_error_response(
+            404,
+            HFErrorCode.INVALID_REPO_TYPE,
+            "Invalid repository type",
+        )
+
+    # Check if repository exists in database
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    # Check read permission for private repos
+    check_repo_read_permission(repo_row, user)
+
+    # Get LakeFS info for default branch
+    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+    client = get_lakefs_client()
+
+    # Get default branch info
+    commit_id = None
+    last_modified = None
+
+    try:
+        branch = client.branches.get_branch(repository=lakefs_repo, branch="main")
+        commit_id = branch.commit_id
+
+        # Get commit details if available
+        if commit_id:
+            try:
+                async_client = get_async_lakefs_client()
+                commit_info = await async_client.get_commit(
+                    repository=lakefs_repo, commit_id=commit_id
+                )
+                if commit_info and commit_info.creation_date:
+                    from datetime import datetime
+
+                    last_modified = datetime.fromtimestamp(
+                        commit_info.creation_date
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            except Exception as ex:
+                logger.debug(f"Could not get commit info: {str(ex)}")
+    except Exception as e:
+        # Log warning but continue - repo exists even if LakeFS has issues
+        logger.warning(f"Could not get branch info for {lakefs_repo}/main: {str(e)}")
+
+    # Format created_at
+    created_at = format_hf_datetime(repo_row.created_at)
+
+    # Return repository info in HuggingFace format
+    return {
+        "_id": repo_row.id,
+        "id": repo_id,
+        "modelId": repo_id if repo_type == "model" else None,
+        "author": repo_row.namespace,
+        "sha": commit_id,
+        "lastModified": last_modified,
+        "createdAt": created_at,
+        "private": repo_row.private,
+        "disabled": False,
+        "gated": False,
+        "downloads": 0,
+        "likes": 0,
+        "tags": [],
+        "pipeline_tag": None,
+        "library_name": None,
+        "siblings": [],
+        "spaces": [],
+        "models": [],
+        "datasets": [],
+    }
+
+
+def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = None):
+    """Helper to filter repositories by privacy settings.
+
+    Args:
+        q: Peewee query object
+        user: Current authenticated user (optional)
+        author: Target author/namespace being queried (optional)
+
+    Returns:
+        Filtered query
+    """
+    if user:
+        # Authenticated user can see:
+        # 1. All public repos
+        # 2. Their own private repos
+        # 3. Private repos in organizations they're a member of
+
+        # Get user's organizations
+        user_orgs = [
+            uo.organization.name
+            for uo in UserOrganization.select()
+            .join(Organization)
+            .where(UserOrganization.user == user.id)
+        ]
+
+        # Build query: public OR (private AND owned by user or user's orgs)
+        q = q.where(
+            (Repository.private == False)
+            | (
+                (Repository.private == True)
+                & (
+                    (Repository.namespace == user.username)
+                    | (Repository.namespace.in_(user_orgs))
+                )
+            )
+        )
+    else:
+        # Not authenticated: only show public repos
+        q = q.where(Repository.private == False)
+
+    return q
+
+
+@router.get("/models")
+@router.get("/datasets")
+@router.get("/spaces")
+async def list_repos(
+    author: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=1000),
+    request: Request = None,
+    user: User = Depends(get_optional_user),
+):
+    """List repositories of a specific type.
+
+    Args:
+        author: Filter by author/namespace
+        limit: Maximum number of results
+        request: FastAPI request object
+        user: Current authenticated user (optional)
+
+    Returns:
+        List of repositories (respects privacy settings)
+    """
+    path = request.url.path
+    if "models" in path:
+        rt = "model"
+    elif "datasets" in path:
+        rt = "dataset"
+    elif "spaces" in path:
+        rt = "space"
+    else:
+        return hf_error_response(
+            404,
+            HFErrorCode.INVALID_REPO_TYPE,
+            "Unknown repository type",
+        )
+
+    # Query database
+    q = Repository.select().where(Repository.repo_type == rt)
+
+    # Filter by author if specified
+    if author:
+        q = q.where(Repository.namespace == author)
+
+    # Apply privacy filtering
+    q = _filter_repos_by_privacy(q, user, author)
+
+    rows = q.limit(limit)
+
+    # Format response with lastModified from LakeFS
+    client = get_lakefs_client()
+    result = []
+
+    for r in rows:
+        last_modified = None
+        sha = None
+
+        # Try to get lastModified from LakeFS main branch
+        try:
+            lakefs_repo = lakefs_repo_name(rt, r.full_id)
+            branch = client.branches.get_branch(repository=lakefs_repo, branch="main")
+            sha = branch.commit_id
+
+            if sha:
+                async_client = get_async_lakefs_client()
+                commit_info = await async_client.get_commit(
+                    repository=lakefs_repo, commit_id=sha
+                )
+                if commit_info and commit_info.creation_date:
+                    from datetime import datetime
+
+                    last_modified = datetime.fromtimestamp(
+                        commit_info.creation_date
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        except Exception as e:
+            logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
+
+        result.append(
+            {
+                "id": r.full_id,
+                "author": r.namespace,
+                "private": r.private,
+                "sha": sha,
+                "lastModified": last_modified,
+                "createdAt": (
+                    r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    if r.created_at
+                    else None
+                ),
+                "downloads": 0,
+                "likes": 0,
+                "gated": False,
+                "tags": [],
+            }
+        )
+
+    return result
+
+
+@router.get("/users/{username}/repos")
+async def list_user_repos(
+    username: str,
+    limit: int = Query(100, ge=1, le=1000),
+    user: User = Depends(get_optional_user),
+):
+    """List all repositories for a specific user/namespace.
+
+    This endpoint returns repositories grouped by type, similar to a profile page.
+
+    Args:
+        username: Username or organization name
+        limit: Maximum number of results per type
+        user: Current authenticated user (optional)
+
+    Returns:
+        Dict with models, datasets, and spaces lists
+    """
+    # Check if the username exists
+    target_user = User.get_or_none(User.username == username)
+    if not target_user:
+        # Could also be an organization
+        target_org = Organization.get_or_none(Organization.name == username)
+        if not target_org:
+            return hf_error_response(
+                404,
+                HFErrorCode.INVALID_USERNAME,
+                f"User or organization '{username}' not found",
+            )
+
+    result = {
+        "models": [],
+        "datasets": [],
+        "spaces": [],
+    }
+
+    for repo_type in ["model", "dataset", "space"]:
+        q = Repository.select().where(
+            (Repository.repo_type == repo_type) & (Repository.namespace == username)
+        )
+
+        # Apply privacy filtering
+        q = _filter_repos_by_privacy(q, user, username)
+
+        rows = q.limit(limit)
+
+        key = repo_type + "s"
+        repos_list = []
+        client = get_lakefs_client()
+
+        for r in rows:
+            last_modified = None
+            sha = None
+
+            # Try to get lastModified from LakeFS
+            try:
+                lakefs_repo = lakefs_repo_name(repo_type, r.full_id)
+                branch = client.branches.get_branch(
+                    repository=lakefs_repo, branch="main"
+                )
+                sha = branch.commit_id
+
+                if sha:
+                    async_client = get_async_lakefs_client()
+                    commit_info = await async_client.get_commit(
+                        repository=lakefs_repo, commit_id=sha
+                    )
+                    if commit_info and commit_info.creation_date:
+                        from datetime import datetime
+
+                        last_modified = datetime.fromtimestamp(
+                            commit_info.creation_date
+                        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            except Exception as e:
+                logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
+
+            repos_list.append(
+                {
+                    "id": r.full_id,
+                    "author": r.namespace,
+                    "private": r.private,
+                    "sha": sha,
+                    "lastModified": last_modified,
+                    "createdAt": (
+                        r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                        if r.created_at
+                        else None
+                    ),
+                    "downloads": 0,
+                    "likes": 0,
+                    "gated": False,
+                    "tags": [],
+                }
+            )
+
+        result[key] = repos_list
+
+    return result

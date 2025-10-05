@@ -1,12 +1,14 @@
 """Utility API endpoints for Kohaku Hub."""
 
 import yaml
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..db import User
-from .auth import get_optional_user
-from ..logger import get_logger
+from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.config import cfg
+from kohakuhub.db import Organization, User, UserOrganization
+from kohakuhub.logger import get_logger
 
 logger = get_logger("UTILS")
 
@@ -26,8 +28,6 @@ def get_version():
     Returns:
         Site identification and version information
     """
-    from ..config import cfg
-
     return {
         "api": "kohakuhub",
         "version": "0.0.1",
@@ -71,8 +71,6 @@ def whoami_v2(user: User = Depends(get_optional_user)):
         raise HTTPException(401, detail="Invalid user token")
 
     # Get user's organizations
-    from ..db import Organization, UserOrganization
-
     user_orgs = (
         UserOrganization.select()
         .join(Organization)
@@ -88,8 +86,6 @@ def whoami_v2(user: User = Depends(get_optional_user)):
                 "roleInOrg": uo.role,
             }
         )
-
-    from ..config import cfg
 
     return {
         "type": "user",

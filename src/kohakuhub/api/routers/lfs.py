@@ -12,20 +12,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ..config import cfg
-from ..db import File, Repository, User
-from ..logger import get_logger
-
-logger = get_logger("LFS")
-from .auth import get_current_user, get_optional_user
-from ..auth.permissions import check_repo_read_permission, check_repo_write_permission
-from .s3_utils import (
+from kohakuhub.api.utils.s3 import (
     generate_download_presigned_url,
     generate_upload_presigned_url,
-    object_exists,
     get_object_metadata,
+    object_exists,
 )
+from kohakuhub.auth.dependencies import get_current_user, get_optional_user
+from kohakuhub.auth.permissions import (
+    check_repo_read_permission,
+    check_repo_write_permission,
+)
+from kohakuhub.config import cfg
+from kohakuhub.db import File, Repository, User
+from kohakuhub.logger import get_logger
 
+logger = get_logger("LFS")
 router = APIRouter()
 
 

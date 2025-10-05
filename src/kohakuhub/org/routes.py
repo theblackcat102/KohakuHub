@@ -3,12 +3,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..db import User, UserOrganization
-from ..auth.dependencies import get_current_user
-from ..logger import get_logger
+from kohakuhub.db import User, UserOrganization
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.logger import get_logger
 
 logger = get_logger("ORG")
-from .utils import (
+from kohakuhub.org.utils import (
     create_organization as create_org_util,
     get_organization_details as get_org_details_util,
     add_member_to_organization as add_member_util,
