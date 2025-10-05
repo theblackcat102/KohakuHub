@@ -29,7 +29,7 @@ def get_version():
     from ..config import cfg
 
     return {
-        "site": "kohakuhub",
+        "api": "kohakuhub",
         "version": "0.0.1",
         "name": cfg.app.site_name,
     }

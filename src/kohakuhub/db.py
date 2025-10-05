@@ -15,6 +15,9 @@ from peewee import (
     ForeignKeyField,
 )
 from .config import cfg
+from .logger import get_logger
+
+logger = get_logger("DB")
 
 
 def _sqlite_path(url: str) -> str:
@@ -32,7 +35,7 @@ if cfg.app.db_backend == "postgres":
     else:
         host, port = host_port, 5432
 
-    print(f"Connecting to postgresql://{user}:{password}@{host}:{port}/{dbname}")
+    logger.info(f"Connecting to PostgreSQL: {user}@{host}:{port}/{dbname}")
 
     db = PostgresqlDatabase(
         dbname,

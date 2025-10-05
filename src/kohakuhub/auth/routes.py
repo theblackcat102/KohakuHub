@@ -44,11 +44,15 @@ class CreateTokenRequest(BaseModel):
 def register(req: RegisterRequest):
     """Register new user."""
 
+    logger.info(f"Registration attempt for username: {req.username}")
+
     # Check if username or email already exists
     if User.get_or_none(User.username == req.username):
+        logger.warning(f"Registration failed: username '{req.username}' already exists")
         raise HTTPException(400, detail="Username already exists")
 
     if User.get_or_none(User.email == req.email):
+        logger.warning(f"Registration failed: email '{req.email}' already exists")
         raise HTTPException(400, detail="Email already exists")
 
     # Create user
@@ -58,6 +62,8 @@ def register(req: RegisterRequest):
         password_hash=hash_password(req.password),
         email_verified=not cfg.auth.require_email_verification,
     )
+
+    logger.success(f"User registered: {user.username} (id={user.id})")
 
     # Send verification email if required
     if cfg.auth.require_email_verification:
@@ -91,12 +97,15 @@ def verify_email(token: str, response: Response):
     """Verify email with token and automatically log in user."""
     from fastapi.responses import RedirectResponse
 
+    logger.info(f"Email verification attempt with token: {token[:8]}...")
+
     verification = EmailVerification.get_or_none(
         (EmailVerification.token == token)
         & (EmailVerification.expires_at > datetime.now(timezone.utc))
     )
 
     if not verification:
+        logger.warning(f"Invalid or expired verification token: {token[:8]}...")
         # Redirect to login with error message
         return RedirectResponse(
             url=f"/?error=invalid_token&message=Invalid+or+expired+verification+token",
@@ -106,6 +115,7 @@ def verify_email(token: str, response: Response):
     # Get user
     user = User.get_or_none(User.id == verification.user)
     if not user:
+        logger.error(f"User not found for verification token: {token[:8]}...")
         return RedirectResponse(url="/?error=user_not_found", status_code=302)
 
     # Update user email verification status
@@ -113,6 +123,8 @@ def verify_email(token: str, response: Response):
 
     # Delete verification token
     EmailVerification.delete().where(EmailVerification.id == verification.id).execute()
+
+    logger.success(f"Email verified for user: {user.username}")
 
     # Create session for auto-login
     session_id = generate_token()
@@ -135,6 +147,10 @@ def verify_email(token: str, response: Response):
         samesite="lax",
     )
 
+    logger.success(
+        f"Auto-login session created for: {user.username} (session={session_id[:8]}...)"
+    )
+
     return response
 
 
@@ -142,15 +158,20 @@ def verify_email(token: str, response: Response):
 def login(req: LoginRequest, response: Response):
     """Login and create session."""
 
+    logger.info(f"Login attempt for user: {req.username}")
+
     user = User.get_or_none(User.username == req.username)
 
     if not user or not verify_password(req.password, user.password_hash):
+        logger.warning(f"Failed login attempt for: {req.username}")
         raise HTTPException(401, detail="Invalid username or password")
 
     if not user.is_active:
+        logger.warning(f"Login attempt for disabled account: {req.username}")
         raise HTTPException(403, detail="Account is disabled")
 
     if cfg.auth.require_email_verification and not user.email_verified:
+        logger.warning(f"Login attempt with unverified email: {req.username}")
         raise HTTPException(403, detail="Please verify your email first")
 
     # Create session
@@ -173,6 +194,8 @@ def login(req: LoginRequest, response: Response):
         samesite="lax",
     )
 
+    logger.success(f"User logged in: {user.username} (session={session_id[:8]}...)")
+
     return {
         "success": True,
         "message": "Logged in successfully",
@@ -185,11 +208,17 @@ def login(req: LoginRequest, response: Response):
 def logout(response: Response, user: User = Depends(get_current_user)):
     """Logout and destroy session."""
 
+    logger.info(f"Logout request for user: {user.username}")
+
     # Delete all user sessions
-    Session.delete().where(Session.user_id == user.id).execute()
+    deleted_count = Session.delete().where(Session.user_id == user.id).execute()
 
     # Clear cookie
     response.delete_cookie(key="session_id")
+
+    logger.success(
+        f"User logged out: {user.username} ({deleted_count} session(s) deleted)"
+    )
 
     return {"success": True, "message": "Logged out successfully"}
 

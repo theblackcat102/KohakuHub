@@ -6,6 +6,9 @@ from fastapi import Cookie, Header, HTTPException
 
 from ..db import User, Session, Token
 from .utils import hash_token
+from ..logger import get_logger
+
+logger = get_logger("AUTH")
 
 
 def get_current_user(
@@ -17,7 +20,15 @@ def get_current_user(
     session_id = str(session_id) if session_id is not None else None
     authorization = str(authorization) if authorization is not None else None
 
-    print(f"session_id: {session_id}, authorization: {authorization}")
+    # Log authentication attempt
+    auth_method = []
+    if session_id:
+        auth_method.append(f"session={session_id[:8]}...")
+    if authorization and authorization.startswith("Bearer "):
+        auth_method.append("token=Bearer ***")
+
+    if auth_method:
+        logger.debug(f"Auth attempt: {', '.join(auth_method)}")
 
     # Try session-based auth first (web UI)
     if session_id:
@@ -28,11 +39,21 @@ def get_current_user(
         if session:
             user = User.get_or_none(User.id == session.user_id)
             if user and user.is_active:
+                logger.debug(
+                    f"Authenticated via session: {user.username} (session={session_id[:8]}...)"
+                )
                 return user
+            else:
+                logger.warning(
+                    f"Session {session_id[:8]}... found but user inactive or not found"
+                )
+        else:
+            logger.debug(f"Session {session_id[:8]}... not found or expired")
 
     # Try token-based auth (API)
     if authorization:
         if not authorization.startswith("Bearer "):
+            logger.warning("Invalid authorization header format")
             raise HTTPException(401, detail="Invalid authorization header")
 
         token_str = authorization[7:]  # Remove "Bearer "
@@ -47,8 +68,16 @@ def get_current_user(
 
             user = User.get_or_none(User.id == token.user_id)
             if user and user.is_active:
+                logger.debug(
+                    f"Authenticated via token: {user.username} (token_id={token.id})"
+                )
                 return user
+            else:
+                logger.warning(f"Token {token.id} found but user inactive or not found")
+        else:
+            logger.debug("Token not found or invalid")
 
+    logger.debug("Authentication failed - no valid session or token")
     raise HTTPException(401, detail="Not authenticated")
 
 
