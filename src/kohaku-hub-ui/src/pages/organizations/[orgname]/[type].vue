@@ -232,6 +232,9 @@
 <script setup>
 import { repoAPI, orgAPI } from "@/utils/api";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
 
 const route = useRoute();
 const router = useRouter();

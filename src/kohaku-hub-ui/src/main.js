@@ -17,6 +17,9 @@ import "element-plus/theme-chalk/dark/css-vars.css";
 // Import custom highlight.js theme for syntax highlighting (supports light and dark modes)
 import "./styles/highlight-theme.css";
 
+// Import main styles last to ensure they override everything else
+import "./style.css";
+
 const app = createApp(App);
 const pinia = createPinia();
 

@@ -408,8 +408,11 @@
 <script setup>
 import { repoAPI, orgAPI } from "@/utils/api";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
 import axios from "axios";
+
+dayjs.extend(relativeTime);
 
 const route = useRoute();
 const router = useRouter();
