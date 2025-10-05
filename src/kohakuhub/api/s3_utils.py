@@ -6,6 +6,9 @@ import boto3
 from botocore.config import Config as BotoConfig
 
 from ..config import cfg
+from ..logger import get_logger
+
+logger = get_logger("S3")
 
 
 def get_s3_client():
@@ -35,12 +38,12 @@ def init_storage():
 
     try:
         s3.head_bucket(Bucket=bucket_name)
-        print(f"S3 Bucket '{bucket_name}' already exists.")
+        logger.success(f"S3 Bucket '{bucket_name}' already exists.")
     except Exception as e:
         # If a 404 error is received, the bucket does not exist
         error_code = e.response["Error"]["Code"]
         if error_code == "404":
-            print(f"S3 Bucket '{bucket_name}' not found. Creating it...")
+            logger.info(f"S3 Bucket '{bucket_name}' not found. Creating it...")
             try:
                 # MinIO doesn't care about the region for local setup, but S3 requires it
                 if region and region != "us-east-1":
@@ -51,14 +54,14 @@ def init_storage():
                 else:
                     s3.create_bucket(Bucket=bucket_name)
 
-                print(f"S3 Bucket '{bucket_name}' created successfully.")
+                logger.success(f"S3 Bucket '{bucket_name}' created successfully.")
             except Exception as e:
-                print(f"Failed to create S3 bucket '{bucket_name}': {e}")
+                logger.exception(f"Failed to create S3 bucket '{bucket_name}'", e)
                 # You might want to raise this error to halt startup
                 raise
         else:
             # Other error (e.g., 403 Forbidden)
-            print(f"Error checking S3 bucket '{bucket_name}': {e}")
+            logger.exception(f"Error checking S3 bucket '{bucket_name}'", e)
             raise
 
 
@@ -121,11 +124,6 @@ def generate_upload_presigned_url(
         # "ContentType": content_type,
     }
 
-    # Add SHA256 checksum if provided (for LFS files)
-    # S3 will verify the checksum automatically
-    if checksum_sha256:
-        params["ChecksumSHA256"] = checksum_sha256
-
     # Generate presigned PUT URL
     url = s3.generate_presigned_url(
         "put_object",
@@ -142,10 +140,6 @@ def generate_upload_presigned_url(
     headers = {
         "Content-Type": content_type,
     }
-
-    # If checksum is required, client must send it
-    if checksum_sha256:
-        headers["x-amz-checksum-sha256"] = checksum_sha256
 
     return {
         "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),

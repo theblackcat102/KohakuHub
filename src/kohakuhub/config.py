@@ -49,6 +49,9 @@ class AppConfig(BaseModel):
     # 5MB file -> ~6.7MB base64, leaving room for multiple files in one commit
     lfs_threshold_bytes: int = 5 * 1024 * 1024
     debug_log_payloads: bool = False
+    # LFS Garbage Collection settings
+    lfs_keep_versions: int = 5  # Keep last K versions of each file
+    lfs_auto_gc: bool = False  # Auto-delete old LFS objects on commit
 
 
 class Config(BaseModel):

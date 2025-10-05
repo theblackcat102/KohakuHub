@@ -14,6 +14,9 @@ from pydantic import BaseModel
 
 from ..config import cfg
 from ..db import File, Repository, User
+from ..logger import get_logger
+
+logger = get_logger("LFS")
 from .auth import get_current_user, get_optional_user
 from ..auth.permissions import check_repo_read_permission, check_repo_write_permission
 from .s3_utils import (
@@ -131,8 +134,8 @@ async def lfs_batch(
             check_repo_read_permission(repo_row, user)
 
     if cfg.app.debug_log_payloads:
-        print("==== LFS Batch Request ====")
-        print(body)
+        logger.debug("==== LFS Batch Request ====")
+        logger.debug(body)
 
     operation = batch_req.operation
     objects_response = []

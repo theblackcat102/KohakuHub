@@ -6,9 +6,30 @@ from pydantic import BaseModel
 
 from ..db import User
 from .auth import get_optional_user
+from ..logger import get_logger
 
+logger = get_logger("UTILS")
 
 router = APIRouter()
+
+
+@router.get("/version")
+def get_version():
+    """Get KohakuHub version and site information.
+
+    This endpoint helps client libraries (like hfutils) detect if they're
+    connecting to KohakuHub vs HuggingFace Hub.
+
+    HuggingFace Hub returns 404 for this endpoint.
+    KohakuHub returns site identification and version info.
+
+    Returns:
+        Site identification and version information
+    """
+    return {
+        "site": "kohakuhub",
+        "version": "0.0.1",
+    }
 
 
 class ValidateYamlPayload(BaseModel):

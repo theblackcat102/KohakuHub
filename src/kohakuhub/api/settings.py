@@ -10,6 +10,9 @@ from ..auth.permissions import check_repo_delete_permission
 from .auth import get_optional_user
 from .lakefs_utils import get_lakefs_client, lakefs_repo_name
 from .hf_utils import hf_error_response, HFErrorCode, hf_repo_not_found, hf_server_error
+from ..logger import get_logger
+
+logger = get_logger("SETTINGS")
 
 router = APIRouter()
 

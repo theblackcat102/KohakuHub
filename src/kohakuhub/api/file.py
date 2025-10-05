@@ -11,6 +11,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadata
 
+from ..logger import get_logger
+
+logger = get_logger("FILE")
+
 
 def calculate_git_blob_sha1(content: bytes) -> str:
     """Calculate SHA1 hash in git blob format.
@@ -106,8 +110,8 @@ async def preupload(
         raise HTTPException(status_code=400, detail={"error": f"Invalid JSON: {e}"})
 
     if cfg.app.debug_log_payloads:
-        print("==== Preupload Payload ====")
-        print(json.dumps(body, indent=2))
+        logger.debug("==== Preupload Payload ====")
+        logger.debug(json.dumps(body, indent=2))
 
     files = body.get("files")
     if not isinstance(files, list):
@@ -174,7 +178,7 @@ async def preupload(
                     # File doesn't exist, need to upload
                     pass
             except Exception as e:
-                print(f"Failed to decode sample for {path}: {e}")
+                logger.warning(f"Failed to decode sample for {path}: {e}")
 
         result_files.append(
             {
@@ -246,7 +250,7 @@ async def get_revision(
             )
         except Exception as e:
             # Log but don't fail if commit info unavailable
-            print(f"Warning: Could not get commit info: {e}")
+            logger.warning(f"Could not get commit info: {e}")
 
     # Format last modified date
     last_modified = None
@@ -475,9 +479,9 @@ async def commit(
     lines = raw.decode("utf-8").splitlines()
 
     if cfg.app.debug_log_payloads:
-        print("==== Commit Payload ====")
+        logger.debug("==== Commit Payload ====")
         for line in lines:
-            print(line)
+            logger.debug(line)
 
     # Parse NDJSON
     header = None
@@ -510,7 +514,7 @@ async def commit(
         key = op["key"]
         value = op["value"]
         path = value.get("path")
-        print(f"Processing {key}: {path}")
+        logger.info(f"Processing {key}: {path}")
 
         if key == "file":
             # Small file with inline base64 content
@@ -543,7 +547,7 @@ async def commit(
                 and existing.sha256 == git_blob_sha1
                 and existing.size == len(data)
             ):
-                print(f"Skipping unchanged file: {path}")
+                logger.info(f"Skipping unchanged file: {path}")
                 continue
 
             # File changed, need to upload
@@ -600,11 +604,11 @@ async def commit(
             old_lfs_oid = None
             if existing and existing.lfs and existing.sha256 != oid:
                 old_lfs_oid = existing.sha256
-                print(f"File {path} will be replaced: {old_lfs_oid} → {oid}")
+                logger.info(f"File {path} will be replaced: {old_lfs_oid} → {oid}")
 
             # Check if file unchanged
             if existing and existing.sha256 == oid and existing.size == size:
-                print(f"Skipping unchanged LFS file: {path}")
+                logger.info(f"Skipping unchanged LFS file: {path}")
                 continue
 
             # File changed or new
@@ -615,7 +619,7 @@ async def commit(
             lfs_key = f"lfs/{oid[:2]}/{oid[2:4]}/{oid}"
             physical_address = f"s3://{cfg.s3.bucket}/{lfs_key}"
 
-            print(f"Linking LFS file: {path} -> {physical_address}")
+            logger.info(f"Linking LFS file: {path} -> {physical_address}")
 
             # Verify the object exists in S3 before linking
             from .s3_utils import object_exists, get_object_metadata
@@ -635,12 +639,12 @@ async def commit(
                 actual_size = s3_metadata["size"]
 
                 if actual_size != size:
-                    print(
-                        f"Warning: Size mismatch for {path}. Expected: {size}, Got: {actual_size}"
+                    logger.warning(
+                        f"Size mismatch for {path}. Expected: {size}, Got: {actual_size}"
                     )
                     size = actual_size
             except Exception as e:
-                print(f"Warning: Could not verify S3 object metadata: {e}")
+                logger.warning(f"Could not verify S3 object metadata: {e}")
 
             # Link the physical S3 object to LakeFS using StagingApi
             try:
@@ -665,7 +669,7 @@ async def commit(
                     staging_metadata=staging_metadata,
                 )
 
-                print(f"Successfully linked LFS file in LakeFS: {path}")
+                logger.success(f"Successfully linked LFS file in LakeFS: {path}")
 
             except Exception as e:
                 raise HTTPException(
@@ -692,7 +696,7 @@ async def commit(
                 },
             ).execute()
 
-            print(f"Updated database record for LFS file: {path}")
+            logger.success(f"Updated database record for LFS file: {path}")
 
             # NOW delete the old LFS object if it exists and is not used elsewhere
             if old_lfs_oid:
@@ -713,32 +717,32 @@ async def commit(
 
                         s3_client = get_s3_client()
                         s3_client.delete_object(Bucket=cfg.s3.bucket, Key=old_lfs_key)
-                        print(f"✓ Deleted old LFS object: {old_lfs_key}")
+                        logger.success(f"Deleted old LFS object: {old_lfs_key}")
                     except Exception as e:
                         # Log but don't fail - the new file is already linked successfully
-                        print(
-                            f"Warning: Failed to delete old LFS object {old_lfs_key}: {e}"
+                        logger.warning(
+                            f"Failed to delete old LFS object {old_lfs_key}: {e}"
                         )
                 else:
-                    print(
-                        f"✓ Keeping old LFS object {old_lfs_oid} - still used by {other_uses} file(s)"
+                    logger.success(
+                        f"Keeping old LFS object {old_lfs_oid} - still used by {other_uses} file(s)"
                     )
 
         elif key == "deletedFile":
             # Delete a single file
             files_changed = True
 
-            print(f"Deleting file: {path}")
+            logger.info(f"Deleting file: {path}")
 
             try:
                 async_client = get_async_lakefs_client()
                 await async_client.delete_object(
                     repository=lakefs_repo, branch=revision, path=path
                 )
-                print(f"Successfully deleted file from LakeFS: {path}")
+                logger.success(f"Successfully deleted file from LakeFS: {path}")
             except Exception as e:
                 # File might not exist, log warning but continue
-                print(f"Warning: Failed to delete {path} from LakeFS: {e}")
+                logger.warning(f"Failed to delete {path} from LakeFS: {e}")
 
             # Remove from database
             deleted_count = (
@@ -748,9 +752,9 @@ async def commit(
             )
 
             if deleted_count > 0:
-                print(f"Removed {path} from database")
+                logger.success(f"Removed {path} from database")
             else:
-                print(f"File {path} was not in database")
+                logger.info(f"File {path} was not in database")
 
         elif key == "deletedFolder":
             # Delete all files with the given path prefix
@@ -759,31 +763,50 @@ async def commit(
 
             # Normalize folder path (ensure it ends with /)
             folder_path = path if path.endswith("/") else f"{path}/"
-            print(f"Deleting folder: {folder_path}")
+            logger.info(f"Deleting folder: {folder_path}")
 
             try:
-                # List all objects in the folder
+                # List all objects in the folder (with pagination)
                 async_client = get_async_lakefs_client()
-                objects = await async_client.list_objects(
-                    repository=lakefs_repo,
-                    ref=revision,
-                    prefix=folder_path,
-                    delimiter="",  # No delimiter to get all files recursively
-                )
+
+                all_folder_objects = []
+                after = ""
+                has_more = True
+
+                while has_more:
+                    objects = await async_client.list_objects(
+                        repository=lakefs_repo,
+                        ref=revision,
+                        prefix=folder_path,
+                        delimiter="",  # No delimiter to get all files recursively
+                        amount=1000,  # Max per request
+                        after=after,
+                    )
+
+                    all_folder_objects.extend(objects.results)
+
+                    # Check pagination
+                    if objects.pagination and objects.pagination.has_more:
+                        after = objects.pagination.next_offset
+                        has_more = True
+                    else:
+                        has_more = False
 
                 deleted_files = []
-                for obj in objects.results:
+                for obj in all_folder_objects:
                     if obj.path_type == "object":
                         try:
                             await async_client.delete_object(
                                 repository=lakefs_repo, branch=revision, path=obj.path
                             )
                             deleted_files.append(obj.path)
-                            print(f"  Deleted: {obj.path}")
+                            logger.info(f"  Deleted: {obj.path}")
                         except Exception as e:
-                            print(f"  Warning: Failed to delete {obj.path}: {e}")
+                            logger.warning(f"  Failed to delete {obj.path}: {e}")
 
-                print(f"Deleted {len(deleted_files)} files from folder {folder_path}")
+                logger.success(
+                    f"Deleted {len(deleted_files)} files from folder {folder_path}"
+                )
 
                 # Remove from database - use LIKE for prefix matching
                 if deleted_files:
@@ -796,10 +819,10 @@ async def commit(
                         )
                         .execute()
                     )
-                    print(f"Removed {deleted_count} records from database")
+                    logger.success(f"Removed {deleted_count} records from database")
 
             except Exception as e:
-                print(f"Warning: Error deleting folder {folder_path}: {e}")
+                logger.warning(f"Error deleting folder {folder_path}: {e}")
 
         elif key == "copyFile":
             # Copy a file within the repository
@@ -817,7 +840,7 @@ async def commit(
                     400, detail={"error": f"Missing srcPath for copyFile operation"}
                 )
 
-            print(
+            logger.info(
                 f"Copying file: {src_path} -> {dest_path} (from revision: {src_revision})"
             )
 
@@ -848,7 +871,7 @@ async def commit(
                     staging_metadata=staging_metadata,
                 )
 
-                print(
+                logger.success(
                     f"Successfully linked {dest_path} to same physical address as {src_path}"
                 )
 
@@ -892,7 +915,7 @@ async def commit(
                         },
                     ).execute()
 
-                print(f"Successfully copied {src_path} to {dest_path}")
+                logger.success(f"Successfully copied {src_path} to {dest_path}")
 
             except Exception as e:
                 raise HTTPException(
@@ -924,7 +947,7 @@ async def commit(
     # Create commit in LakeFS (only if files changed)
     commit_msg = header.get("summary", "Commit via API")
     commit_desc = header.get("description", "")
-    print(f"Commit message: {commit_msg}")
+    logger.info(f"Commit message: {commit_msg}")
 
     try:
         # Commit (async to avoid blocking)
@@ -942,7 +965,7 @@ async def commit(
 
     # Generate commit URL
     commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result.id}"
-    print(f"Commit URL: {commit_url}")
+    logger.success(f"Commit URL: {commit_url}")
 
     return {
         "commitUrl": commit_url,

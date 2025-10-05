@@ -157,6 +157,29 @@ class UserOrganization(BaseModel):
         indexes = ((("user", "organization"), True),)
 
 
+class LFSObjectHistory(BaseModel):
+    """Track LFS object usage history for garbage collection.
+
+    Keeps track of which commits reference which LFS objects,
+    allowing us to preserve K versions of each file.
+    """
+
+    id = AutoField()
+    repo_full_id = CharField(index=True)
+    path_in_repo = CharField(index=True)  # File path
+    sha256 = CharField(index=True)  # LFS object hash
+    size = IntegerField()
+    commit_id = CharField(index=True)  # LakeFS commit ID
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        # Index for quick lookups by repo and path
+        indexes = (
+            (("repo_full_id", "path_in_repo"), False),
+            (("sha256",), False),
+        )
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
@@ -170,6 +193,7 @@ def init_db():
             StagingUpload,
             Organization,
             UserOrganization,
+            LFSObjectHistory,
         ],
         safe=True,
     )

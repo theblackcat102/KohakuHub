@@ -5,6 +5,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 from ..config import cfg
+from ..logger import get_logger
+
+logger = get_logger("EMAIL")
 
 
 def send_verification_email(to_email: str, username: str, token: str) -> bool:
@@ -19,8 +22,8 @@ def send_verification_email(to_email: str, username: str, token: str) -> bool:
     - Background images often blocked
     """
     if not cfg.smtp.enabled:
-        print(
-            f"[EMAIL] SMTP disabled. Verification link: {cfg.app.base_url}/api/auth/verify-email?token={token}"
+        logger.info(
+            f"SMTP disabled. Verification link: {cfg.app.base_url}/api/auth/verify-email?token={token}"
         )
         return True
 
@@ -165,5 +168,5 @@ Kohaku Hub Team
 
         return True
     except Exception as e:
-        print(f"[EMAIL] Failed to send verification email: {e}")
+        logger.exception("Failed to send verification email", e)
         return False

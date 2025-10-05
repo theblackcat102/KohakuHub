@@ -214,6 +214,18 @@ export const repoAPI = {
       },
     );
   },
+
+  /**
+   * List commits for a repository branch
+   * @param {string} type - Repository type
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {string} branch - Branch name (default: main)
+   * @param {Object} params - Query parameters { limit?, after? }
+   * @returns {Promise} - { commits: Array, hasMore: boolean, nextCursor: string }
+   */
+  listCommits: (type, namespace, name, branch, params) =>
+    api.get(`/api/${type}s/${namespace}/${name}/commits/${branch}`, { params }),
 };
 
 /**

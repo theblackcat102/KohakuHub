@@ -7,6 +7,9 @@ from pydantic import BaseModel, EmailStr
 
 from ..config import cfg
 from ..db import User, EmailVerification, Session, Token
+from ..logger import get_logger
+
+logger = get_logger("AUTH")
 from .utils import (
     hash_password,
     verify_password,

@@ -332,9 +332,65 @@
         </div>
 
         <div v-if="activeTab === 'commits'" class="card">
-          <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+          <h2 class="text-xl font-semibold mb-4">Commit History</h2>
+
+          <div
+            v-if="commitsLoading && commits.length === 0"
+            class="text-center py-12"
+          >
+            <el-icon class="is-loading" :size="40">
+              <div class="i-carbon-renew" />
+            </el-icon>
+            <p class="mt-4 text-gray-500 dark:text-gray-400">
+              Loading commits...
+            </p>
+          </div>
+
+          <div v-else-if="commits.length > 0" class="space-y-3">
+            <div
+              v-for="commit in commits"
+              :key="commit.id"
+              class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+            >
+              <div class="flex items-start gap-3">
+                <div
+                  class="i-carbon-commit text-2xl text-blue-500 flex-shrink-0 mt-1"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="font-medium text-sm mb-1">{{ commit.title }}</div>
+                  <div
+                    class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400"
+                  >
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-user-avatar" />
+                      <span>{{ commit.author }}</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-calendar" />
+                      <span>{{ formatCommitDate(commit.date) }}</span>
+                    </div>
+                    <div class="font-mono text-xs">
+                      {{ commit.id.slice(0, 7) }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Load More Button -->
+            <div v-if="commitsHasMore" class="text-center pt-4">
+              <el-button @click="loadMoreCommits" :loading="commitsLoading">
+                Load More Commits
+              </el-button>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="text-center py-12 text-gray-500 dark:text-gray-400"
+          >
             <div class="i-carbon-branch text-6xl mb-4 inline-block" />
-            <p>Commit history coming soon</p>
+            <p>No commits yet</p>
           </div>
         </div>
       </main>
@@ -462,6 +518,10 @@ const error = ref(null);
 const repoInfo = ref(null);
 const currentBranch = ref(props.branch);
 const fileTree = ref([]);
+const commits = ref([]);
+const commitsLoading = ref(false);
+const commitsHasMore = ref(false);
+const commitsNextCursor = ref(null);
 const filesLoading = ref(true);
 const readmeContent = ref("");
 const readmeLoading = ref(true);
@@ -629,6 +689,51 @@ async function loadReadme() {
   }
 }
 
+async function loadCommits() {
+  commitsLoading.value = true;
+  try {
+    const { data } = await repoAPI.listCommits(
+      props.repoType,
+      props.namespace,
+      props.name,
+      currentBranch.value,
+      { limit: 20 },
+    );
+
+    commits.value = data.commits || [];
+    commitsHasMore.value = data.hasMore || false;
+    commitsNextCursor.value = data.nextCursor || null;
+  } catch (err) {
+    console.error("Failed to load commits:", err);
+    commits.value = [];
+  } finally {
+    commitsLoading.value = false;
+  }
+}
+
+async function loadMoreCommits() {
+  if (!commitsHasMore.value || commitsLoading.value) return;
+
+  commitsLoading.value = true;
+  try {
+    const { data } = await repoAPI.listCommits(
+      props.repoType,
+      props.namespace,
+      props.name,
+      currentBranch.value,
+      { limit: 20, after: commitsNextCursor.value },
+    );
+
+    commits.value.push(...(data.commits || []));
+    commitsHasMore.value = data.hasMore || false;
+    commitsNextCursor.value = data.nextCursor || null;
+  } catch (err) {
+    console.error("Failed to load more commits:", err);
+  } finally {
+    commitsLoading.value = false;
+  }
+}
+
 function handleFileClick(file) {
   if (file.type === "directory") {
     // Navigate to folder using tree route
@@ -651,6 +756,11 @@ function handleFileClick(file) {
 
 function downloadRepo() {
   ElMessage.info("Download functionality coming soon");
+}
+
+function formatCommitDate(timestamp) {
+  if (!timestamp) return "Unknown";
+  return dayjs.unix(timestamp).fromNow();
 }
 
 async function createReadme() {
@@ -720,6 +830,8 @@ watch(
         await loadFileTree();
       }
       await loadReadme();
+    } else if (newTab === "commits" && commits.value.length === 0) {
+      await loadCommits();
     }
   },
 );
@@ -743,6 +855,8 @@ onMounted(async () => {
   } else if (activeTab.value === "card") {
     await loadFileTree();
     await loadReadme();
+  } else if (activeTab.value === "commits") {
+    await loadCommits();
   }
 });
 </script>

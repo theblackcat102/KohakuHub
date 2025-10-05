@@ -35,3 +35,6 @@ db_backend = "postgres"  # or "sqlite"
 database_url = "postgresql://hub:hubpass@127.0.0.1:25432/hubdb"
 lfs_threshold_bytes = 10485760 # 10MB
 debug_log_payloads = true
+# LFS Garbage Collection settings
+lfs_keep_versions = 5  # Keep last K versions of each LFS file
+lfs_auto_gc = true  # Automatically delete old LFS objects on commit

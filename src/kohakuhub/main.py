@@ -4,13 +4,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import basic, file, lfs, utils, settings
+from .api import basic, file, lfs, utils, settings, commits
 from .auth import router as auth_router
 from .org import router as org_router
 from .config import cfg
 from .db import Repository
 from .api.file import resolve_file_head, resolve_file_get
 from .api.s3_utils import init_storage
+from .logger import get_logger
+
+logger = get_logger("MAIN")
 
 
 @asynccontextmanager
@@ -41,6 +44,7 @@ app.include_router(file.router, prefix=cfg.app.api_base, tags=["files"])
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(utils.router, prefix=cfg.app.api_base, tags=["utils"])
 app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
+app.include_router(commits.router, prefix=cfg.app.api_base, tags=["commits"])
 app.include_router(org_router, prefix="/org", tags=["organizations"])
 
 
@@ -50,10 +54,11 @@ async def public_resolve_head(
     namespace: str, name: str, revision: str, path: str, type: str = "model"
 ):
     """Public HEAD endpoint without /api prefix - returns file metadata only."""
-    print(f"HEAD {type}/{namespace}/{name}/resolve/{revision}/{path}")
+    logger.debug(f"HEAD {type}/{namespace}/{name}/resolve/{revision}/{path}")
 
     repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
     if not repo:
+        logger.warning(f"Repository not found: {type}/{namespace}/{name}")
         raise HTTPException(404, detail={"error": "Repository not found"})
 
     return await resolve_file_head(
@@ -71,10 +76,11 @@ async def public_resolve_get(
     namespace: str, name: str, revision: str, path: str, type: str = "model"
 ):
     """Public GET endpoint without /api prefix - redirects to S3 download."""
-    print(f"GET {type}/{namespace}/{name}/resolve/{revision}/{path}")
+    logger.debug(f"GET {type}/{namespace}/{name}/resolve/{revision}/{path}")
 
     repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
     if not repo:
+        logger.warning(f"Repository not found: {type}/{namespace}/{name}")
         raise HTTPException(404, detail={"error": "Repository not found"})
 
     return await resolve_file_get(
