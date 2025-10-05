@@ -6,6 +6,7 @@ hub-storage/
 *.db
 test_*/
 config.toml
+docker-compose.yml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
