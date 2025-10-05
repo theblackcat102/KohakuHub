@@ -2,7 +2,7 @@
 <template>
   <div
     id="app"
-    class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors flex flex-col"
+    class="min-h-screen w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors flex flex-col"
   >
     <TheHeader />
     <main class="flex-1 min-h-screen-content">
