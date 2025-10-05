@@ -716,7 +716,7 @@ def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = No
 @router.get("/models")
 @router.get("/datasets")
 @router.get("/spaces")
-def list_repos(
+async def list_repos(
     author: Optional[str] = None,
     limit: int = Query(50, ge=1, le=1000),
     request: Request = None,
@@ -759,28 +759,60 @@ def list_repos(
 
     rows = q.limit(limit)
 
-    # Format response
-    return [
-        {
-            "id": r.full_id,
-            "author": r.namespace,
-            "private": r.private,
-            "sha": None,
-            "lastModified": None,
-            "createdAt": (
-                r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if r.created_at else None
-            ),
-            "downloads": 0,
-            "likes": 0,
-            "gated": False,
-            "tags": [],
-        }
-        for r in rows
-    ]
+    # Format response with lastModified from LakeFS
+    client = get_lakefs_client()
+    result = []
+
+    for r in rows:
+        last_modified = None
+        sha = None
+
+        # Try to get lastModified from LakeFS main branch
+        try:
+            lakefs_repo = lakefs_repo_name(rt, r.full_id)
+            branch = client.branches.get_branch(repository=lakefs_repo, branch="main")
+            sha = branch.commit_id
+
+            if sha:
+                from ..async_utils import get_async_lakefs_client
+
+                async_client = get_async_lakefs_client()
+                commit_info = await async_client.get_commit(
+                    repository=lakefs_repo, commit_id=sha
+                )
+                if commit_info and commit_info.creation_date:
+                    from datetime import datetime
+
+                    last_modified = datetime.fromtimestamp(
+                        commit_info.creation_date
+                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        except Exception as e:
+            logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
+
+        result.append(
+            {
+                "id": r.full_id,
+                "author": r.namespace,
+                "private": r.private,
+                "sha": sha,
+                "lastModified": last_modified,
+                "createdAt": (
+                    r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    if r.created_at
+                    else None
+                ),
+                "downloads": 0,
+                "likes": 0,
+                "gated": False,
+                "tags": [],
+            }
+        )
+
+    return result
 
 
 @router.get("/users/{username}/repos")
-def list_user_repos(
+async def list_user_repos(
     username: str,
     limit: int = Query(100, ge=1, le=1000),
     user: User = Depends(get_optional_user),
@@ -828,24 +860,56 @@ def list_user_repos(
         rows = q.limit(limit)
 
         key = repo_type + "s"
-        result[key] = [
-            {
-                "id": r.full_id,
-                "author": r.namespace,
-                "private": r.private,
-                "sha": None,
-                "lastModified": None,
-                "createdAt": (
-                    r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                    if r.created_at
-                    else None
-                ),
-                "downloads": 0,
-                "likes": 0,
-                "gated": False,
-                "tags": [],
-            }
-            for r in rows
-        ]
+        repos_list = []
+        client = get_lakefs_client()
+
+        for r in rows:
+            last_modified = None
+            sha = None
+
+            # Try to get lastModified from LakeFS
+            try:
+                lakefs_repo = lakefs_repo_name(repo_type, r.full_id)
+                branch = client.branches.get_branch(
+                    repository=lakefs_repo, branch="main"
+                )
+                sha = branch.commit_id
+
+                if sha:
+                    from ..async_utils import get_async_lakefs_client
+
+                    async_client = get_async_lakefs_client()
+                    commit_info = await async_client.get_commit(
+                        repository=lakefs_repo, commit_id=sha
+                    )
+                    if commit_info and commit_info.creation_date:
+                        from datetime import datetime
+
+                        last_modified = datetime.fromtimestamp(
+                            commit_info.creation_date
+                        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            except Exception as e:
+                logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
+
+            repos_list.append(
+                {
+                    "id": r.full_id,
+                    "author": r.namespace,
+                    "private": r.private,
+                    "sha": sha,
+                    "lastModified": last_modified,
+                    "createdAt": (
+                        r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                        if r.created_at
+                        else None
+                    ),
+                    "downloads": 0,
+                    "likes": 0,
+                    "gated": False,
+                    "tags": [],
+                }
+            )
+
+        result[key] = repos_list
 
     return result

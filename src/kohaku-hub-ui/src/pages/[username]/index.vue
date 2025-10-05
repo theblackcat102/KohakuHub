@@ -394,7 +394,7 @@ function hasMoreRepos(type) {
 }
 
 function formatDate(date) {
-  return date ? dayjs(date).format("MMM YYYY") : "";
+  return date ? dayjs(date).fromNow() : "never";
 }
 
 function goToRepo(type, repo) {
