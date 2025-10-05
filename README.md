@@ -22,19 +22,47 @@ KohakuHub provides a simple but functional solution for teams and individuals wh
 
 ## Key Features
 
+### Core Infrastructure
 - ✅ **HuggingFace Compatible**: Works seamlessly with existing `huggingface_hub` client code
 - ✅ **S3-Compatible Storage**: Use any S3-compatible backend (MinIO, Cloudflare R2, Wasabi, AWS S3, etc.)
-- ✅ **Repository Management**: Create, list, and delete model/dataset/space repositories
-- ✅ **File Operations**: Upload, download, copy, and delete files with automatic deduplication
 - ✅ **Large File Support**: Handles files of any size with Git LFS protocol
-- ✅ **Version Control**: Git-like branching and commit history via LakeFS
-- ✅ **Authentication & Authorization**: Complete user registration, session management, and API tokens
+- ✅ **File Operations**: Upload, download, copy, and delete files with automatic deduplication
+- ✅ **Version Control**: Git-like branching, tagging, and commit history via LakeFS
+
+### Repository & Organization Management
+- ✅ **Complete Repository Management**: Create, delete, list, move/rename repositories with full settings control
+- ✅ **Branch Management**: Create and delete branches with full version control
+- ✅ **Tag Management**: Create and delete tags for release versioning
+- ✅ **Repository Settings**: Configure visibility (private/public), gated access, and descriptions
 - ✅ **Organization Management**: Full organization support with member roles (admin, super-admin, member)
 - ✅ **Permission System**: Namespace-based permissions for repositories and organizations
-- ✅ **Web UI**: Modern Vue 3 interface with file browsing, editing, and repository management
+
+### Authentication & API
+- ✅ **Authentication & Authorization**: Complete user registration, session management, and API tokens
+- ✅ **User Settings Management**: Update user profiles, preferences, and account settings
+- ✅ **Organization Settings Management**: Configure organization-wide settings and policies
+- ✅ **Detailed User Info API**: Enhanced user information endpoint (whoami-v2)
+- ✅ **Version API**: Track KohakuHub version and API compatibility
+- ✅ **YAML Validation**: Built-in validation for configuration files
+
+### Web Interface
+- ✅ **Modern Web UI**: Vue 3 interface with file browsing, editing, and repository management
+- ✅ **Repository Settings Page**: Complete UI for managing repository configuration
+- ✅ **Organization Settings Page**: Full organization management interface
+- ✅ **Commit History Viewer**: Browse and explore repository history
 - ✅ **Code Highlighting**: Syntax highlighting for code files with Monaco Editor integration
 - ✅ **Markdown Support**: Built-in markdown rendering for documentation
-- 🚧 **CLI Tool**: Basic functionality available (user/org management), more features in development
+- ✅ **Comprehensive Documentation**: API docs, CLI guides, roadmap, and contributing guidelines
+
+### Command-Line Interface
+- ✅ **Full-Featured CLI**: Complete command-line tool with interactive TUI mode
+- ✅ **User Management**: Login, logout, whoami, register, and update user settings
+- ✅ **Token Management**: Create, list, and delete API tokens
+- ✅ **Organization Operations**: Create, info, list, member management, and settings updates
+- ✅ **Repository Operations**: Create, delete, info, list, files, settings, and move/rename
+- ✅ **Branch & Tag Management**: Create and delete branches and tags via CLI
+- ✅ **Configuration Management**: Set, get, list, and clear CLI configuration
+- ✅ **Multiple Output Formats**: JSON and text output for scripting and automation
 
 ## Architecture
 
@@ -45,7 +73,7 @@ KohakuHub combines three powerful technologies:
 - **PostgreSQL/SQLite**: Lightweight metadata database for deduplication and indexing
 - **FastAPI**: HuggingFace-compatible API layer
 
-See [API.md](./API.md) for detailed API documentation and workflow diagrams.
+See [API.md](./docs/API.md) for detailed API documentation and workflow diagrams.
 
 ## Quick Start
 
@@ -174,7 +202,7 @@ The test script will:
 
 ## `kohub-cli` Usage
 
-KohakuHub includes a powerful command-line tool with both a **Python API** for programmatic access and a **CLI** for interactive and scripted usage.
+KohakuHub includes a **complete command-line tool** with both a **Python API** for programmatic access and a **full-featured CLI** for interactive and scripted usage. The CLI provides access to all major KohakuHub features including user management, organization management, repository operations, branch/tag management, and more.
 
 ### Installation
 
@@ -212,7 +240,7 @@ token_info = client.create_token(name="my-laptop")
 print(f"Token: {token_info['token']}")
 ```
 
-See [CLI.md](./CLI.md) for complete Python API documentation.
+See [CLI.md](./docs/CLI.md) for complete Python API documentation.
 
 ### Command-Line Interface
 
@@ -233,26 +261,48 @@ kohub-cli interactive
 Use specific commands for scripting and automation:
 
 ```bash
-# Authentication
+# Authentication & User Management
 kohub-cli auth login
+kohub-cli auth logout
 kohub-cli auth whoami
+kohub-cli auth register
+kohub-cli user update --display-name "Alice Smith" --bio "ML Engineer"
+
+# Token Management
 kohub-cli auth token create --name "my-laptop"
 kohub-cli auth token list
+kohub-cli auth token delete <token-id>
 
-# Repository management
-kohub-cli repo create my-org/my-model --type model
+# Repository Management
+kohub-cli repo create my-org/my-model --type model --private
 kohub-cli repo list --type model --author my-org
 kohub-cli repo info my-org/my-model --type model
 kohub-cli repo files my-org/my-model --recursive
+kohub-cli repo update my-org/my-model --description "My awesome model"
+kohub-cli repo move my-org/my-model my-org/my-new-model
+kohub-cli repo delete my-org/my-model --type model
 
-# Organization management
+# Branch & Tag Management
+kohub-cli branch create my-org/my-model new-feature --type model
+kohub-cli branch delete my-org/my-model old-feature --type model
+kohub-cli tag create my-org/my-model v1.0.0 --type model
+kohub-cli tag delete my-org/my-model v0.9.0 --type model
+
+# Organization Management
 kohub-cli org create my-org --description "My organization"
 kohub-cli org list
+kohub-cli org info my-org
 kohub-cli org member add my-org bob --role member
+kohub-cli org member list my-org
+kohub-cli org member update my-org bob --role admin
+kohub-cli org member remove my-org bob
+kohub-cli org update my-org --description "Updated description"
 
-# Configuration
+# Configuration Management
 kohub-cli config set endpoint http://localhost:8000
+kohub-cli config get endpoint
 kohub-cli config list
+kohub-cli config clear
 ```
 
 #### Global Options
@@ -281,6 +331,22 @@ kohub-cli --help
 kohub-cli auth --help
 kohub-cli repo create --help
 ```
+
+### CLI Features Summary
+
+The `kohub-cli` tool provides comprehensive access to KohakuHub functionality:
+
+- **User Management**: Full user lifecycle (register, login, logout, profile updates)
+- **Token Management**: Create, list, and delete API tokens for authentication
+- **Organization Management**: Complete organization operations including member management
+- **Repository Management**: Full CRUD operations plus advanced features like move/rename
+- **Branch & Tag Management**: Create and delete branches and tags for version control
+- **Configuration Management**: Persistent configuration storage for endpoint and credentials
+- **Interactive TUI**: User-friendly text-based interface for all operations
+- **Multiple Output Formats**: JSON for scripting, text for human-readable output
+- **Python API**: Use KohakuHub programmatically in your Python scripts
+
+For complete CLI documentation, see [CLI.md](./docs/CLI.md).
 
 ## Using KohakuHub
 
@@ -365,44 +431,66 @@ Key settings include:
 
 ## Project Status & Roadmap
 
-See [TODO.md](./TODO.md) for detailed development status.
+See [TODO.md](./docs/TODO.md) for detailed development status.
 
 **Current Status:**
-- ✅ Core API (upload, download, version control)
+- ✅ **Core API** (upload, download, version control)
+  - Complete repository management (create, delete, list, move/rename, update settings)
+  - Branch management (create, delete branches)
+  - Tag management (create, delete tags)
+  - Commit history API
+  - User and organization settings management
+  - Version API endpoint
+  - YAML validation API
+  - Detailed user info API (whoami-v2)
   - Some Path related API may not be 100% supported, report if they are important for you.
-- ✅ HuggingFace client compatibility
-- ✅ Large file support (Git LFS)
-- ✅ Docker deployment with docker-compose
-- ✅ Authentication & Authorization
-  - User registration with email verification (optional)
+- ✅ **HuggingFace Client Compatibility**
+  - Full compatibility with `huggingface_hub` Python client
+  - Works with `hfutils`, `transformers`, and `diffusers`
+- ✅ **Large File Support** (Git LFS)
+  - Handles files of any size with Git LFS protocol
+- ✅ **Docker Deployment**
+  - Complete docker-compose setup
+  - Includes LakeFS, MinIO, PostgreSQL, and KohakuHub services
+- ✅ **Authentication & Authorization**
+  - User registration with optional email verification
   - Session-based authentication with secure cookies
   - API token generation and management
   - Permission system for repositories and organizations
-- ✅ Organization Management
+- ✅ **Organization Management**
   - Create/delete organizations
   - Member management with roles (admin, super-admin, member)
   - Organization-based namespaces for repositories
-- ✅ Web User Interface
+  - Organization settings management
+- ✅ **Web User Interface**
   - Vue 3 + Vite frontend with modern UI
   - Repository browsing and file viewing
-  - Code editor with syntax highlighting
+  - Code editor with syntax highlighting (Monaco Editor)
   - File upload/download interface
   - Markdown documentation rendering
   - User authentication pages (login/register)
-  - Settings and organization management pages
-- 🚧 CLI for administration
-  - User and organization management functional
-  - Additional administrative features in development
+  - Repository and organization settings pages
+  - Commit history viewer
+  - Comprehensive documentation pages (API, CLI, Roadmap, Contributing)
+- ✅ **Command-Line Interface (CLI)**
+  - Complete user management (login, logout, whoami, register, update settings)
+  - Full token management (create, list, delete)
+  - Complete organization management (create, info, list, member operations, update settings)
+  - Full repository management (create, delete, info, list, files, update settings, move/rename)
+  - Branch and tag management (create, delete)
+  - Configuration management (set, get, list, clear)
+  - Interactive TUI mode
+  - JSON and text output formats for scripting
 
 ## Contributing
 
-We welcome contributions! Especially:
+We welcome contributions! Please read our [Contributing Guide](./CONTRIBUTING.md) to get started.
 
 ### 🎨 Web Interface (High Priority!)
 
 We're looking for frontend developers to help build a modern web UI. Preferred stack:
 - **Vue 3 + Vite** for the framework
-- **Tailwind CSS** for styling
+- **UnoCSS** for styling
 - Similar UX to HuggingFace Hub
 
 If you're interested in leading the web UI development, please reach out on Discord!
@@ -413,6 +501,8 @@ If you're interested in leading the web UI development, please reach out on Disc
 - Code improvements and bug fixes via Pull Requests
 - Documentation improvements
 - Testing and feedback
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
 Join our community on Discord: https://discord.gg/xWYrkyvJ2s
 

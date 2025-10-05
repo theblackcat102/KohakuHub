@@ -1,5 +1,7 @@
 # TODO
 
+*Last Updated: October 2025*
+
 Kohaku-Hub is a pretty large project and really hard to say where to start is better, but I will try to list all the known TODOs here with brief priority note
 
 ## Infrastructure
@@ -26,8 +28,9 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
     - [x] Get repository info
     - [x] Tree list (recursive & non-recursive)
     - [x] Paths-info endpoint
-    - [ ] Move/Rename repository
-    - [ ] Repository transfer between namespaces
+    - [x] Move/Rename repository
+    - [x] Update repository settings (private, gated)
+    - [ ] Repository transfer between namespaces (different from move)
 - [x] Authentication & Authorization
     - [x] User registration
     - [x] User login/logout
@@ -44,17 +47,21 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
     - [x] Get organization details
     - [x] Add/remove members
     - [x] Update member roles
+    - [x] List organization members
     - [x] List user organizations
+    - [x] Organization settings/metadata (description, etc.)
     - [ ] Organization deletion
-    - [ ] Organization settings/metadata
+- [x] Version Control Features
+    - [x] Repository branches (create/delete)
+    - [x] Repository tags (create/delete)
+    - [x] Commit history API
 - [ ] Advanced Features
-    - [ ] Repository branches (beyond main)
     - [ ] Pull requests / merge requests
     - [ ] Discussion/comments
     - [ ] Repository stars/likes
     - [ ] Download statistics
     - [ ] Search functionality
-    - [ ] Tags/categories
+    - [ ] Repository metadata tags/categories
 
 ## Web UI (Vue 3 + Vite)
 - [x] Core Pages
@@ -72,16 +79,18 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
     - [x] File editor (Monaco Editor)
     - [x] File uploader
     - [x] Markdown renderer
-    - [ ] Commit history view
+    - [x] Commit history view
+    - [x] Repository settings page
     - [ ] Branch management UI
+    - [ ] Tag management UI
     - [ ] Diff viewer
-    - [ ] Repository settings
-    - [ ] Repository deletion UI
+    - [ ] Repository deletion UI confirmation
 - [x] User/Organization UI
     - [x] User profile view
     - [x] Organization pages
-    - [ ] Organization member management UI
-    - [ ] Organization settings UI
+    - [x] Organization settings page
+    - [ ] Organization member management UI (add/remove members)
+    - [ ] Organization creation UI
 - [ ] Additional Features
     - [x] Theme support (dark/light)
     - [ ] Search interface
@@ -90,35 +99,62 @@ Kohaku-Hub is a pretty large project and really hard to say where to start is be
     - [ ] File preview for images/media
 
 ## CLI Tool
-- [x] Basic User Management
+- [x] User Management
     - [x] User registration
-    - [x] User login
-    - [x] Token creation
-- [x] Basic Organization Management
+    - [x] User login/logout
+    - [x] Token creation/listing/deletion
+    - [x] Get current user info (whoami)
+    - [x] Update user settings
+- [x] Organization Management
     - [x] Create organization
+    - [x] Get organization info
+    - [x] List user organizations
     - [x] Add/remove members
     - [x] Update member roles
-- [ ] Repository Management
-    - [ ] Create/delete repositories via CLI
-    - [ ] Upload/download files
-    - [ ] Manage branches
+    - [x] List organization members
+    - [x] Update organization settings
+- [x] Repository Management
+    - [x] Create/delete repositories via CLI
+    - [x] List repositories
+    - [x] Get repository info
+    - [x] List repository files
+    - [x] Update repository settings
+    - [x] Move/rename repositories
+    - [x] Create/delete branches
+    - [x] Create/delete tags
+    - [ ] Upload/download files (use hfutils for now)
+- [x] Configuration Management
+    - [x] Set/get configuration
+    - [x] List all configuration
+    - [x] Clear configuration
+- [x] Interactive TUI Mode
+    - [x] Menu-based interface
 - [ ] Administrative Features
-    - [ ] User administration
+    - [ ] User administration (create/delete users)
     - [ ] System statistics
     - [ ] Backup/restore utilities
+    - [ ] LFS garbage collection
 
 ## Documentation
 - [x] API.md (comprehensive API documentation)
+- [x] CLI.md (CLI design and usage documentation)
 - [x] README.md (getting started guide)
 - [x] TODO.md (this file)
+- [x] CONTRIBUTING.md (contributing guidelines)
 - [x] config-example.toml
+- [x] Documentation pages in Web UI
+    - [x] API documentation viewer
+    - [x] CLI documentation viewer
+    - [x] Roadmap viewer
+    - [x] Contributing guide viewer
 - [ ] Deployment guides
     - [ ] Production deployment best practices
     - [ ] Scaling guide
-    - [ ] Migration guide
+    - [ ] Migration guide from other hubs
+    - [ ] Backup/restore procedures
 - [ ] Developer documentation
-    - [ ] Architecture overview
-    - [ ] Contributing guidelines
+    - [ ] Architecture overview document
+    - [ ] Database schema documentation
     - [ ] API client development guide
 
 ## Testing & Quality

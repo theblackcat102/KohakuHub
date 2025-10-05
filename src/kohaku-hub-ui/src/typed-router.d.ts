@@ -31,7 +31,11 @@ declare module 'vue-router/auto-routes' {
     '/[username]/': RouteRecordInfo<'/[username]/', '/:username', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/[username]/[type]': RouteRecordInfo<'/[username]/[type]', '/:username/:type', { username: ParamValue<true>, type: ParamValue<true> }, { username: ParamValue<false>, type: ParamValue<false> }>,
     '/about': RouteRecordInfo<'/about', '/about', Record<never, never>, Record<never, never>>,
-    '/docs': RouteRecordInfo<'/docs', '/docs', Record<never, never>, Record<never, never>>,
+    '/contributing': RouteRecordInfo<'/contributing', '/contributing', Record<never, never>, Record<never, never>>,
+    '/docs/': RouteRecordInfo<'/docs/', '/docs', Record<never, never>, Record<never, never>>,
+    '/docs/api': RouteRecordInfo<'/docs/api', '/docs/api', Record<never, never>, Record<never, never>>,
+    '/docs/cli': RouteRecordInfo<'/docs/cli', '/docs/cli', Record<never, never>, Record<never, never>>,
+    '/docs/roadmap': RouteRecordInfo<'/docs/roadmap', '/docs/roadmap', Record<never, never>, Record<never, never>>,
     '/get-started': RouteRecordInfo<'/get-started', '/get-started', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
@@ -110,8 +114,24 @@ declare module 'vue-router/auto-routes' {
       routes: '/about'
       views: never
     }
-    'src/pages/docs.vue': {
-      routes: '/docs'
+    'src/pages/contributing.vue': {
+      routes: '/contributing'
+      views: never
+    }
+    'src/pages/docs/index.vue': {
+      routes: '/docs/'
+      views: never
+    }
+    'src/pages/docs/api.vue': {
+      routes: '/docs/api'
+      views: never
+    }
+    'src/pages/docs/cli.vue': {
+      routes: '/docs/cli'
+      views: never
+    }
+    'src/pages/docs/roadmap.vue': {
+      routes: '/docs/roadmap'
       views: never
     }
     'src/pages/get-started.vue': {

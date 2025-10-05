@@ -88,7 +88,7 @@
             </div>
 
             <el-button text class="w-full" @click="$router.push('/models')">
-              View all models →
+              View all models ->
             </el-button>
           </div>
         </div>
@@ -141,7 +141,7 @@
             </div>
 
             <el-button text class="w-full" @click="$router.push('/datasets')">
-              View all datasets →
+              View all datasets ->
             </el-button>
           </div>
         </div>
@@ -196,7 +196,7 @@
             </div>
 
             <el-button text class="w-full" @click="$router.push('/spaces')">
-              View all spaces →
+              View all spaces ->
             </el-button>
           </div>
         </div>

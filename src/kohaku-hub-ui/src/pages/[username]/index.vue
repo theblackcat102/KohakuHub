@@ -175,7 +175,7 @@
             <!-- Show More button -->
             <RouterLink :to="`/${username}/models`">
               <el-button v-if="hasMoreRepos('model')" text class="w-full">
-                Show all {{ getCount("model") }} models →
+                Show all {{ getCount("model") }} models ->
               </el-button>
             </RouterLink>
           </div>
@@ -262,7 +262,7 @@
             <!-- Show More button -->
             <RouterLink :to="`/${username}/datasets`">
               <el-button v-if="hasMoreRepos('dataset')" text class="w-full">
-                Show all {{ getCount("dataset") }} datasets →
+                Show all {{ getCount("dataset") }} datasets ->
               </el-button>
             </RouterLink>
           </div>
@@ -347,7 +347,7 @@
             <!-- Show More button -->
             <RouterLink :to="`/${username}/spaces`">
               <el-button v-if="hasMoreRepos('space')" text class="w-full">
-                Show all {{ getCount("space") }} spaces →
+                Show all {{ getCount("space") }} spaces ->
               </el-button>
             </RouterLink>
           </div>

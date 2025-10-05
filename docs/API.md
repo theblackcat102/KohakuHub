@@ -1,5 +1,7 @@
 # Kohaku Hub API Documentation
 
+*Last Updated: October 2025*
+
 This document explains how Kohaku Hub's API works, the data flow, and key endpoints.
 
 ## System Architecture
@@ -9,8 +11,8 @@ This document explains how Kohaku Hub's API works, the data flow, and key endpoi
 │                         Client Request                          │
 │                    (huggingface_hub Python)                     │
 └────────────────────────────────┬────────────────────────────────┘
-                                 │
-                                 ▼
+                                 |
+                                 v
 ┌─────────────────────────────────────────────────────────────────┐
 │                         FastAPI Layer                           │
 │                      (kohakuhub/api/*)                          │
@@ -20,10 +22,10 @@ This document explains how Kohaku Hub's API works, the data flow, and key endpoi
 │     │  .py     │  │   .py    │  │   .py    │  │   .py    │      │
 │     └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
 └────────────────────────────────┬────────────────────────────────┘
-                                 │
+                                 |
                     ┌────────────┼────────────┐
-                    │            │            │
-                    ▼            ▼            ▼
+                    |            |            |
+                    v            v            v
          ┌─────────────┐  ┌──────────┐  ┌─────────────┐
          │   LakeFS    │  │ SQLite/  │  │    MinIO    │
          │             │  │ Postgres │  │     (S3)    │
@@ -40,18 +42,18 @@ This document explains how Kohaku Hub's API works, the data flow, and key endpoi
 File Size Decision Tree:
 
          Is file > 10MB?
-              │
+              |
       ┌───────┴───────┐
-      │               │
+      |               |
      NO              YES
-      │               │
-      ▼               ▼
+      |               |
+      v               v
   ┌─────────┐    ┌─────────┐
   │ Regular │    │   LFS   │
   │  Mode   │    │  Mode   │
   └─────────┘    └─────────┘
-      │               │
-      ▼               ▼
+      |               |
+      v               v
   Base64 in      S3 Direct
    Commit         Upload
 ```
@@ -80,7 +82,7 @@ s3://hub-storage/
 
 ```
 ┌────────┐     ┌──────────┐     ┌─────────┐     ┌────────┐
-│ Client │────▶│ Preupload│────▶│ Upload  │────▶│ Commit │
+│ Client │---->│ Preupload│---->│ Upload  │---->│ Commit │
 └────────┘     └──────────┘     └─────────┘     └────────┘
    User          Check if         Upload          Atomic
   Request       file exists       file(s)         commit
@@ -211,7 +213,7 @@ Files are sent inline in the commit payload as base64.
 
 ```
 ┌────────┐                       ┌─────────┐
-│ Client │──── PUT file ────────>│   S3    │
+│ Client │---- PUT file -------->│   S3    │
 └────────┘   (presigned URL)     └─────────┘
               Direct upload       lfs/ab/cd/
               (no proxy!)         abcd123...
@@ -259,25 +261,25 @@ Files are sent inline in the commit payload as base64.
 ```
 1. Regular files:
    ┌─────────┐
-   │ Decode  │ Base64 → Binary
+   │ Decode  │ Base64 -> Binary
    └────┬────┘
-        │
-        ▼
+        |
+        v
    ┌─────────┐
    │ Upload  │ To LakeFS
    └────┬────┘
-        │
-        ▼
+        |
+        v
    ┌─────────┐
    │ Update  │ Database record
    └─────────┘
 
 2. LFS files:
    ┌─────────┐
-   │  Link   │ S3 physical address → LakeFS
+   │  Link   │ S3 physical address -> LakeFS
    └────┬────┘
-        │
-        ▼
+        |
+        v
    ┌─────────┐
    │ Update  │ Database record
    └─────────┘
@@ -640,6 +642,7 @@ When uploading LFS file:
 |----------|--------|------|-------------|
 | `/api/repos/create` | POST | ✓ | Create new repository |
 | `/api/repos/delete` | DELETE | ✓ | Delete repository |
+| `/api/repos/move` | POST | ✓ | Move/rename repository |
 | `/api/{type}s` | GET | ○ | List repositories (respects privacy) |
 | `/api/{type}s/{id}` | GET | ○ | Get repo info |
 | `/api/{type}s/{id}/tree/{rev}/{path}` | GET | ○ | List files |
@@ -665,6 +668,29 @@ When uploading LFS file:
 | `/{id}.git/info/lfs/objects/batch` | POST | ✓ | LFS batch API |
 | `/api/{id}.git/info/lfs/verify` | POST | ✓ | Verify upload |
 
+### Commit History
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/{type}s/{namespace}/{name}/commits/{branch}` | GET | ○ | List commits on a branch with pagination |
+
+### Branch and Tag Management
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/{type}s/{namespace}/{name}/branch` | POST | ✓ | Create a new branch |
+| `/{type}s/{namespace}/{name}/branch/{branch}` | DELETE | ✓ | Delete a branch |
+| `/{type}s/{namespace}/{name}/tag` | POST | ✓ | Create a new tag |
+| `/{type}s/{namespace}/{name}/tag/{tag}` | DELETE | ✓ | Delete a tag |
+
+### Settings Management
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/users/{username}/settings` | PUT | ✓ | Update user settings |
+| `/organizations/{org_name}/settings` | PUT | ✓ | Update organization settings |
+| `/{type}s/{namespace}/{name}/settings` | PUT | ✓ | Update repository settings (private, gated) |
+
 ### Authentication Operations
 
 | Endpoint | Method | Auth | Description |
@@ -676,17 +702,18 @@ When uploading LFS file:
 | `/api/auth/me` | GET | ✓ | Get current user info |
 | `/api/auth/tokens` | GET | ✓ | List user's API tokens |
 | `/api/auth/tokens/create` | POST | ✓ | Create new API token |
-| `/api/auth/tokens/{id}` | DELETE | ✓ | Revoke API token |
+| `/api/auth/tokens/{token_id}` | DELETE | ✓ | Revoke API token |
 
 ### Organization Operations
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/org/create` | POST | ✓ | Create new organization |
-| `/org/{name}` | GET | ✗ | Get organization details |
-| `/org/{name}/members` | POST | ✓ | Add member to organization |
-| `/org/{name}/members/{username}` | DELETE | ✓ | Remove member from organization |
-| `/org/{name}/members/{username}` | PUT | ✓ | Update member role |
+| `/org/{org_name}` | GET | ✗ | Get organization details |
+| `/org/{org_name}/members` | GET | ○ | List organization members |
+| `/org/{org_name}/members` | POST | ✓ | Add member to organization |
+| `/org/{org_name}/members/{username}` | DELETE | ✓ | Remove member from organization |
+| `/org/{org_name}/members/{username}` | PUT | ✓ | Update member role |
 | `/org/users/{username}/orgs` | GET | ✗ | List user's organizations |
 
 ### Utility Operations
@@ -694,7 +721,8 @@ When uploading LFS file:
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/validate-yaml` | POST | ✗ | Validate YAML content |
-| `/api/whoami-v2` | GET | ✓ | Get user info |
+| `/api/whoami-v2` | GET | ✓ | Get detailed current user info |
+| `/api/version` | GET | ✗ | Get API version information |
 | `/health` | GET | ✗ | Health check |
 | `/` | GET | ✗ | API information |
 
@@ -702,6 +730,348 @@ When uploading LFS file:
 - ✓ = Required
 - ○ = Optional (public repos)
 - ✗ = Not required
+
+---
+
+## Detailed Endpoint Documentation
+
+### Commit History API
+
+The commit history API allows you to retrieve the commit log for a specific branch in a repository.
+
+**Endpoint**: `GET /{repo_type}s/{namespace}/{name}/commits/{branch}`
+
+**Query Parameters**:
+- `page`: Page number for pagination (default: 1)
+- `limit`: Number of commits per page (default: 20)
+
+**Example Request**:
+```bash
+GET /models/myorg/mymodel/commits/main?page=1&limit=20
+```
+
+**Response**:
+```json
+{
+  "commits": [
+    {
+      "id": "abc123def456",
+      "message": "Update model config",
+      "author": "john@example.com",
+      "committer": "john@example.com",
+      "createdAt": "2025-10-05T12:00:00Z",
+      "parents": ["parent123"]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "hasMore": true
+  }
+}
+```
+
+### Branch and Tag Management
+
+#### Create Branch
+
+**Endpoint**: `POST /{repo_type}s/{namespace}/{name}/branch`
+
+**Request**:
+```json
+{
+  "branch": "feature-branch",
+  "startPoint": "main"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "branch": "feature-branch",
+  "ref": "refs/heads/feature-branch"
+}
+```
+
+#### Delete Branch
+
+**Endpoint**: `DELETE /{repo_type}s/{namespace}/{name}/branch/{branch}`
+
+**Example**: `DELETE /models/myorg/mymodel/branch/feature-branch`
+
+**Response**:
+```json
+{
+  "success": true,
+  "deleted": "feature-branch"
+}
+```
+
+**Note**: Cannot delete the default branch (usually `main`).
+
+#### Create Tag
+
+**Endpoint**: `POST /{repo_type}s/{namespace}/{name}/tag`
+
+**Request**:
+```json
+{
+  "tag": "v1.0.0",
+  "ref": "main",
+  "message": "Release version 1.0.0"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "tag": "v1.0.0",
+  "ref": "refs/tags/v1.0.0"
+}
+```
+
+#### Delete Tag
+
+**Endpoint**: `DELETE /{repo_type}s/{namespace}/{name}/tag/{tag}`
+
+**Example**: `DELETE /models/myorg/mymodel/tag/v1.0.0`
+
+**Response**:
+```json
+{
+  "success": true,
+  "deleted": "v1.0.0"
+}
+```
+
+### Settings Management
+
+#### Update User Settings
+
+**Endpoint**: `PUT /users/{username}/settings`
+
+**Request**:
+```json
+{
+  "email": "newemail@example.com",
+  "displayName": "John Doe",
+  "bio": "ML Engineer",
+  "website": "https://example.com"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "user": {
+    "username": "johndoe",
+    "email": "newemail@example.com",
+    "displayName": "John Doe"
+  }
+}
+```
+
+#### Update Organization Settings
+
+**Endpoint**: `PUT /organizations/{org_name}/settings`
+
+**Request**:
+```json
+{
+  "displayName": "My Organization",
+  "description": "Building amazing ML models",
+  "website": "https://example.com",
+  "avatar": "https://cdn.example.com/avatar.png"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "organization": {
+    "name": "my-org",
+    "displayName": "My Organization",
+    "description": "Building amazing ML models"
+  }
+}
+```
+
+#### Update Repository Settings
+
+**Endpoint**: `PUT /{repo_type}s/{namespace}/{name}/settings`
+
+**Request**:
+```json
+{
+  "private": true,
+  "gated": false,
+  "description": "A state-of-the-art language model",
+  "tags": ["nlp", "transformers", "llm"]
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "repository": {
+    "id": "myorg/mymodel",
+    "private": true,
+    "gated": false,
+    "description": "A state-of-the-art language model"
+  }
+}
+```
+
+**Privacy Options**:
+- `private: false` - Public repository, visible to everyone
+- `private: true` - Private repository, only visible to owner and organization members
+- `gated: true` - Requires explicit permission to access (for controlled releases)
+
+#### Move/Rename Repository
+
+**Endpoint**: `POST /api/repos/move`
+
+**Request**:
+```json
+{
+  "fromRepo": {
+    "type": "model",
+    "namespace": "oldorg",
+    "name": "oldname"
+  },
+  "toRepo": {
+    "type": "model",
+    "namespace": "neworg",
+    "name": "newname"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "url": "https://hub.example.com/models/neworg/newname",
+  "message": "Repository moved successfully"
+}
+```
+
+**What Happens**:
+1. Validates that source repository exists and user has permission
+2. Checks that destination doesn't already exist
+3. Updates LakeFS repository name
+4. Updates all database records
+5. Creates redirect from old URL to new URL
+
+**Note**: This operation is atomic - either everything succeeds or everything rolls back.
+
+### Version and Utility Endpoints
+
+#### Get API Version
+
+**Endpoint**: `GET /api/version`
+
+**Response**:
+```json
+{
+  "version": "1.0.0",
+  "apiVersion": "v1",
+  "lfsVersion": "2.0",
+  "features": {
+    "lfs": true,
+    "multipart": true,
+    "deduplication": true,
+    "organizations": true
+  },
+  "limits": {
+    "maxFileSize": 107374182400,
+    "lfsThreshold": 10485760
+  }
+}
+```
+
+#### Validate YAML
+
+**Endpoint**: `POST /api/validate-yaml`
+
+**Request**:
+```json
+{
+  "content": "model:\n  name: gpt-2\n  version: 1.0"
+}
+```
+
+**Response** (if valid):
+```json
+{
+  "valid": true,
+  "parsed": {
+    "model": {
+      "name": "gpt-2",
+      "version": "1.0"
+    }
+  }
+}
+```
+
+**Response** (if invalid):
+```json
+{
+  "valid": false,
+  "error": "Invalid YAML syntax at line 2: unexpected character",
+  "line": 2,
+  "column": 10
+}
+```
+
+**Use Case**: Validate README.md frontmatter, model card YAML, or configuration files before upload.
+
+#### Get Detailed User Info (whoami-v2)
+
+**Endpoint**: `GET /api/whoami-v2`
+
+**Response**:
+```json
+{
+  "type": "user",
+  "id": "12345",
+  "name": "johndoe",
+  "fullname": "John Doe",
+  "email": "john@example.com",
+  "emailVerified": true,
+  "canPay": true,
+  "isPro": false,
+  "periodEnd": null,
+  "avatarUrl": "https://cdn.example.com/avatars/johndoe.png",
+  "orgs": [
+    {
+      "name": "my-org",
+      "fullname": "My Organization",
+      "email": "contact@my-org.com",
+      "avatarUrl": "https://cdn.example.com/orgs/my-org.png",
+      "roleInOrg": "admin"
+    }
+  ],
+  "auth": {
+    "accessToken": {
+      "displayName": "API Token",
+      "role": "write"
+    }
+  }
+}
+```
+
+**Compared to `/api/auth/me`**: This endpoint provides more detailed information including:
+- Organization memberships with roles
+- Token information
+- Subscription/payment status
+- Email verification status
 
 ## Content Deduplication
 

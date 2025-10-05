@@ -230,7 +230,7 @@ Add a **Page Rule** or **Configuration Rule** to bypass cache for download endpo
 
 **Option 1: Page Rules (Classic)**
 
-1. Go to **Cloudflare Dashboard** → Your domain → **Rules** → **Page Rules**
+1. Go to **Cloudflare Dashboard** -> Your domain -> **Rules** -> **Page Rules**
 2. Click **Create Page Rule**
 3. Configure:
    - **URL Pattern**: \`your-domain.com/*/resolve/*\`
@@ -239,7 +239,7 @@ Add a **Page Rule** or **Configuration Rule** to bypass cache for download endpo
 
 **Option 2: Configuration Rules (Modern, Recommended)**
 
-1. Go to **Cloudflare Dashboard** → Your domain → **Rules** → **Configuration Rules**
+1. Go to **Cloudflare Dashboard** -> Your domain -> **Rules** -> **Configuration Rules**
 2. Click **Create Rule**
 3. Configure:
    - **Rule name**: Bypass cache for file downloads

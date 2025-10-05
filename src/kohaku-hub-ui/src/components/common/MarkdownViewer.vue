@@ -248,6 +248,23 @@ const renderedHTML = computed(() => {
   pointer-events: auto;
 }
 
+/* Style task list checkboxes */
+.markdown-body :deep(input[type="checkbox"].task-list-checkbox) {
+  margin-right: 0.5em;
+  vertical-align: middle;
+  pointer-events: none; /* Disabled checkboxes */
+}
+
+/* Style list items containing task list checkboxes */
+.markdown-body :deep(li:has(> input[type="checkbox"].task-list-checkbox)) {
+  list-style-type: none;
+}
+
+/* For browsers that don't support :has(), use a fallback */
+.markdown-body :deep(ul li input[type="checkbox"].task-list-checkbox) {
+  margin-left: -1.5em;
+}
+
 /* Ensure custom containers don't overflow */
 .markdown-body :deep(div),
 .markdown-body :deep(section),

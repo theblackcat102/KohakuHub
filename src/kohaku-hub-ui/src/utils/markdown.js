@@ -71,6 +71,42 @@ const md = new MarkdownIt({
 });
 
 /**
+ * Add support for GitHub-style task lists
+ * Converts - [ ] and - [x] to checkboxes
+ */
+md.core.ruler.after("inline", "task-lists", function (state) {
+  const tokens = state.tokens;
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== "inline") continue;
+
+    const children = tokens[i].children;
+    for (let j = 0; j < children.length; j++) {
+      const token = children[j];
+      if (token.type !== "text") continue;
+
+      const content = token.content;
+      // Match [ ] or [x] or [X] at the start of list items
+      const match = content.match(/^\[([ xX])\]\s+/);
+      if (!match) continue;
+
+      // Create checkbox element
+      const isChecked = match[1].toLowerCase() === "x";
+      const checkbox = new state.Token("html_inline", "", 0);
+      checkbox.content = `<input type="checkbox" disabled ${isChecked ? "checked" : ""} class="task-list-checkbox"> `;
+
+      // Create remaining text
+      const remainingText = new state.Token("text", "", 0);
+      remainingText.content = content.slice(match[0].length);
+
+      // Replace the token
+      children.splice(j, 1, checkbox, remainingText);
+      break;
+    }
+  }
+  return true;
+});
+
+/**
  * Sanitize HTML with blacklist approach
  * Allows most HTML/CSS but removes dangerous elements
  *
@@ -82,7 +118,7 @@ export function sanitizeHTML(html) {
 
   return DOMPurify.sanitize(html, {
     // Blacklist dangerous tags
-    // Note: We allow 'input' for radio-based image galleries
+    // Note: We allow 'input' for radio-based image galleries and task list checkboxes
     FORBID_TAGS: [
       "script",
       "iframe",
