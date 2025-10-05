@@ -14,9 +14,8 @@ import "element-plus/dist/index.css";
 // Import Element Plus dark theme
 import "element-plus/theme-chalk/dark/css-vars.css";
 
-// Import highlight.js theme for syntax highlighting
-import "highlight.js/styles/github.css"; // Light theme
-import "highlight.js/styles/github-dark.css"; // Dark theme
+// Import custom highlight.js theme for syntax highlighting (supports light and dark modes)
+import "./styles/highlight-theme.css";
 
 const app = createApp(App);
 const pinia = createPinia();

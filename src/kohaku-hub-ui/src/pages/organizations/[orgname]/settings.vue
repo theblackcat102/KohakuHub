@@ -74,7 +74,7 @@
                   <el-dropdown
                     @command="(role) => handleUpdateRole(member, role)"
                   >
-                    <el-button size="small" type="primary" text>
+                    <el-button size="small" type="primary">
                       Change Role
                       <div class="i-carbon-chevron-down ml-1" />
                     </el-button>

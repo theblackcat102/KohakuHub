@@ -105,6 +105,7 @@
               @click="downloadRepo"
               size="small"
               class="w-full sm:w-auto m-0 sm:m-1"
+              plain
             >
               <div class="i-carbon-document-download inline-block mr-1" />
               Download
@@ -115,6 +116,7 @@
               @click="navigateToSettings"
               size="small"
               class="w-full sm:w-auto m-0 sm:m-1"
+              plain
             >
               <div class="i-carbon-settings inline-block mr-1" />
               Settings
@@ -398,7 +400,11 @@
 
             <!-- Load More Button -->
             <div v-if="commitsHasMore" class="text-center pt-4">
-              <el-button @click="loadMoreCommits" :loading="commitsLoading">
+              <el-button
+                @click="loadMoreCommits"
+                :loading="commitsLoading"
+                plain
+              >
                 Load More Commits
               </el-button>
             </div>

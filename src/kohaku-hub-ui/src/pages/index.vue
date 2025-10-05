@@ -23,8 +23,7 @@
           <div class="w-0 h-0 p-0 m-0"></div>
           <el-button
             size="large"
-            plain
-            class="!text-white !border-white !border-2 hover:!bg-white/20 !font-semibold"
+            class="!bg-transparent !text-white !border-white !border-2 hover:!bg-white/20 !font-semibold"
             @click="$router.push('/self-hosted')"
           >
             Host Your Own Hub
@@ -87,7 +86,7 @@
               </div>
             </div>
 
-            <el-button text class="w-full" @click="$router.push('/models')">
+            <el-button class="w-full" @click="$router.push('/models')">
               View all models ->
             </el-button>
           </div>
@@ -140,7 +139,7 @@
               </div>
             </div>
 
-            <el-button text class="w-full" @click="$router.push('/datasets')">
+            <el-button class="w-full" @click="$router.push('/datasets')">
               View all datasets ->
             </el-button>
           </div>
@@ -195,7 +194,7 @@
               </div>
             </div>
 
-            <el-button text class="w-full" @click="$router.push('/spaces')">
+            <el-button class="w-full" @click="$router.push('/spaces')">
               View all spaces ->
             </el-button>
           </div>

@@ -9,7 +9,7 @@ const error = ref(null);
 onMounted(async () => {
   try {
     // Fetch the CLI.md file from the docs directory
-    const response = await fetch("/docs/CLI.md");
+    const response = await fetch("/documentation/CLI.md");
     if (!response.ok) {
       throw new Error("Failed to load documentation");
     }

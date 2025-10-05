@@ -9,7 +9,7 @@ const error = ref(null);
 onMounted(async () => {
   try {
     // Fetch the TODO.md file from the docs directory
-    const response = await fetch("/docs/TODO.md");
+    const response = await fetch("/documentation/TODO.md");
     if (!response.ok) {
       throw new Error("Failed to load documentation");
     }

@@ -11,7 +11,7 @@ const path = require('path');
 // Define paths relative to the script location
 const rootDir = path.join(__dirname, '..', '..', '..');
 const publicDir = path.join(__dirname, '..', 'public');
-const docsPublicDir = path.join(publicDir, 'docs');
+const docsPublicDir = path.join(publicDir, 'documentation');
 
 // Documentation files to copy
 const filesToCopy = [

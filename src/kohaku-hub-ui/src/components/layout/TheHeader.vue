@@ -114,7 +114,7 @@
         </template>
 
         <template v-else>
-          <el-button @click="$router.push('/login')" text> Login </el-button>
+          <el-button @click="$router.push('/login')" plain> Login </el-button>
           <el-button type="primary" @click="$router.push('/register')">
             Sign Up
           </el-button>
@@ -323,6 +323,7 @@
               "
               size="large"
               class="w-full"
+              plain
             >
               Login
             </el-button>

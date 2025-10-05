@@ -9,7 +9,7 @@ const error = ref(null);
 onMounted(async () => {
   try {
     // Fetch the API.md file from the docs directory
-    const response = await fetch("/docs/API.md");
+    const response = await fetch("/documentation/API.md");
     if (!response.ok) {
       throw new Error("Failed to load documentation");
     }
