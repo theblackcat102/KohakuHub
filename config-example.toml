@@ -38,3 +38,5 @@ debug_log_payloads = true
 # LFS Garbage Collection settings
 lfs_keep_versions = 5  # Keep last K versions of each LFS file
 lfs_auto_gc = true  # Automatically delete old LFS objects on commit
+# Site identification
+site_name = "KohakuHub"  # Customizable site name (e.g., "MyCompany Hub")

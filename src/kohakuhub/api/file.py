@@ -509,6 +509,7 @@ async def commit(
 
     # Process operations
     files_changed = False  # Track if any files actually changed
+    pending_lfs_tracking = []  # Track LFS objects to record in history after commit
 
     for op in operations:
         key = op["key"]
@@ -698,35 +699,15 @@ async def commit(
 
             logger.success(f"Updated database record for LFS file: {path}")
 
-            # NOW delete the old LFS object if it exists and is not used elsewhere
-            if old_lfs_oid:
-                # Check if this OID is still used by other files (deduplication check)
-                other_uses = (
-                    File.select()
-                    .where((File.sha256 == old_lfs_oid) & (File.lfs == True))
-                    .count()
-                )
-
-                if other_uses == 0:
-                    # Safe to delete - not used anywhere
-                    old_lfs_key = (
-                        f"lfs/{old_lfs_oid[:2]}/{old_lfs_oid[2:4]}/{old_lfs_oid}"
-                    )
-                    try:
-                        from .s3_utils import get_s3_client
-
-                        s3_client = get_s3_client()
-                        s3_client.delete_object(Bucket=cfg.s3.bucket, Key=old_lfs_key)
-                        logger.success(f"Deleted old LFS object: {old_lfs_key}")
-                    except Exception as e:
-                        # Log but don't fail - the new file is already linked successfully
-                        logger.warning(
-                            f"Failed to delete old LFS object {old_lfs_key}: {e}"
-                        )
-                else:
-                    logger.success(
-                        f"Keeping old LFS object {old_lfs_oid} - still used by {other_uses} file(s)"
-                    )
+            # Track this LFS object for GC after commit
+            pending_lfs_tracking.append(
+                {
+                    "path": path,
+                    "sha256": oid,
+                    "size": size,
+                    "old_sha256": old_lfs_oid,
+                }
+            )
 
         elif key == "deletedFile":
             # Delete a single file
@@ -966,6 +947,32 @@ async def commit(
     # Generate commit URL
     commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result.id}"
     logger.success(f"Commit URL: {commit_url}")
+
+    # Now that we have commit_id, track LFS objects and run GC
+    if pending_lfs_tracking:
+        from .gc_utils import track_lfs_object, run_gc_for_file
+
+        for lfs_info in pending_lfs_tracking:
+            # Track the new LFS object in history
+            track_lfs_object(
+                repo_full_id=repo_id,
+                path_in_repo=lfs_info["path"],
+                sha256=lfs_info["sha256"],
+                size=lfs_info["size"],
+                commit_id=commit_result.id,
+            )
+
+            # Run GC for this file if enabled
+            if cfg.app.lfs_auto_gc and lfs_info.get("old_sha256"):
+                deleted_count = run_gc_for_file(
+                    repo_full_id=repo_id,
+                    path_in_repo=lfs_info["path"],
+                    current_commit_id=commit_result.id,
+                )
+                if deleted_count > 0:
+                    logger.info(
+                        f"GC: Cleaned up {deleted_count} old version(s) of {lfs_info['path']}"
+                    )
 
     return {
         "commitUrl": commit_url,

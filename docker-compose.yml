@@ -42,6 +42,10 @@ services:
       - KOHAKU_HUB_BASE_URL=http://127.0.0.1:28080 # Web UI will proxy requests to hub-api, we use hub-ui url here
       - KOHAKU_HUB_DB_BACKEND=postgres
       - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/hubdb # Linking to the 'postgres' service
+      - KOHAKU_HUB_LFS_THRESHOLD_BYTES=1000000
+      - KOHAKU_HUB_LFS_KEEP_VERSIONS=5
+      - KOHAKU_HUB_LFS_AUTO_GC=true
+      - KOHAKU_HUB_SITE_NAME=KohakuHub
       ## SMTP Configuration (Email Verification - Optional)
       - KOHAKU_HUB_SMTP_ENABLED=false
       - KOHAKU_HUB_SMTP_HOST=smtp.gmail.com

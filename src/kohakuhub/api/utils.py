@@ -26,9 +26,12 @@ def get_version():
     Returns:
         Site identification and version information
     """
+    from ..config import cfg
+
     return {
         "site": "kohakuhub",
         "version": "0.0.1",
+        "name": cfg.app.site_name,
     }
 
 
@@ -86,6 +89,8 @@ def whoami_v2(user: User = Depends(get_optional_user)):
             }
         )
 
+    from ..config import cfg
+
     return {
         "type": "user",
         "id": str(user.id),
@@ -99,5 +104,11 @@ def whoami_v2(user: User = Depends(get_optional_user)):
         "auth": {
             "type": "access_token",
             "accessToken": {"displayName": "Auto-generated token", "role": "write"},
+        },
+        # KohakuHub-specific fields
+        "site": {
+            "name": cfg.app.site_name,  # Configurable site name
+            "api": "kohakuhub",  # Hardcoded API identifier
+            "version": "0.0.1",  # Hardcoded version
         },
     }

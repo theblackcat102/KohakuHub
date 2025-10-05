@@ -52,6 +52,8 @@ class AppConfig(BaseModel):
     # LFS Garbage Collection settings
     lfs_keep_versions: int = 5  # Keep last K versions of each file
     lfs_auto_gc: bool = False  # Auto-delete old LFS objects on commit
+    # Site identification
+    site_name: str = "KohakuHub"  # Configurable site name (e.g., "MyCompany Hub")
 
 
 class Config(BaseModel):
@@ -117,6 +119,10 @@ def load_config(path: str = None) -> Config:
             lfs_threshold_bytes=int(
                 os.environ.get("KOHAKU_HUB_LFS_THRESHOLD_BYTES", "10000000")
             ),
+            lfs_keep_versions=int(os.environ.get("KOHAKU_HUB_LFS_KEEP_VERSIONS", "5")),
+            lfs_auto_gc=os.environ.get("KOHAKU_HUB_LFS_AUTO_GC", "false").lower()
+            == "true",
+            site_name=os.environ.get("KOHAKU_HUB_SITE_NAME", "KohakuHub"),
         )
 
         return Config(

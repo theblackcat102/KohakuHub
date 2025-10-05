@@ -294,10 +294,22 @@
               </p>
             </div>
             <template v-else>
+              <!-- Header Row (desktop only) -->
+              <div
+                class="hidden md:grid md:grid-cols-[auto_1fr_120px_150px] gap-3 py-2 px-2 text-sm font-medium text-gray-600 dark:text-gray-400 border-b"
+              >
+                <div></div>
+                <!-- Icon column -->
+                <div>Name</div>
+                <div class="text-right">Size</div>
+                <div class="text-right">Last Modified</div>
+              </div>
+
+              <!-- File Rows -->
               <div
                 v-for="file in filteredFiles"
                 :key="file.path"
-                class="py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 px-2 cursor-pointer transition-colors"
+                class="py-3 grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_1fr_120px_150px] gap-3 items-center hover:bg-gray-50 dark:hover:bg-gray-700 px-2 cursor-pointer transition-colors"
                 @click="handleFileClick(file)"
               >
                 <div
@@ -308,13 +320,20 @@
                   "
                   class="text-xl flex-shrink-0"
                 />
-                <div class="flex-1 min-w-0">
+                <div class="min-w-0">
                   <div class="font-medium truncate">
                     {{ getFileName(file.path) }}
                   </div>
                 </div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
+                <div
+                  class="text-sm text-gray-500 dark:text-gray-400 text-right"
+                >
                   {{ formatSize(file.size) }}
+                </div>
+                <div
+                  class="hidden md:block text-sm text-gray-500 dark:text-gray-400 text-right"
+                >
+                  {{ formatLastModified(file.lastModified) }}
                 </div>
               </div>
 
@@ -432,6 +451,10 @@
             <div>
               <span class="text-gray-600 dark:text-gray-400">Created:</span>
               <span class="ml-2">{{ formatDate(repoInfo?.createdAt) }}</span>
+            </div>
+            <div v-if="repoInfo?.lastModified">
+              <span class="text-gray-600 dark:text-gray-400">Updated:</span>
+              <span class="ml-2">{{ formatDate(repoInfo?.lastModified) }}</span>
             </div>
             <div v-if="repoInfo?.sha">
               <span class="text-gray-600 dark:text-gray-400">Commit:</span>
@@ -551,6 +574,7 @@ const pathSegments = computed(() => {
 });
 
 const filteredFiles = computed(() => {
+  // Backend now provides folder stats, so just filter
   if (!fileSearchQuery.value) return fileTree.value;
 
   const query = fileSearchQuery.value.toLowerCase();
@@ -580,6 +604,15 @@ function formatSize(bytes) {
   if (bytes < 1024 * 1024 * 1024)
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+}
+
+function formatLastModified(dateString) {
+  if (!dateString) return "-";
+  try {
+    return dayjs(dateString).fromNow();
+  } catch (e) {
+    return "-";
+  }
 }
 
 function getFileName(path) {

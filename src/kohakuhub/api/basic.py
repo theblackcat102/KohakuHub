@@ -468,17 +468,53 @@ async def list_repo_tree(
             # Remove prefix from path to get relative path
             relative_path = obj.path[prefix_len:] if prefix else obj.path
 
+            # Calculate folder stats by listing its contents recursively
+            folder_size = 0
+            folder_latest_mtime = None
+
+            try:
+                # List all objects in this folder recursively
+                folder_contents = await async_client.list_objects(
+                    repository=lakefs_repo,
+                    ref=revision,
+                    prefix=obj.path,  # Use full path as prefix
+                    delimiter="",  # No delimiter = recursive
+                    amount=1000,
+                )
+
+                # Calculate total size and find latest modification
+                for child_obj in folder_contents.results:
+                    if child_obj.path_type == "object":
+                        folder_size += child_obj.size_bytes or 0
+                        if hasattr(child_obj, "mtime") and child_obj.mtime:
+                            if (
+                                folder_latest_mtime is None
+                                or child_obj.mtime > folder_latest_mtime
+                            ):
+                                folder_latest_mtime = child_obj.mtime
+
+            except Exception as e:
+                logger.debug(
+                    f"Could not calculate stats for folder {obj.path}: {str(e)}"
+                )
+
             dir_obj = {
                 "type": "directory",
                 "oid": (
                     obj.checksum if hasattr(obj, "checksum") and obj.checksum else ""
                 ),
-                "size": 0,
+                "size": folder_size,
                 "path": relative_path.rstrip("/"),  # Remove trailing slash
             }
 
-            # Add last modified info if available
-            if hasattr(obj, "mtime") and obj.mtime:
+            # Add last modified info
+            if folder_latest_mtime:
+                from datetime import datetime
+
+                dir_obj["lastModified"] = datetime.fromtimestamp(
+                    folder_latest_mtime
+                ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            elif hasattr(obj, "mtime") and obj.mtime:
                 from datetime import datetime
 
                 dir_obj["lastModified"] = datetime.fromtimestamp(obj.mtime).strftime(
