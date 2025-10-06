@@ -6,6 +6,27 @@ const router = useRouter();
 
 const docs = [
   {
+    title: "Setup Guide",
+    description:
+      "Step-by-step installation and configuration guide. Learn how to deploy KohakuHub with Docker and customize it for your needs.",
+    path: "/docs/setup",
+    icon: "i-carbon-rocket",
+  },
+  {
+    title: "Deployment Architecture",
+    description:
+      "Understanding KohakuHub's architecture, port configuration, and nginx reverse proxy setup. Essential for production deployments.",
+    path: "/docs/deployment",
+    icon: "i-carbon-cloud",
+  },
+  {
+    title: "Port Reference",
+    description:
+      "Quick reference guide for all ports used by KohakuHub services. Know which port to use for what.",
+    path: "/docs/ports",
+    icon: "i-carbon-network-3",
+  },
+  {
     title: "API Documentation",
     description:
       "Learn about KohakuHub's API, data flow, and key endpoints. Includes detailed workflow diagrams for uploads, downloads, and repository management.",
@@ -20,17 +41,10 @@ const docs = [
     icon: "i-carbon-terminal",
   },
   {
-    title: "Project Roadmap",
+    title: "Contributing & Roadmap",
     description:
-      "Current development status and planned features. See what's already implemented and what's coming next for KohakuHub.",
-    path: "/docs/roadmap",
-    icon: "i-carbon-roadmap",
-  },
-  {
-    title: "Contributing Guide",
-    description:
-      "Want to contribute to KohakuHub? Learn how to set up your development environment, code style guidelines, and the pull request process.",
-    path: "/contributing",
+      "Want to contribute? Learn how to set up, code style guidelines, and see the project roadmap with current status and planned features.",
+    path: "/docs/contributing",
     icon: "i-carbon-collaborate",
   },
 ];

@@ -24,12 +24,20 @@ const filesToCopy = [
     dest: path.join(docsPublicDir, 'CLI.md'),
   },
   {
-    source: path.join(rootDir, 'docs', 'TODO.md'),
-    dest: path.join(docsPublicDir, 'TODO.md'),
+    source: path.join(rootDir, 'docs', 'setup.md'),
+    dest: path.join(docsPublicDir, 'setup.md'),
+  },
+  {
+    source: path.join(rootDir, 'docs', 'deployment.md'),
+    dest: path.join(docsPublicDir, 'deployment.md'),
+  },
+  {
+    source: path.join(rootDir, 'docs', 'ports.md'),
+    dest: path.join(docsPublicDir, 'ports.md'),
   },
   {
     source: path.join(rootDir, 'CONTRIBUTING.md'),
-    dest: path.join(publicDir, 'CONTRIBUTING.md'),
+    dest: path.join(docsPublicDir, 'contributing.md'),
   },
 ];
 

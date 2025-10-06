@@ -35,7 +35,10 @@ declare module 'vue-router/auto-routes' {
     '/docs/': RouteRecordInfo<'/docs/', '/docs', Record<never, never>, Record<never, never>>,
     '/docs/api': RouteRecordInfo<'/docs/api', '/docs/api', Record<never, never>, Record<never, never>>,
     '/docs/cli': RouteRecordInfo<'/docs/cli', '/docs/cli', Record<never, never>, Record<never, never>>,
-    '/docs/roadmap': RouteRecordInfo<'/docs/roadmap', '/docs/roadmap', Record<never, never>, Record<never, never>>,
+    '/docs/contributing': RouteRecordInfo<'/docs/contributing', '/docs/contributing', Record<never, never>, Record<never, never>>,
+    '/docs/deployment': RouteRecordInfo<'/docs/deployment', '/docs/deployment', Record<never, never>, Record<never, never>>,
+    '/docs/ports': RouteRecordInfo<'/docs/ports', '/docs/ports', Record<never, never>, Record<never, never>>,
+    '/docs/setup': RouteRecordInfo<'/docs/setup', '/docs/setup', Record<never, never>, Record<never, never>>,
     '/get-started': RouteRecordInfo<'/get-started', '/get-started', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
@@ -130,8 +133,20 @@ declare module 'vue-router/auto-routes' {
       routes: '/docs/cli'
       views: never
     }
-    'src/pages/docs/roadmap.vue': {
-      routes: '/docs/roadmap'
+    'src/pages/docs/contributing.vue': {
+      routes: '/docs/contributing'
+      views: never
+    }
+    'src/pages/docs/deployment.vue': {
+      routes: '/docs/deployment'
+      views: never
+    }
+    'src/pages/docs/ports.vue': {
+      routes: '/docs/ports'
+      views: never
+    }
+    'src/pages/docs/setup.vue': {
+      routes: '/docs/setup'
       views: never
     }
     'src/pages/get-started.vue': {

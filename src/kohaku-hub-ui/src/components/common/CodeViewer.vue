@@ -18,7 +18,16 @@
       </el-button>
     </div>
 
-    <div class="code-container" v-html="highlightedCode" />
+    <div class="code-container">
+      <table class="code-table">
+        <tbody>
+          <tr v-for="(line, index) in codeLines" :key="index" class="code-line">
+            <td class="line-number">{{ index + 1 }}</td>
+            <td class="line-content" v-html="line"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -92,7 +101,7 @@ const props = defineProps({
   },
 });
 
-const highlightedCode = ref("");
+const codeLines = ref([]);
 
 const lineCount = computed(() => {
   return props.code ? props.code.split("\n").length : 0;
@@ -101,17 +110,21 @@ const lineCount = computed(() => {
 function highlightCode() {
   try {
     const lang = props.language || "text";
+    let highlighted = "";
 
     if (hljs.getLanguage(lang)) {
       const result = hljs.highlight(props.code, { language: lang });
-      highlightedCode.value = `<pre><code class="hljs language-${lang}">${result.value}</code></pre>`;
+      highlighted = result.value;
     } else {
       // Fallback to plain text
-      highlightedCode.value = `<pre><code class="hljs">${escapeHtml(props.code)}</code></pre>`;
+      highlighted = escapeHtml(props.code);
     }
+
+    // Split into lines for line numbering
+    codeLines.value = highlighted.split("\n");
   } catch (error) {
     console.error("Failed to highlight code:", error);
-    highlightedCode.value = `<pre><code class="hljs">${escapeHtml(props.code)}</code></pre>`;
+    codeLines.value = escapeHtml(props.code).split("\n");
   }
 }
 
@@ -156,51 +169,77 @@ onMounted(() => {
   border-color: #30363d;
 }
 
-.code-container :deep(pre) {
-  margin: 0;
-  padding: 16px;
-  background-color: #ffffff !important;
-  border-radius: 6px;
-}
-
-.dark .code-container :deep(pre) {
-  background-color: #0d1117 !important;
-}
-
-.code-container :deep(code) {
+.code-table {
+  width: 100%;
+  border-collapse: collapse;
   font-family:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
   font-size: 11px;
   line-height: 1.5;
-  background: transparent !important;
-  padding: 0 !important;
-  color: #24292f;
+  background-color: #ffffff;
 }
 
 @media (min-width: 640px) {
-  .code-container :deep(code) {
+  .code-table {
     font-size: 12px;
   }
 }
 
 @media (min-width: 768px) {
-  .code-container :deep(code) {
+  .code-table {
     font-size: 14px;
   }
 }
 
-.dark .code-container :deep(code) {
-  color: #c9d1d9;
+.dark .code-table {
+  background-color: #0d1117;
 }
 
-.code-container :deep(.hljs) {
-  background: transparent !important;
-  padding: 0 !important;
+.code-line {
+  vertical-align: top;
+}
+
+.line-number {
+  padding: 0 8px;
+  text-align: right;
+  user-select: none;
+  color: #6e7781;
+  background-color: #f6f8fa;
+  border-right: 1px solid #d0d7de;
+  min-width: 40px;
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: top;
+  font-size: 11px;
+}
+
+@media (min-width: 640px) {
+  .line-number {
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  .line-number {
+    font-size: 13px;
+  }
+}
+
+.dark .line-number {
+  color: #8b949e;
+  background-color: #161b22;
+  border-right-color: #30363d;
+}
+
+.line-content {
+  padding: 0 12px;
+  white-space: pre;
   color: #24292f;
+  width: 99%;
 }
 
-.dark .code-container :deep(.hljs) {
+.dark .line-content {
   color: #c9d1d9;
 }
 
