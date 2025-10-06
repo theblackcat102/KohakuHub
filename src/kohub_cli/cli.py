@@ -1424,7 +1424,7 @@ def interactive(ctx):
     # Override with any provided options
     if ctx.obj.get("client"):
         client = ctx.obj["client"]
-        if client.endpoint != "http://localhost:8000":
+        if client.endpoint != "http://localhost:28080":
             state.client.endpoint = client.endpoint
         if client.token:
             state.client.token = client.token

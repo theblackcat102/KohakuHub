@@ -7,7 +7,7 @@ Example:
     from kohub_cli import KohubClient
 
     # Initialize client
-    client = KohubClient(endpoint="http://localhost:8000")
+    client = KohubClient(endpoint="http://localhost:28080")
 
     # Login
     client.login(username="alice", password="secret")

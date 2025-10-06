@@ -174,10 +174,10 @@ class Config:
         Returns endpoint from:
         1. HF_ENDPOINT environment variable
         2. Config file
-        3. Default: http://localhost:8000
+        3. Default: http://localhost:28080 (nginx reverse proxy)
         """
         return os.environ.get("HF_ENDPOINT") or self.get(
-            "endpoint", "http://localhost:8000"
+            "endpoint", "http://localhost:28080"
         )
 
     @endpoint.setter
