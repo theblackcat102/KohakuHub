@@ -127,12 +127,15 @@ We welcome feature suggestions! Please:
 
 ### Backend (Python)
 
-We follow **PEP 8** with some modifications:
-- **Line length**: 100 characters (not 79)
-- **Import order**: stdlib → third-party → local
-- **Type hints**: **Encouraged** but not required - use type hints for function signatures where helpful
-- **No mypy**: We don't enforce static type checking with mypy, but type hints improve code readability
-- **Docstrings**: Use Google-style docstrings for public APIs
+Follow the guidelines in [CLAUDE.md](./CLAUDE.md):
+- **Modern Python**: Use match-case, async/await, type hints
+- **Import order**: builtin → 3rd party → our package (alphabetical)
+- **Type hints**: Use native types (`dict` not `Dict`)
+- **Clean code**: Split large functions into smaller ones
+- **Async operations**: Use dedicated threadpools (S3/LakeFS/DB)
+  - S3 operations → `run_in_s3_executor()`
+  - LakeFS operations → `run_in_lakefs_executor()`
+  - DB operations → `db_async` module wrappers
 
 ```python
 from typing import Optional
@@ -161,12 +164,13 @@ def create_repository(
 
 ### Frontend (Vue 3 + JavaScript)
 
-- **Language**: **JavaScript only** (no TypeScript)
-- **Type hints**: **Encouraged** - use JSDoc style comments for type information
-- **Component naming**: PascalCase for components, kebab-case in templates
+Follow the guidelines in [CLAUDE.md](./CLAUDE.md):
+- **JavaScript only** - No TypeScript, use JSDoc for type hints
+- **Split reusable components** - One component per file
+- **Dark/light mode** - Implement both at once
+- **Mobile responsive** - Consider auto-break lines
 - **Composition API**: Use `<script setup>` syntax
-- **Styling**: Use UnoCSS utility classes
-- **File structure**: One component per file
+- **Styling**: UnoCSS utility classes
 
 ```vue
 <script setup>
