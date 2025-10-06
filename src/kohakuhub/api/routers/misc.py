@@ -61,7 +61,7 @@ def validate_yaml(body: ValidateYamlPayload):
 
 
 @router.get("/whoami-v2")
-def whoami_v2(user: User = Depends(get_optional_user)):
+def whoami_v2(user: User | None = Depends(get_optional_user)):
     """Get current user information (HuggingFace compatible).
 
     Matches HuggingFace Hub /api/whoami-v2 endpoint format.

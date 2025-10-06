@@ -179,7 +179,7 @@ async def get_revision(
     name: str,
     revision: str,
     expand: Optional[str] = None,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """Get revision information for a repository.
 
@@ -270,7 +270,7 @@ async def _get_file_metadata(
     name: str,
     revision: str,
     path: str,
-    user: User,
+    user: User | None,
 ):
     """Shared logic to get file metadata for HEAD/GET requests."""
     repo_id = f"{namespace}/{name}"
@@ -359,7 +359,7 @@ async def resolve_file_head(
     name: str,
     revision: str,
     path: str,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """Get file metadata (HEAD request).
 
@@ -383,7 +383,7 @@ async def resolve_file_get(
     name: str,
     revision: str,
     path: str,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """Download file (GET request).
 

@@ -24,7 +24,7 @@ async def list_commits(
     branch: str = "main",
     limit: int = Query(20, ge=1, le=100),
     after: Optional[str] = None,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """List commits for a repository branch.
 

@@ -34,7 +34,7 @@ async def list_repo_tree(
     path: str = "",
     recursive: bool = False,
     expand: bool = False,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """List repository file tree.
 
@@ -248,7 +248,7 @@ async def get_paths_info(
     revision: str,
     paths: List[str] = Form(...),
     expand: bool = Form(False),
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """Get information about specific paths in a repository.
 

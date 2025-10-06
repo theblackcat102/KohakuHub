@@ -87,7 +87,7 @@ async def lfs_batch(
     name: str,
     request: Request,
     repo_type: Optional[str] = "model",
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """Git LFS Batch API endpoint.
 

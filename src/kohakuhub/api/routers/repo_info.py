@@ -31,7 +31,7 @@ async def get_repo_info(
     namespace: str,
     repo_name: str,
     request: Request,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """Get repository information (without revision).
 
@@ -189,7 +189,7 @@ async def list_repos(
     author: Optional[str] = None,
     limit: int = Query(50, ge=1, le=1000),
     request: Request = None,
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """List repositories of a specific type.
 
@@ -282,7 +282,7 @@ async def list_repos(
 async def list_user_repos(
     username: str,
     limit: int = Query(100, ge=1, le=1000),
-    user: User = Depends(get_optional_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """List all repositories for a specific user/namespace.
 
