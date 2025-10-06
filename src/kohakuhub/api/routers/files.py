@@ -44,6 +44,119 @@ class RepoType(str, Enum):
 # ========== Preupload Endpoint ==========
 
 
+async def check_file_by_sha256(repo_id: str, path: str, sha256: str, size: int) -> bool:
+    """Check if file with same SHA256 and size already exists.
+
+    Args:
+        repo_id: Repository ID
+        path: File path
+        sha256: SHA256 hash
+        size: File size
+
+    Returns:
+        True if file should be ignored (already exists), False otherwise
+    """
+    existing = await get_file(repo_id, path)
+    if existing and existing.sha256 == sha256 and existing.size == size:
+        return True
+    return False
+
+
+async def check_file_by_sample(
+    repo_id: str, path: str, sample: str, size: int, lakefs_repo: str, revision: str
+) -> bool:
+    """Check if file with same content already exists by comparing sample.
+
+    Args:
+        repo_id: Repository ID
+        path: File path
+        sample: Base64 encoded sample content
+        size: File size
+        lakefs_repo: LakeFS repository name
+        revision: Branch name
+
+    Returns:
+        True if file should be ignored (already exists), False otherwise
+    """
+    try:
+        # Decode the sample
+        sample_data = base64.b64decode(sample)
+        sample_sha256 = hashlib.sha256(sample_data).hexdigest()
+
+        # Try to get existing file from LakeFS
+        try:
+            async_client = get_async_lakefs_client()
+            obj_stat = await async_client.stat_object(
+                repository=lakefs_repo, ref=revision, path=path
+            )
+
+            # If file exists and size matches, download and compare
+            if obj_stat.size_bytes == size:
+                # Get the actual content to compare
+                try:
+                    obj_content = await async_client.get_object(
+                        repository=lakefs_repo, ref=revision, path=path
+                    )
+                    # Read the content
+                    existing_data = obj_content.read()
+                    existing_sha256 = hashlib.sha256(existing_data).hexdigest()
+
+                    # If content matches, skip upload
+                    if existing_sha256 == sample_sha256:
+                        return True
+                except Exception:
+                    # If can't read content, assume changed
+                    pass
+        except Exception:
+            # File doesn't exist, need to upload
+            pass
+    except Exception as e:
+        logger.warning(f"Failed to decode sample for {path}: {e}")
+
+    return False
+
+
+async def process_preupload_file(
+    file_info: dict, repo_id: str, lakefs_repo: str, revision: str, threshold: int
+) -> dict:
+    """Process single file for preupload check.
+
+    Args:
+        file_info: File metadata dict
+        repo_id: Repository ID
+        lakefs_repo: LakeFS repository name
+        revision: Branch name
+        threshold: LFS size threshold
+
+    Returns:
+        Preupload result dict with path, uploadMode, shouldIgnore
+    """
+    path = file_info.get("path") or file_info.get("path_in_repo")
+    size = int(file_info.get("size") or 0)
+    sha256 = file_info.get("sha256", "")
+    sample = file_info.get("sample", "")
+
+    # Determine upload mode based on size
+    upload_mode = "lfs" if size >= threshold else "regular"
+    should_ignore = False
+
+    # Check for existing file with same content
+    if sha256:
+        # If sha256 provided, use it for comparison (most reliable)
+        should_ignore = await check_file_by_sha256(repo_id, path, sha256, size)
+    elif sample and upload_mode == "regular":
+        # For small files, compare sample content if no sha256 provided
+        should_ignore = await check_file_by_sample(
+            repo_id, path, sample, size, lakefs_repo, revision
+        )
+
+    return {
+        "path": path,
+        "uploadMode": upload_mode,
+        "shouldIgnore": should_ignore,
+    }
+
+
 @router.post("/{repo_type}s/{namespace}/{name}/preupload/{revision}")
 async def preupload(
     repo_type: RepoType,
@@ -95,73 +208,18 @@ async def preupload(
     if not isinstance(files, list):
         raise HTTPException(400, detail={"error": "Missing or invalid 'files' array"})
 
-    # Get LakeFS client to check existing files
+    # Get LakeFS repository name
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
+    threshold = cfg.app.lfs_threshold_bytes
 
     # Process each file
     result_files: List[Dict[str, Any]] = []
-    threshold = cfg.app.lfs_threshold_bytes
 
     for f in files:
-        path = f.get("path") or f.get("path_in_repo")
-        size = int(f.get("size") or 0)
-        sha256 = f.get("sha256", "")
-        sample = f.get("sample", "")  # Base64 encoded sample content
-
-        # Determine upload mode based on size
-        upload_mode = "lfs" if size >= threshold else "regular"
-        should_ignore = False
-
-        # Check for existing file with same content
-        if sha256:
-            # If sha256 provided, use it for comparison (most reliable)
-            existing = await get_file(repo_id, path)
-            if existing and existing.sha256 == sha256 and existing.size == size:
-                should_ignore = True
-        elif sample and upload_mode == "regular":
-            # For small files, compare sample content if no sha256 provided
-            try:
-                # Decode the sample
-                sample_data = base64.b64decode(sample)
-                sample_sha256 = hashlib.sha256(sample_data).hexdigest()
-
-                # Try to get existing file from LakeFS
-                try:
-                    async_client = get_async_lakefs_client()
-                    obj_stat = await async_client.stat_object(
-                        repository=lakefs_repo, ref=revision, path=path
-                    )
-
-                    # If file exists and size matches, download and compare
-                    if obj_stat.size_bytes == size:
-                        # Get the actual content to compare
-                        try:
-                            obj_content = await async_client.get_object(
-                                repository=lakefs_repo, ref=revision, path=path
-                            )
-                            # Read the content
-                            existing_data = obj_content.read()
-                            existing_sha256 = hashlib.sha256(existing_data).hexdigest()
-
-                            # If content matches, skip upload
-                            if existing_sha256 == sample_sha256:
-                                should_ignore = True
-                        except Exception:
-                            # If can't read content, assume changed
-                            pass
-                except Exception:
-                    # File doesn't exist, need to upload
-                    pass
-            except Exception as e:
-                logger.warning(f"Failed to decode sample for {path}: {e}")
-
-        result_files.append(
-            {
-                "path": path,
-                "uploadMode": upload_mode,
-                "shouldIgnore": should_ignore,
-            }
+        file_result = await process_preupload_file(
+            f, repo_id, lakefs_repo, revision, threshold
         )
+        result_files.append(file_result)
 
     return {"files": result_files}
 
