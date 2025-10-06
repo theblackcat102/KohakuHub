@@ -42,7 +42,7 @@ async def create_organization(
 
 
 @router.get("/{org_name}")
-async def get_organization(org_name: str):
+async def get_organization_info(org_name: str):
     """Get organization details."""
     org = get_org_details_util(org_name)
     if not org:
