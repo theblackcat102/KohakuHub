@@ -2,7 +2,7 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from kohakuhub.api.routers import (
@@ -20,8 +20,9 @@ from kohakuhub.api.routers import (
 from kohakuhub.api.routers.files import resolve_file_get, resolve_file_head
 from kohakuhub.api.utils.s3 import init_storage
 from kohakuhub.auth import router as auth_router
+from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.config import cfg
-from kohakuhub.db import Repository
+from kohakuhub.db import Repository, User
 from kohakuhub.logger import get_logger
 from kohakuhub.org import router as org_router
 
@@ -67,7 +68,12 @@ app.include_router(org_router, prefix="/org", tags=["organizations"])
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.head("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
 async def public_resolve_head(
-    namespace: str, name: str, revision: str, path: str, type: str = "model"
+    namespace: str,
+    name: str,
+    revision: str,
+    path: str,
+    type: str = "model",
+    user: User | None = Depends(get_optional_user),
 ):
     """Public HEAD endpoint without /api prefix - returns file metadata only."""
     logger.debug(f"HEAD {type}/{namespace}/{name}/resolve/{revision}/{path}")
@@ -83,13 +89,19 @@ async def public_resolve_head(
         name=name,
         revision=revision,
         path=path,
+        user=user,
     )
 
 
 @app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.get("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
 async def public_resolve_get(
-    namespace: str, name: str, revision: str, path: str, type: str = "model"
+    namespace: str,
+    name: str,
+    revision: str,
+    path: str,
+    type: str = "model",
+    user: User | None = Depends(get_optional_user),
 ):
     """Public GET endpoint without /api prefix - redirects to S3 download."""
     logger.debug(f"GET {type}/{namespace}/{name}/resolve/{revision}/{path}")
@@ -105,6 +117,7 @@ async def public_resolve_get(
         name=name,
         revision=revision,
         path=path,
+        user=user,
     )
 
 
