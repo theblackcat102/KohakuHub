@@ -1375,6 +1375,7 @@ def main():
     else:
         # Use Click CLI
         from .cli import cli as click_cli
+
         click_cli()
 
 
