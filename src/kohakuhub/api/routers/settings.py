@@ -8,7 +8,12 @@ from pydantic import BaseModel, EmailStr
 from kohakuhub.api.utils.hf import hf_repo_not_found
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
-from kohakuhub.db_async import execute_db_query, get_organization, get_repository, get_user_organization
+from kohakuhub.db_async import (
+    execute_db_query,
+    get_organization,
+    get_repository,
+    get_user_organization,
+)
 from kohakuhub.db import Organization, Repository, User, UserOrganization
 from kohakuhub.logger import get_logger
 
@@ -107,6 +112,7 @@ async def update_organization_settings(
 
     # Update fields if provided
     if req.description is not None:
+
         def _update_org():
             Organization.update(description=req.description).where(
                 Organization.id == org.id
@@ -164,6 +170,7 @@ async def update_repo_settings(
 
     # Update fields if provided
     if payload.private is not None:
+
         def _update_private():
             Repository.update(private=payload.private).where(
                 Repository.id == repo_row.id

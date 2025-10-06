@@ -115,9 +115,7 @@ async def calculate_folder_stats(
     return folder_size, folder_latest_mtime
 
 
-async def convert_file_object(
-    obj, repo_id: str, prefix_len: int
-) -> dict:
+async def convert_file_object(obj, repo_id: str, prefix_len: int) -> dict:
     """Convert LakeFS file object to HuggingFace format.
 
     Args:
@@ -137,9 +135,7 @@ async def convert_file_object(
     file_record = await get_file(repo_id, obj.path)
 
     checksum = (
-        file_record.sha256
-        if file_record and file_record.sha256
-        else obj.checksum
+        file_record.sha256 if file_record and file_record.sha256 else obj.checksum
     )
 
     file_obj = {
@@ -190,18 +186,16 @@ async def convert_directory_object(
 
     dir_obj = {
         "type": "directory",
-        "oid": (
-            obj.checksum if hasattr(obj, "checksum") and obj.checksum else ""
-        ),
+        "oid": (obj.checksum if hasattr(obj, "checksum") and obj.checksum else ""),
         "size": folder_size,
         "path": relative_path.rstrip("/"),  # Remove trailing slash
     }
 
     # Add last modified info
     if folder_latest_mtime:
-        dir_obj["lastModified"] = datetime.fromtimestamp(
-            folder_latest_mtime
-        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        dir_obj["lastModified"] = datetime.fromtimestamp(folder_latest_mtime).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
     elif hasattr(obj, "mtime") and obj.mtime:
         dir_obj["lastModified"] = datetime.fromtimestamp(obj.mtime).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"

@@ -42,7 +42,9 @@ class CreateRepoPayload(BaseModel):
 
 
 @router.post("/repos/create")
-async def create_repo(payload: CreateRepoPayload, user: User = Depends(get_current_user)):
+async def create_repo(
+    payload: CreateRepoPayload, user: User = Depends(get_current_user)
+):
     """Create a new repository.
 
     Args:
@@ -165,7 +167,9 @@ async def delete_repo(
         try:
             # Delete related file records first
             File.delete().where(File.repo_full_id == full_id).execute()
-            StagingUpload.delete().where(StagingUpload.repo_full_id == full_id).execute()
+            StagingUpload.delete().where(
+                StagingUpload.repo_full_id == full_id
+            ).execute()
             repo_row.delete_instance()
             logger.success(f"Successfully deleted database records for: {full_id}")
         except Exception as e:
@@ -213,7 +217,9 @@ async def move_repo(
     # Check if source repository exists
     from_parts = from_id.split("/", 1)
     if len(from_parts) != 2:
-        return hf_error_response(400, HFErrorCode.INVALID_REPO_ID, "Invalid source repository ID")
+        return hf_error_response(
+            400, HFErrorCode.INVALID_REPO_ID, "Invalid source repository ID"
+        )
 
     from_namespace, from_name = from_parts
     repo_row = await get_repository(repo_type, from_namespace, from_name)
@@ -227,7 +233,9 @@ async def move_repo(
     # Check if destination already exists
     to_parts = to_id.split("/", 1)
     if len(to_parts) != 2:
-        return hf_error_response(400, HFErrorCode.INVALID_REPO_ID, "Invalid destination repository ID")
+        return hf_error_response(
+            400, HFErrorCode.INVALID_REPO_ID, "Invalid destination repository ID"
+        )
 
     to_namespace, to_name = to_parts
     existing = await get_repository(repo_type, to_namespace, to_name)

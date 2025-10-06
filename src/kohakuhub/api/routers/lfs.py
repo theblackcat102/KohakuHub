@@ -193,9 +193,9 @@ async def process_download_object(oid: str, size: int) -> LFSObjectResponse:
             expires_in=3600,
         )
 
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=3600)
-        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=3600)).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
 
         return LFSObjectResponse(
             oid=oid,

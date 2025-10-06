@@ -274,7 +274,9 @@ async def list_tokens(user: User = Depends(get_current_user)):
 
 
 @router.post("/tokens/create")
-async def create_token_endpoint(req: CreateTokenRequest, user: User = Depends(get_current_user)):
+async def create_token_endpoint(
+    req: CreateTokenRequest, user: User = Depends(get_current_user)
+):
     """Create new API token."""
 
     # Generate token
@@ -282,7 +284,9 @@ async def create_token_endpoint(req: CreateTokenRequest, user: User = Depends(ge
     token_hash_val = hash_token(token_str)
 
     # Save to database
-    token = await create_token(user_id=user.id, token_hash=token_hash_val, name=req.name)
+    token = await create_token(
+        user_id=user.id, token_hash=token_hash_val, name=req.name
+    )
 
     # Get session secret for encryption (if in web session)
     def _get_session():

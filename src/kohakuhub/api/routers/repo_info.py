@@ -15,7 +15,12 @@ from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
-from kohakuhub.db_async import execute_db_query, get_organization, get_repository, get_user_by_username
+from kohakuhub.db_async import (
+    execute_db_query,
+    get_organization,
+    get_repository,
+    get_user_by_username,
+)
 from kohakuhub.db import Organization, Repository, User, UserOrganization
 from kohakuhub.logger import get_logger
 
@@ -317,6 +322,7 @@ async def list_user_repos(
     }
 
     for repo_type in ["model", "dataset", "space"]:
+
         def _query_repos():
             q = Repository.select().where(
                 (Repository.repo_type == repo_type) & (Repository.namespace == username)
