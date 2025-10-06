@@ -15,6 +15,7 @@ from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
+from kohakuhub.db_async import execute_db_query, get_organization, get_repository, get_user_by_username
 from kohakuhub.db import Organization, Repository, User, UserOrganization
 from kohakuhub.logger import get_logger
 
@@ -71,9 +72,7 @@ async def get_repo_info(
         )
 
     # Check if repository exists in database
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = await get_repository(repo_type, namespace, repo_name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -217,16 +216,19 @@ async def list_repos(
         )
 
     # Query database
-    q = Repository.select().where(Repository.repo_type == rt)
+    def _query_repos():
+        q = Repository.select().where(Repository.repo_type == rt)
 
-    # Filter by author if specified
-    if author:
-        q = q.where(Repository.namespace == author)
+        # Filter by author if specified
+        if author:
+            q = q.where(Repository.namespace == author)
 
-    # Apply privacy filtering
-    q = _filter_repos_by_privacy(q, user, author)
+        # Apply privacy filtering
+        q = _filter_repos_by_privacy(q, user, author)
 
-    rows = q.limit(limit)
+        return list(q.limit(limit))
+
+    rows = await execute_db_query(_query_repos)
 
     # Format response with lastModified from LakeFS
     client = get_lakefs_client()
@@ -297,10 +299,10 @@ async def list_user_repos(
         Dict with models, datasets, and spaces lists
     """
     # Check if the username exists
-    target_user = User.get_or_none(User.username == username)
+    target_user = await get_user_by_username(username)
     if not target_user:
         # Could also be an organization
-        target_org = Organization.get_or_none(Organization.name == username)
+        target_org = await get_organization(username)
         if not target_org:
             return hf_error_response(
                 404,
@@ -315,14 +317,17 @@ async def list_user_repos(
     }
 
     for repo_type in ["model", "dataset", "space"]:
-        q = Repository.select().where(
-            (Repository.repo_type == repo_type) & (Repository.namespace == username)
-        )
+        def _query_repos():
+            q = Repository.select().where(
+                (Repository.repo_type == repo_type) & (Repository.namespace == username)
+            )
 
-        # Apply privacy filtering
-        q = _filter_repos_by_privacy(q, user, username)
+            # Apply privacy filtering
+            q = _filter_repos_by_privacy(q, user, username)
 
-        rows = q.limit(limit)
+            return list(q.limit(limit))
+
+        rows = await execute_db_query(_query_repos)
 
         key = repo_type + "s"
         repos_list = []

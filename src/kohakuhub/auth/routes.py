@@ -6,6 +6,24 @@ from fastapi import APIRouter, HTTPException, Response, Depends
 from pydantic import BaseModel, EmailStr
 
 from ..config import cfg
+from ..db_async import (
+    create_email_verification,
+    create_session,
+    create_token,
+    create_user,
+    delete_email_verification,
+    delete_session,
+    delete_token,
+    execute_db_query,
+    get_email_verification,
+    get_session,
+    get_token_by_hash,
+    get_user_by_email,
+    get_user_by_id,
+    get_user_by_username,
+    list_user_tokens,
+    update_user,
+)
 from ..db import User, EmailVerification, Session, Token
 from ..logger import get_logger
 
@@ -41,22 +59,22 @@ class CreateTokenRequest(BaseModel):
 
 
 @router.post("/register")
-def register(req: RegisterRequest):
+async def register(req: RegisterRequest):
     """Register new user."""
 
     logger.info(f"Registration attempt for username: {req.username}")
 
     # Check if username or email already exists
-    if User.get_or_none(User.username == req.username):
+    if await get_user_by_username(req.username):
         logger.warning(f"Registration failed: username '{req.username}' already exists")
         raise HTTPException(400, detail="Username already exists")
 
-    if User.get_or_none(User.email == req.email):
+    if await get_user_by_email(req.email):
         logger.warning(f"Registration failed: email '{req.email}' already exists")
         raise HTTPException(400, detail="Email already exists")
 
     # Create user
-    user = User.create(
+    user = await create_user(
         username=req.username,
         email=req.email,
         password_hash=hash_password(req.password),
@@ -68,8 +86,8 @@ def register(req: RegisterRequest):
     # Send verification email if required
     if cfg.auth.require_email_verification:
         token = generate_token()
-        EmailVerification.create(
-            user=user.id, token=token, expires_at=get_expiry_time(24)
+        await create_email_verification(
+            user_id=user.id, token=token, expires_at=get_expiry_time(24)
         )
 
         if not send_verification_email(req.email, req.username, token):
@@ -93,18 +111,15 @@ def register(req: RegisterRequest):
 
 
 @router.get("/verify-email")
-def verify_email(token: str, response: Response):
+async def verify_email(token: str, response: Response):
     """Verify email with token and automatically log in user."""
     from fastapi.responses import RedirectResponse
 
     logger.info(f"Email verification attempt with token: {token[:8]}...")
 
-    verification = EmailVerification.get_or_none(
-        (EmailVerification.token == token)
-        & (EmailVerification.expires_at > datetime.now(timezone.utc))
-    )
+    verification = await get_email_verification(token)
 
-    if not verification:
+    if not verification or verification.expires_at <= datetime.now(timezone.utc):
         logger.warning(f"Invalid or expired verification token: {token[:8]}...")
         # Redirect to login with error message
         return RedirectResponse(
@@ -113,16 +128,16 @@ def verify_email(token: str, response: Response):
         )
 
     # Get user
-    user = User.get_or_none(User.id == verification.user)
+    user = await get_user_by_id(verification.user)
     if not user:
         logger.error(f"User not found for verification token: {token[:8]}...")
         return RedirectResponse(url="/?error=user_not_found", status_code=302)
 
     # Update user email verification status
-    User.update(email_verified=True).where(User.id == verification.user).execute()
+    await update_user(user, email_verified=True)
 
     # Delete verification token
-    EmailVerification.delete().where(EmailVerification.id == verification.id).execute()
+    await delete_email_verification(verification)
 
     logger.success(f"Email verified for user: {user.username}")
 
@@ -130,7 +145,7 @@ def verify_email(token: str, response: Response):
     session_id = generate_token()
     session_secret = generate_session_secret()
 
-    Session.create(
+    await create_session(
         session_id=session_id,
         user_id=user.id,
         secret=session_secret,
@@ -155,12 +170,12 @@ def verify_email(token: str, response: Response):
 
 
 @router.post("/login")
-def login(req: LoginRequest, response: Response):
+async def login(req: LoginRequest, response: Response):
     """Login and create session."""
 
     logger.info(f"Login attempt for user: {req.username}")
 
-    user = User.get_or_none(User.username == req.username)
+    user = await get_user_by_username(req.username)
 
     if not user or not verify_password(req.password, user.password_hash):
         logger.warning(f"Failed login attempt for: {req.username}")
@@ -178,7 +193,7 @@ def login(req: LoginRequest, response: Response):
     session_id = generate_token()
     session_secret = generate_session_secret()
 
-    Session.create(
+    await create_session(
         session_id=session_id,
         user_id=user.id,
         secret=session_secret,
@@ -205,13 +220,16 @@ def login(req: LoginRequest, response: Response):
 
 
 @router.post("/logout")
-def logout(response: Response, user: User = Depends(get_current_user)):
+async def logout(response: Response, user: User = Depends(get_current_user)):
     """Logout and destroy session."""
 
     logger.info(f"Logout request for user: {user.username}")
 
     # Delete all user sessions
-    deleted_count = Session.delete().where(Session.user_id == user.id).execute()
+    def _delete_sessions():
+        return Session.delete().where(Session.user_id == user.id).execute()
+
+    deleted_count = await execute_db_query(_delete_sessions)
 
     # Clear cookie
     response.delete_cookie(key="session_id")
@@ -237,10 +255,10 @@ def get_me(user: User = Depends(get_current_user)):
 
 
 @router.get("/tokens")
-def list_tokens(user: User = Depends(get_current_user)):
+async def list_tokens(user: User = Depends(get_current_user)):
     """List user's API tokens."""
 
-    tokens = Token.select().where(Token.user_id == user.id)
+    tokens = await list_user_tokens(user.id)
 
     return {
         "tokens": [
@@ -256,7 +274,7 @@ def list_tokens(user: User = Depends(get_current_user)):
 
 
 @router.post("/tokens/create")
-def create_token(req: CreateTokenRequest, user: User = Depends(get_current_user)):
+async def create_token_endpoint(req: CreateTokenRequest, user: User = Depends(get_current_user)):
     """Create new API token."""
 
     # Generate token
@@ -264,10 +282,13 @@ def create_token(req: CreateTokenRequest, user: User = Depends(get_current_user)
     token_hash_val = hash_token(token_str)
 
     # Save to database
-    token = Token.create(user_id=user.id, token_hash=token_hash_val, name=req.name)
+    token = await create_token(user_id=user.id, token_hash=token_hash_val, name=req.name)
 
     # Get session secret for encryption (if in web session)
-    session = Session.get_or_none(Session.user_id == user.id)
+    def _get_session():
+        return Session.get_or_none(Session.user_id == user.id)
+
+    session = await execute_db_query(_get_session)
     session_secret = session.secret if session else None
 
     return {
@@ -280,14 +301,17 @@ def create_token(req: CreateTokenRequest, user: User = Depends(get_current_user)
 
 
 @router.delete("/tokens/{token_id}")
-def revoke_token(token_id: int, user: User = Depends(get_current_user)):
+async def revoke_token(token_id: int, user: User = Depends(get_current_user)):
     """Revoke an API token."""
 
-    token = Token.get_or_none((Token.id == token_id) & (Token.user_id == user.id))
+    def _get_token():
+        return Token.get_or_none((Token.id == token_id) & (Token.user_id == user.id))
+
+    token = await execute_db_query(_get_token)
 
     if not token:
         raise HTTPException(404, detail="Token not found")
 
-    token.delete_instance()
+    await delete_token(token.id)
 
     return {"success": True, "message": "Token revoked successfully"}

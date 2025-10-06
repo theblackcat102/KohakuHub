@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, Query
 
 from kohakuhub.api.utils.hf import hf_repo_not_found, hf_server_error
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.async_utils import get_async_lakefs_client, run_in_executor
+from kohakuhub.async_utils import get_async_lakefs_client, run_in_lakefs_executor
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.db_async import get_repository
 from kohakuhub.db import Repository, User
 from kohakuhub.logger import get_logger
 
@@ -43,9 +44,7 @@ async def list_commits(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = await get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -70,7 +69,7 @@ async def list_commits(
         if after:
             kwargs["after"] = after
 
-        log_result = await run_in_executor(
+        log_result = await run_in_lakefs_executor(
             client.refs.log_commits,
             lakefs_repo,  # repository (positional)
             branch,  # ref (positional)

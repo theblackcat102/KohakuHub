@@ -3,11 +3,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from kohakuhub.db_async import (
+    execute_db_query,
+    get_organization,
+    get_user_by_username,
+    get_user_organization,
+    list_organization_members as list_org_members_async,
+)
 from kohakuhub.db import User, UserOrganization
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.logger import get_logger
-
-logger = get_logger("ORG")
 from kohakuhub.org.utils import (
     create_organization as create_org_util,
     get_organization_details as get_org_details_util,
@@ -16,6 +21,8 @@ from kohakuhub.org.utils import (
     get_user_organizations,
     update_member_role as update_member_role_util,
 )
+
+logger = get_logger("ORG")
 
 router = APIRouter()
 
@@ -26,7 +33,7 @@ class CreateOrganizationPayload(BaseModel):
 
 
 @router.post("/create")
-def create_organization(
+async def create_organization(
     payload: CreateOrganizationPayload, user: User = Depends(get_current_user)
 ):
     """Create a new organization."""
@@ -35,7 +42,7 @@ def create_organization(
 
 
 @router.get("/{org_name}")
-def get_organization(org_name: str):
+async def get_organization(org_name: str):
     """Get organization details."""
     org = get_org_details_util(org_name)
     if not org:
@@ -53,7 +60,7 @@ class AddMemberPayload(BaseModel):
 
 
 @router.post("/{org_name}/members")
-def add_member(
+async def add_member(
     org_name: str,
     payload: AddMemberPayload,
     current_user: User = Depends(get_current_user),
@@ -64,10 +71,7 @@ def add_member(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if the current user is an admin of the organization
-    user_org = UserOrganization.get_or_none(
-        (UserOrganization.user == current_user.id)
-        & (UserOrganization.organization == org.id)
-    )
+    user_org = await get_user_organization(current_user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to add members")
 
@@ -76,7 +80,7 @@ def add_member(
 
 
 @router.delete("/{org_name}/members/{username}")
-def remove_member(
+async def remove_member(
     org_name: str,
     username: str,
     current_user: User = Depends(get_current_user),
@@ -87,10 +91,7 @@ def remove_member(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if the current user is an admin of the organization
-    user_org = UserOrganization.get_or_none(
-        (UserOrganization.user == current_user.id)
-        & (UserOrganization.organization == org.id)
-    )
+    user_org = await get_user_organization(current_user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to remove members")
 
@@ -99,9 +100,9 @@ def remove_member(
 
 
 @router.get("/users/{username}/orgs")
-def list_user_organizations(username: str):
+async def list_user_organizations(username: str):
     """List organizations a user belongs to."""
-    user = User.get_or_none(User.username == username)
+    user = await get_user_by_username(username)
     if not user:
         raise HTTPException(404, detail="User not found")
 
@@ -123,7 +124,7 @@ class UpdateMemberRolePayload(BaseModel):
 
 
 @router.put("/{org_name}/members/{username}")
-def update_member_role(
+async def update_member_role(
     org_name: str,
     username: str,
     payload: UpdateMemberRolePayload,
@@ -135,10 +136,7 @@ def update_member_role(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if the current user is an admin of the organization
-    user_org = UserOrganization.get_or_none(
-        (UserOrganization.user == current_user.id)
-        & (UserOrganization.organization == org.id)
-    )
+    user_org = await get_user_organization(current_user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to update member roles")
 
@@ -147,20 +145,14 @@ def update_member_role(
 
 
 @router.get("/{org_name}/members")
-def list_organization_members(org_name: str):
+async def list_organization_members(org_name: str):
     """List organization members."""
-    from ..db import Organization
-
-    org = Organization.get_or_none(Organization.name == org_name)
+    org = await get_organization(org_name)
     if not org:
         raise HTTPException(404, detail="Organization not found")
 
     # Get all members
-    members = (
-        UserOrganization.select()
-        .join(User)
-        .where(UserOrganization.organization == org.id)
-    )
+    members = await list_org_members_async(org.id)
 
     return {
         "members": [

@@ -25,6 +25,7 @@ from kohakuhub.auth.permissions import (
     check_repo_write_permission,
 )
 from kohakuhub.config import cfg
+from kohakuhub.db_async import execute_db_query, get_file, get_repository
 from kohakuhub.db import File, Repository, User
 from kohakuhub.logger import get_logger
 
@@ -73,9 +74,7 @@ async def preupload(
     """
     repo_id = f"{namespace}/{name}"
     # Verify repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
-    )
+    repo_row = await get_repository(repo_type.value, namespace, name)
     if not repo_row:
         raise HTTPException(404, detail={"error": "Repository not found"})
 
@@ -116,9 +115,7 @@ async def preupload(
         # Check for existing file with same content
         if sha256:
             # If sha256 provided, use it for comparison (most reliable)
-            existing = File.get_or_none(
-                (File.repo_full_id == repo_id) & (File.path_in_repo == path)
-            )
+            existing = await get_file(repo_id, path)
             if existing and existing.sha256 == sha256 and existing.size == size:
                 should_ignore = True
         elif sample and upload_mode == "regular":
@@ -195,9 +192,7 @@ async def get_revision(
     """
     repo_id = f"{namespace}/{name}"
     # Check if repository exists in database first
-    repo_row = Repository.get_or_none(
-        (Repository.repo_type == repo_type.value) & (Repository.full_id == repo_id)
-    )
+    repo_row = await get_repository(repo_type.value, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type.value)
@@ -276,9 +271,12 @@ async def _get_file_metadata(
     repo_id = f"{namespace}/{name}"
 
     # Check repository exists and read permission
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    def _get_repo():
+        return Repository.get_or_none(
+            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+        )
+
+    repo_row = await execute_db_query(_get_repo)
     if repo_row:
         check_repo_read_permission(repo_row, user)
 
@@ -311,7 +309,7 @@ async def _get_file_metadata(
     bucket, key = parse_s3_uri(physical_address)
 
     # Generate presigned download URL
-    presigned_url = generate_download_presigned_url(
+    presigned_url = await generate_download_presigned_url(
         bucket=bucket,
         key=key,
         expires_in=3600,  # 1 hour
@@ -323,9 +321,7 @@ async def _get_file_metadata(
 
     # Get correct checksum from database
     # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
-    file_record = File.get_or_none(
-        (File.repo_full_id == repo_id) & (File.path_in_repo == path)
-    )
+    file_record = await get_file(repo_id, path)
 
     # HuggingFace expects plain SHA256 hex (64 characters, unquoted)
     # For non-LFS: use git blob SHA1, for LFS: use SHA256

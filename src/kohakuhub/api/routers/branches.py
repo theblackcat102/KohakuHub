@@ -14,6 +14,7 @@ from kohakuhub.api.utils.hf import (
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
+from kohakuhub.db_async import get_repository
 from kohakuhub.db import Repository, User
 from kohakuhub.logger import get_logger
 
@@ -30,7 +31,7 @@ class CreateBranchPayload(BaseModel):
 
 
 @router.post("/{repo_type}s/{namespace}/{name}/branch")
-def create_branch(
+async def create_branch(
     repo_type: str,
     namespace: str,
     name: str,
@@ -90,7 +91,7 @@ def create_branch(
 
 
 @router.delete("/{repo_type}s/{namespace}/{name}/branch/{branch}")
-def delete_branch(
+async def delete_branch(
     repo_type: str,
     namespace: str,
     name: str,
@@ -112,9 +113,7 @@ def delete_branch(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = await get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -150,7 +149,7 @@ class CreateTagPayload(BaseModel):
 
 
 @router.post("/{repo_type}s/{namespace}/{name}/tag")
-def create_tag(
+async def create_tag(
     repo_type: str,
     namespace: str,
     name: str,
@@ -172,9 +171,7 @@ def create_tag(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = await get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -210,7 +207,7 @@ def create_tag(
 
 
 @router.delete("/{repo_type}s/{namespace}/{name}/tag/{tag}")
-def delete_tag(
+async def delete_tag(
     repo_type: str,
     namespace: str,
     name: str,
@@ -232,9 +229,7 @@ def delete_tag(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = await get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
