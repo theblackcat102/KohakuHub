@@ -81,7 +81,7 @@ from kohub_cli import KohubClient
 
 # Initialize client
 client = KohubClient(
-    endpoint="http://localhost:8000",
+    endpoint="http://localhost:28080",
     token="your_token_here"  # optional
 )
 
@@ -255,7 +255,7 @@ client.update_user_settings(
 ```python
 # Save configuration
 client.save_config(
-    endpoint="http://localhost:8000",
+    endpoint="http://localhost:28080",
     token="hf_..."
 )
 
@@ -434,7 +434,7 @@ kohub-cli settings organization members my-org
 
 ```bash
 # Set endpoint
-kohub-cli config set endpoint http://localhost:8000
+kohub-cli config set endpoint http://localhost:28080
 
 # Set token
 kohub-cli config set token hf_...
@@ -472,7 +472,7 @@ All commands support these global options:
 
 Examples:
 ```bash
-kohub-cli --endpoint http://localhost:8000 auth whoami
+kohub-cli --endpoint http://localhost:28080 auth whoami
 kohub-cli --output json repo list --type model
 kohub-cli --token hf_xxxxx repo create my-model --type model
 ```
@@ -483,7 +483,7 @@ Located at `~/.kohub/config.json`:
 
 ```json
 {
-  "endpoint": "http://localhost:8000",
+  "endpoint": "http://localhost:28080",
   "token": "hf_...",
   "default_repo_type": "model",
   "interactive_mode_default": true
@@ -524,7 +524,7 @@ $ kohub-cli --output json repo info nonexistent/repo --type model
 
 ## Environment Variables
 
-- `HF_ENDPOINT` - KohakuHub endpoint URL (default: `http://localhost:8000`)
+- `HF_ENDPOINT` - KohakuHub endpoint URL (default: `http://localhost:28080`)
 - `HF_TOKEN` - API token for authentication
 - `KOHUB_CONFIG_DIR` - Config directory (default: `~/.kohub`)
 

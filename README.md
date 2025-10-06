@@ -30,15 +30,24 @@ Self-hosted HuggingFace Hub alternative with Git-like versioning for AI models a
 git clone https://github.com/KohakuBlueleaf/KohakuHub.git
 cd KohakuHub
 
-# Build frontend and start services
+# 1. Copy and customize configuration
+cp docker-compose.example.yml docker-compose.yml
+
+# 2. IMPORTANT: Edit docker-compose.yml
+#    - Change MINIO_ROOT_USER and MINIO_ROOT_PASSWORD
+#    - Change POSTGRES_PASSWORD
+#    - Change LAKEFS_AUTH_ENCRYPT_SECRET_KEY
+#    - Change KOHAKU_HUB_SESSION_SECRET
+
+# 3. Build frontend and start services
 npm install --prefix ./src/kohaku-hub-ui
 npm run build --prefix ./src/kohaku-hub-ui
 docker-compose up -d --build
 ```
 
 **Access:**
-- Web UI: http://localhost:28080
-- API Docs: http://localhost:48888/docs
+- Web UI & API: http://localhost:28080 (all traffic goes here)
+- API Docs (Swagger): http://localhost:48888/docs (direct access for development)
 - LakeFS UI: http://localhost:28000
 - MinIO Console: http://localhost:29000
 
@@ -50,7 +59,7 @@ docker-compose up -d --build
 import os
 from huggingface_hub import HfApi
 
-os.environ["HF_ENDPOINT"] = "http://localhost:48888"
+os.environ["HF_ENDPOINT"] = "http://localhost:28080"
 os.environ["HF_TOKEN"] = "your_token_here"
 
 api = HfApi(endpoint=os.environ["HF_ENDPOINT"], token=os.environ["HF_TOKEN"])
@@ -73,7 +82,7 @@ api.hf_hub_download(repo_id="my-org/my-model", filename="model.safetensors")
 
 ```python
 import os
-os.environ["HF_ENDPOINT"] = "http://localhost:48888"
+os.environ["HF_ENDPOINT"] = "http://localhost:28080"
 os.environ["HF_TOKEN"] = "your_token_here"
 
 from diffusers import AutoencoderKL
@@ -145,7 +154,8 @@ See [config-example.toml](./config-example.toml) for all options.
 **Backend:**
 ```bash
 pip install -e .
-uvicorn kohakuhub.main:app --reload --port 48888
+uvicorn kohakuhub.main:app --reload --port 48888  # Development only
+# Note: In production, access via nginx on port 28080
 ```
 
 **Frontend:**
@@ -164,11 +174,13 @@ See [CLAUDE.md](./CLAUDE.md) for development guidelines.
 
 ## Documentation
 
-- [API.md](./docs/API.md) - API endpoints and workflows
-- [CLI.md](./docs/CLI.md) - Command-line tool usage
-- [TODO.md](./docs/TODO.md) - Development status and roadmap
+- [docs/setup.md](./docs/setup.md) - Setup and installation guide
+- [docs/deployment.md](./docs/deployment.md) - Deployment architecture
+- [docs/ports.md](./docs/ports.md) - Port configuration reference
+- [docs/API.md](./docs/API.md) - API endpoints and workflows
+- [docs/CLI.md](./docs/CLI.md) - Command-line tool usage
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contributing guide & roadmap
 - [CLAUDE.md](./CLAUDE.md) - Developer guide for Claude Code
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
 
 ## Security Notes
 

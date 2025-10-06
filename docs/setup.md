@@ -1,0 +1,264 @@
+# KohakuHub Setup Guide
+
+## Quick Start
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/KohakuBlueleaf/KohakuHub.git
+cd KohakuHub
+```
+
+### 2. Copy Configuration
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+```
+
+**Important:** The repository only includes `docker-compose.example.yml` as a template. You must copy it to `docker-compose.yml` and customize it for your deployment.
+
+### 2. Customize Configuration
+
+**Edit `docker-compose.yml` and change these critical settings:**
+
+#### ⚠️ Security (MUST CHANGE)
+
+```yaml
+# MinIO (Object Storage)
+environment:
+  - MINIO_ROOT_USER=your_secure_username        # Change from 'minioadmin'
+  - MINIO_ROOT_PASSWORD=your_secure_password    # Change from 'minioadmin'
+
+# PostgreSQL (Database)
+environment:
+  - POSTGRES_PASSWORD=your_secure_db_password   # Change from 'hubpass'
+
+# LakeFS (Version Control)
+environment:
+  - LAKEFS_AUTH_ENCRYPT_SECRET_KEY=generate_random_32_char_key_here  # Change!
+
+# KohakuHub API
+environment:
+  - KOHAKU_HUB_SESSION_SECRET=generate_random_string_here  # Change!
+```
+
+#### 🌐 Deployment URL (Optional)
+
+If deploying to a server with a domain name:
+
+```yaml
+# KohakuHub API
+environment:
+  - KOHAKU_HUB_BASE_URL=https://your-domain.com        # Change from localhost
+  - KOHAKU_HUB_S3_PUBLIC_ENDPOINT=https://s3.your-domain.com  # For downloads
+```
+
+### 3. Build Frontend
+
+```bash
+npm install --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-ui
+```
+
+### 4. Start Services
+
+```bash
+docker-compose up -d --build
+```
+
+### 5. Verify Installation
+
+```bash
+# Check all services are running
+docker-compose ps
+
+# View logs
+docker-compose logs -f hub-api
+```
+
+### 6. Access KohakuHub
+
+- **Web UI & API:** http://localhost:28080
+- **API Docs:** http://localhost:48888/docs (optional, for development)
+
+## Configuration Reference
+
+### Required Changes
+
+| Variable | Default | Change To | Why |
+|----------|---------|-----------|-----|
+| `MINIO_ROOT_USER` | minioadmin | your_username | Security |
+| `MINIO_ROOT_PASSWORD` | minioadmin | strong_password | Security |
+| `POSTGRES_PASSWORD` | hubpass | strong_password | Security |
+| `LAKEFS_AUTH_ENCRYPT_SECRET_KEY` | change_this | random_32_chars | Security |
+| `KOHAKU_HUB_SESSION_SECRET` | change_this | random_string | Security |
+
+### Optional Changes
+
+| Variable | Default | When to Change |
+|----------|---------|----------------|
+| `KOHAKU_HUB_BASE_URL` | http://localhost:28080 | Deploying to domain |
+| `KOHAKU_HUB_S3_PUBLIC_ENDPOINT` | http://localhost:29001 | Using external S3 |
+| `KOHAKU_HUB_LFS_THRESHOLD_BYTES` | 10000000 (10MB) | Adjust LFS threshold |
+| `KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION` | false | Enable email verification |
+
+## Post-Installation
+
+### 1. Create First User
+
+**Via Web UI:**
+- Go to http://localhost:28080
+- Click "Register"
+- Create account
+
+**Via CLI:**
+```bash
+pip install -e .
+kohub-cli auth register
+```
+
+### 2. Get LakeFS Credentials
+
+LakeFS credentials are auto-generated on first startup:
+
+```bash
+cat docker/hub-meta/hub-api/credentials.env
+```
+
+Use these to login to LakeFS UI at http://localhost:28000
+
+### 3. Test with Python
+
+```bash
+pip install huggingface_hub
+
+export HF_ENDPOINT=http://localhost:28080
+export HF_TOKEN=your_token_from_ui
+
+python scripts/test.py
+```
+
+## Troubleshooting
+
+### Services Won't Start
+
+**Check logs:**
+```bash
+docker-compose logs hub-api
+docker-compose logs lakefs
+docker-compose logs minio
+```
+
+**Common issues:**
+- Port already in use (change ports in docker-compose.yml)
+- Insufficient disk space
+- Docker daemon not running
+
+### Cannot Connect to API
+
+**Verify nginx is running:**
+```bash
+docker-compose ps hub-ui
+```
+
+**Check nginx logs:**
+```bash
+docker-compose logs hub-ui
+```
+
+**Test directly:**
+```bash
+curl http://localhost:28080/api/version
+```
+
+### Cannot Access from External Network
+
+**If deploying on a server:**
+
+1. Update `KOHAKU_HUB_BASE_URL` to your domain
+2. Update `KOHAKU_HUB_S3_PUBLIC_ENDPOINT` if using external S3
+3. Add reverse proxy with HTTPS (nginx/traefik/caddy)
+4. Only expose port 28080 (or 443 with HTTPS)
+
+## Production Deployment
+
+### 1. Use HTTPS
+
+Add reverse proxy in front of port 28080:
+
+```nginx
+# Example nginx config
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:28080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### 2. Security Checklist
+
+- [ ] Changed all default passwords
+- [ ] Set strong SESSION_SECRET
+- [ ] Set strong LAKEFS_AUTH_ENCRYPT_SECRET_KEY
+- [ ] Using HTTPS with valid certificate
+- [ ] Only port 28080 exposed (or 443 for HTTPS)
+- [ ] Firewall configured
+- [ ] Regular backups configured
+
+### 3. Backup Strategy
+
+**Data to backup:**
+- `hub-meta/` - Database, LakeFS metadata, credentials
+- `hub-storage/` - MinIO object storage (or use S3)
+- `docker-compose.yml` - Your configuration
+
+```bash
+# Backup command
+tar -czf kohakuhub-backup-$(date +%Y%m%d).tar.gz hub-meta/ hub-storage/ docker-compose.yml
+```
+
+## Updating
+
+### Update KohakuHub
+
+```bash
+# Pull latest code
+git pull
+
+# Rebuild frontend
+npm install --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-ui
+
+# Restart services
+docker-compose down
+docker-compose up -d --build
+```
+
+**Note:** Check CHANGELOG for breaking changes before updating.
+
+## Uninstall
+
+```bash
+# Stop and remove containers
+docker-compose down
+
+# Remove data (WARNING: This deletes everything!)
+rm -rf hub-meta/ hub-storage/
+
+# Remove docker-compose config
+rm docker-compose.yml
+```
+
+## Support
+
+- **Discord:** https://discord.gg/xWYrkyvJ2s
+- **GitHub Issues:** https://github.com/KohakuBlueleaf/KohakuHub/issues
+- **Documentation:** See docs/ folder
