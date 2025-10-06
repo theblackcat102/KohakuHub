@@ -13,33 +13,36 @@ license = { text = "Apache-2.0" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "bcrypt",
+    "boto3",
+    "click>=8.0",
+    "click-completion",
     "fastapi",
     "httpx",
-    "uvicorn",
-    "pydantic[email]",
-    "toml",
-    "peewee",
-    "boto3",
     "lakefs-client",
+    "peewee",
     "psycopg2-binary",
-    "pyyaml",
-    "bcrypt",
-    "questionary",
-    "rich",
+    "pydantic[email]",
     "python-multipart",
-    "click>=8.0",
+    "pyyaml",
+    "questionary",
     "requests",
+    "rich",
+    "toml",
+    "uvicorn",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 
 [project.optional-dependencies]
 dev = [
     "huggingface_hub",
+    "pytest",
+    "pytest-asyncio",
 ]
 
 
 [project.scripts]
-kohub-cli = "kohub_cli.main:main"
+kohub-cli = "kohub_cli.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

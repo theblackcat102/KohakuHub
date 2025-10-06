@@ -1142,6 +1142,268 @@ def clear(ctx):
         handle_error(e, ctx)
 
 
+@config.command("history")
+@click.option("--limit", default=10, help="Number of recent operations to show")
+@click.pass_context
+def show_history(ctx, limit):
+    """Show recent operation history."""
+    client = ctx.obj["client"]
+    try:
+        history = client.config.get_history(limit)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, history)
+        else:
+            if not history:
+                console.print("[yellow]No operation history[/yellow]")
+                return
+
+            table = Table(title="Recent Operations")
+            table.add_column("Time", style="blue")
+            table.add_column("Operation", style="cyan")
+            table.add_column("Details", style="green")
+
+            for entry in history:
+                timestamp = entry.get("timestamp", "")[:19]  # Trim milliseconds
+                operation = entry.get("operation", "")
+                details = entry.get("details", {})
+                details_str = ", ".join(f"{k}={v}" for k, v in details.items())
+
+                table.add_row(timestamp, operation, details_str)
+
+            console.print(table)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@config.command("clear-history")
+@click.confirmation_option(prompt="Are you sure you want to clear operation history?")
+@click.pass_context
+def clear_history(ctx):
+    """Clear operation history."""
+    client = ctx.obj["client"]
+    try:
+        client.config.clear_history()
+        output_result(ctx, {}, "Operation history cleared")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+# ========== File Upload/Download Commands ==========
+
+
+@repo.command("upload")
+@click.argument("repo_id")
+@click.argument("local_path")
+@click.option(
+    "--path", "repo_path", help="Destination path in repo (default: same as local)"
+)
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--branch", default="main", help="Target branch")
+@click.option("--message", "-m", help="Commit message")
+@click.pass_context
+def upload_file(ctx, repo_id, local_path, repo_path, repo_type, branch, message):
+    """Upload a file to repository.
+
+    REPO_ID format: namespace/name
+    LOCAL_PATH: Path to local file
+
+    Examples:
+    \b
+        kohub-cli repo upload my-org/my-model model.safetensors
+        kohub-cli repo upload my-org/my-model ./model.bin --path weights/model.bin
+    """
+    client = ctx.obj["client"]
+    try:
+        # Use local filename if repo_path not specified
+        if not repo_path:
+            from pathlib import Path
+
+            repo_path = Path(local_path).name
+
+        result = client.upload_file(
+            repo_id,
+            local_path=local_path,
+            repo_path=repo_path,
+            repo_type=repo_type,
+            branch=branch,
+            commit_message=message,
+        )
+        output_result(ctx, result, f"File uploaded: {repo_path}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo.command("download")
+@click.argument("repo_id")
+@click.argument("repo_path")
+@click.option(
+    "--output",
+    "-o",
+    "local_path",
+    help="Local destination path (default: same as repo)",
+)
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--revision", default="main", help="Branch or commit hash")
+@click.pass_context
+def download_file(ctx, repo_id, repo_path, local_path, repo_type, revision):
+    """Download a file from repository.
+
+    REPO_ID format: namespace/name
+    REPO_PATH: Path to file in repository
+
+    Examples:
+    \b
+        kohub-cli repo download my-org/my-model model.safetensors
+        kohub-cli repo download my-org/my-model weights/model.bin -o ./model.bin
+    """
+    client = ctx.obj["client"]
+    try:
+        # Use repo filename if local_path not specified
+        if not local_path:
+            from pathlib import Path
+
+            local_path = Path(repo_path).name
+
+        result_path = client.download_file(
+            repo_id,
+            repo_path=repo_path,
+            local_path=local_path,
+            repo_type=repo_type,
+            revision=revision,
+        )
+        output_result(ctx, {"path": result_path}, f"File downloaded: {result_path}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+# ========== Commit History Commands ==========
+
+
+@repo.command("commits")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--branch", default="main", help="Branch name")
+@click.option("--limit", default=20, help="Maximum number of commits")
+@click.pass_context
+def list_repo_commits(ctx, repo_id, repo_type, branch, limit):
+    """List commit history for a repository.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.list_commits(
+            repo_id, branch=branch, repo_type=repo_type, limit=limit
+        )
+
+        commits = result.get("commits", [])
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, result)
+        else:
+            if not commits:
+                console.print("[yellow]No commits found[/yellow]")
+                return
+
+            table = Table(title=f"Commits for {repo_id} ({branch})")
+            table.add_column("SHA", style="yellow", no_wrap=True)
+            table.add_column("Message", style="cyan")
+            table.add_column("Author", style="green")
+            table.add_column("Date", style="blue")
+
+            for c in commits:
+                sha_short = c.get("oid", "")[:8]
+                message = c.get("title", c.get("message", ""))
+                # Truncate long messages
+                if len(message) > 60:
+                    message = message[:57] + "..."
+                author = c.get("author", "unknown")
+                date = c.get("date", "")
+
+                table.add_row(sha_short, message, author, date)
+
+            console.print(table)
+
+            if result.get("hasMore"):
+                console.print(
+                    f"\n[dim]Showing {len(commits)} commits. Use --limit to see more.[/dim]"
+                )
+            else:
+                console.print(f"\n[dim]Total: {len(commits)} commits[/dim]")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+# ========== Health Check Command ==========
+
+
+@cli.command()
+@click.pass_context
+def health(ctx):
+    """Check health of KohakuHub services."""
+    client = ctx.obj["client"]
+
+    try:
+        health_info = client.health_check()
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, health_info)
+        else:
+            console.print("[bold]KohakuHub Health Check[/bold]\n")
+
+            # API Status
+            api_status = health_info.get("api", {})
+            status = api_status.get("status", "unknown")
+
+            if status == "healthy":
+                console.print("✓ API: [bold green]Healthy[/bold green]")
+                site_name = api_status.get("site_name", "KohakuHub")
+                version = api_status.get("version", "unknown")
+                console.print(f"  Site: {site_name}")
+                console.print(f"  Version: {version}")
+            elif status == "unreachable":
+                console.print("✗ API: [bold red]Unreachable[/bold red]")
+                if api_status.get("error"):
+                    console.print(f"  Error: {api_status.get('error')}")
+            else:
+                console.print(f"? API: [yellow]{status}[/yellow]")
+
+            console.print(f"  Endpoint: {api_status.get('endpoint')}")
+
+            # Authentication Status
+            console.print()
+            if health_info.get("authenticated"):
+                user = health_info.get("user", "unknown")
+                console.print(
+                    f"✓ Auth: [bold green]Authenticated as {user}[/bold green]"
+                )
+            else:
+                console.print("✗ Auth: [yellow]Not authenticated[/yellow]")
+                console.print("  [dim]Tip: Login with 'kohub-cli auth login'[/dim]")
+
+    except Exception as e:
+        handle_error(e, ctx)
+
+
 # ========== Interactive Mode ==========
 
 
@@ -1154,18 +1416,24 @@ def interactive(ctx):
     KohakuHub resources interactively.
     """
     # Import the interactive mode from main
-    from .main import State, main_menu
+    from .main import InteractiveState, main_menu
 
-    # Create state using current context settings
-    state = State()
+    # Create state (will use endpoint/token from context if provided)
+    state = InteractiveState()
 
     # Override with any provided options
     if ctx.obj.get("client"):
         client = ctx.obj["client"]
         if client.endpoint != "http://localhost:8000":
-            state.base_url = client.endpoint
+            state.client.endpoint = client.endpoint
         if client.token:
-            state.session.headers["Authorization"] = f"Bearer {client.token}"
+            state.client.token = client.token
+            # Refresh username
+            try:
+                user_info = state.client.whoami()
+                state.username = user_info.get("username")
+            except Exception:
+                pass
 
     # Launch interactive menu
     main_menu(state)

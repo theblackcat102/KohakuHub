@@ -1,7 +1,7 @@
 """Python API client for KohakuHub."""
 
 import requests
-from typing import Optional, List, Dict, Any, Literal
+from typing import Any, Literal, Optional
 
 from .config import Config
 from .errors import (
@@ -104,7 +104,7 @@ class KohubClient:
         username: str,
         email: str,
         password: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Register a new user.
 
         Args:
@@ -130,7 +130,7 @@ class KohubClient:
         self,
         username: str,
         password: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Login and create a session.
 
         Args:
@@ -150,7 +150,7 @@ class KohubClient:
         )
         return response.json()
 
-    def logout(self) -> Dict[str, Any]:
+    def logout(self) -> dict[str, Any]:
         """Logout and destroy current session.
 
         Returns:
@@ -162,7 +162,7 @@ class KohubClient:
         response = self._request("POST", "/api/auth/logout")
         return response.json()
 
-    def whoami(self) -> Dict[str, Any]:
+    def whoami(self) -> dict[str, Any]:
         """Get current user information.
 
         Returns:
@@ -176,7 +176,7 @@ class KohubClient:
 
     # ========== Token Management ==========
 
-    def create_token(self, name: str) -> Dict[str, Any]:
+    def create_token(self, name: str) -> dict[str, Any]:
         """Create a new API token.
 
         Args:
@@ -195,7 +195,7 @@ class KohubClient:
         )
         return response.json()
 
-    def list_tokens(self) -> List[Dict[str, Any]]:
+    def list_tokens(self) -> list[dict[str, Any]]:
         """List all API tokens for current user.
 
         Returns:
@@ -208,7 +208,7 @@ class KohubClient:
         data = response.json()
         return data.get("tokens", [])
 
-    def revoke_token(self, token_id: int) -> Dict[str, Any]:
+    def revoke_token(self, token_id: int) -> dict[str, Any]:
         """Revoke an API token.
 
         Args:
@@ -230,7 +230,7 @@ class KohubClient:
         self,
         name: str,
         description: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new organization.
 
         Args:
@@ -251,7 +251,7 @@ class KohubClient:
         )
         return response.json()
 
-    def get_organization(self, org_name: str) -> Dict[str, Any]:
+    def get_organization(self, org_name: str) -> dict[str, Any]:
         """Get organization information.
 
         Args:
@@ -269,7 +269,7 @@ class KohubClient:
     def list_user_organizations(
         self,
         username: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List organizations for a user.
 
         Args:
@@ -296,7 +296,7 @@ class KohubClient:
         org_name: str,
         username: str,
         role: str = "member",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add a member to an organization.
 
         Args:
@@ -323,7 +323,7 @@ class KohubClient:
         self,
         org_name: str,
         username: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Remove a member from an organization.
 
         Args:
@@ -346,7 +346,7 @@ class KohubClient:
         org_name: str,
         username: str,
         role: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update a member's role in an organization.
 
         Args:
@@ -376,7 +376,7 @@ class KohubClient:
         repo_id: str,
         repo_type: RepoType = "model",
         private: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new repository.
 
         Args:
@@ -415,7 +415,7 @@ class KohubClient:
         self,
         repo_id: str,
         repo_type: RepoType = "model",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete a repository.
 
         Args:
@@ -453,7 +453,7 @@ class KohubClient:
         repo_id: str,
         repo_type: RepoType = "model",
         revision: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get repository information.
 
         Args:
@@ -486,7 +486,7 @@ class KohubClient:
         repo_type: RepoType = "model",
         author: Optional[str] = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List repositories.
 
         Args:
@@ -511,7 +511,7 @@ class KohubClient:
         self,
         namespace: str,
         repo_type: Optional[RepoType] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List all repositories under a namespace (user or organization).
 
         Args:
@@ -573,7 +573,7 @@ class KohubClient:
         revision: str = "main",
         path: str = "",
         recursive: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List files in a repository.
 
         Args:
@@ -605,7 +605,7 @@ class KohubClient:
 
     # ========== Settings API ==========
 
-    def whoami_v2(self) -> Dict[str, Any]:
+    def whoami_v2(self) -> dict[str, Any]:
         """Get current user information with organizations (HuggingFace compatible).
 
         Returns:
@@ -621,7 +621,7 @@ class KohubClient:
         self,
         username: str,
         email: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update user settings.
 
         Args:
@@ -648,7 +648,7 @@ class KohubClient:
         repo_type: RepoType = "model",
         private: Optional[bool] = None,
         gated: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update repository settings.
 
         Args:
@@ -688,7 +688,7 @@ class KohubClient:
         from_repo: str,
         to_repo: str,
         repo_type: RepoType = "model",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Move/rename a repository.
 
         Args:
@@ -722,7 +722,7 @@ class KohubClient:
         branch: str,
         repo_type: RepoType = "model",
         revision: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new branch.
 
         Args:
@@ -760,7 +760,7 @@ class KohubClient:
         repo_id: str,
         branch: str,
         repo_type: RepoType = "model",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete a branch.
 
         Args:
@@ -794,7 +794,7 @@ class KohubClient:
         repo_type: RepoType = "model",
         revision: Optional[str] = None,
         message: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new tag.
 
         Args:
@@ -835,7 +835,7 @@ class KohubClient:
         repo_id: str,
         tag: str,
         repo_type: RepoType = "model",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete a tag.
 
         Args:
@@ -866,7 +866,7 @@ class KohubClient:
         self,
         org_name: str,
         description: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update organization settings.
 
         Args:
@@ -895,7 +895,7 @@ class KohubClient:
     def list_organization_members(
         self,
         org_name: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List organization members.
 
         Args:
@@ -910,6 +910,220 @@ class KohubClient:
         response = self._request("GET", f"/org/{org_name}/members")
         data = response.json()
         return data.get("members", [])
+
+    # ========== Commit History ==========
+
+    def list_commits(
+        self,
+        repo_id: str,
+        branch: str = "main",
+        repo_type: RepoType = "model",
+        limit: int = 20,
+        after: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """List commits for a repository branch.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            branch: Branch name (default: main)
+            repo_type: Repository type (model, dataset, space)
+            limit: Maximum number of commits (default: 20, max: 100)
+            after: Pagination cursor (commit ID to start after)
+
+        Returns:
+            Dict with 'commits', 'hasMore', 'nextCursor'
+
+        Raises:
+            NotFoundError: If repository or branch not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        params = {"limit": limit}
+        if after:
+            params["after"] = after
+
+        response = self._request(
+            "GET",
+            f"/api/{repo_type}s/{namespace}/{name}/commits/{branch}",
+            params=params,
+        )
+        return response.json()
+
+    # ========== File Operations ==========
+
+    def upload_file(
+        self,
+        repo_id: str,
+        local_path: str,
+        repo_path: str,
+        repo_type: RepoType = "model",
+        branch: str = "main",
+        commit_message: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Upload a file to repository.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            local_path: Local file path to upload
+            repo_path: Destination path in repository
+            repo_type: Repository type (model, dataset, space)
+            branch: Target branch (default: main)
+            commit_message: Commit message (default: auto-generated)
+
+        Returns:
+            Commit result
+
+        Raises:
+            FileNotFoundError: If local file doesn't exist
+            AuthenticationError: If not authenticated
+            NotFoundError: If repository not found
+        """
+        import base64
+        from pathlib import Path
+
+        local_file = Path(local_path)
+        if not local_file.exists():
+            raise FileNotFoundError(f"File not found: {local_path}")
+
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        # Read file content
+        with open(local_file, "rb") as f:
+            content = f.read()
+
+        # Encode as base64
+        content_b64 = base64.b64encode(content).decode("utf-8")
+
+        # Build NDJSON commit payload
+        import json
+
+        ndjson_lines = []
+
+        # Header
+        message = commit_message or f"Upload {repo_path}"
+        ndjson_lines.append(
+            json.dumps(
+                {"key": "header", "value": {"summary": message, "description": ""}}
+            )
+        )
+
+        # File
+        ndjson_lines.append(
+            json.dumps(
+                {
+                    "key": "file",
+                    "value": {
+                        "path": repo_path,
+                        "content": content_b64,
+                        "encoding": "base64",
+                    },
+                }
+            )
+        )
+
+        ndjson_payload = "\n".join(ndjson_lines)
+
+        # Send commit
+        response = self._request(
+            "POST",
+            f"/api/{repo_type}s/{namespace}/{name}/commit/{branch}",
+            data=ndjson_payload,
+            headers={"Content-Type": "application/x-ndjson"},
+        )
+
+        return response.json()
+
+    def download_file(
+        self,
+        repo_id: str,
+        repo_path: str,
+        local_path: str,
+        repo_type: RepoType = "model",
+        revision: str = "main",
+    ) -> str:
+        """Download a file from repository.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_path: File path in repository
+            local_path: Local destination path
+            repo_type: Repository type (model, dataset, space)
+            revision: Branch or commit hash (default: main)
+
+        Returns:
+            Local file path
+
+        Raises:
+            NotFoundError: If file not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        # Use resolve endpoint
+        url = f"{self.endpoint}/{repo_type}s/{namespace}/{name}/resolve/{revision}/{repo_path}"
+
+        try:
+            response = self.session.get(url, allow_redirects=True)
+            if not response.ok:
+                handle_response_error(response)
+
+            # Save to file
+            with open(local_path, "wb") as f:
+                f.write(response.content)
+
+            return local_path
+        except requests.RequestException as e:
+            raise NetworkError(f"Download failed: {e}")
+
+    # ========== Health Check ==========
+
+    def health_check(self) -> dict[str, Any]:
+        """Check health of KohakuHub services.
+
+        Returns:
+            Dict with status of various components
+
+        Raises:
+            NetworkError: If cannot connect to server
+        """
+        health_info = {
+            "api": {"status": "unknown", "endpoint": self.endpoint},
+            "authenticated": False,
+            "user": None,
+        }
+
+        # Check API using /api/version endpoint
+        try:
+            response = self.session.get(f"{self.endpoint}/api/version", timeout=5)
+            if response.ok:
+                data = response.json()
+                health_info["api"]["status"] = "healthy"
+                health_info["api"]["version"] = data.get("version", "unknown")
+                health_info["api"]["site_name"] = data.get("name", "KohakuHub")
+                health_info["api"]["api"] = data.get("api", "kohakuhub")
+            else:
+                health_info["api"]["status"] = f"error (HTTP {response.status_code})"
+        except requests.RequestException as e:
+            health_info["api"]["status"] = "unreachable"
+            health_info["api"]["error"] = str(e)
+
+        # Check auth
+        try:
+            user_info = self.whoami()
+            health_info["authenticated"] = True
+            health_info["user"] = user_info.get("username")
+        except Exception:
+            health_info["authenticated"] = False
+
+        return health_info
 
     # ========== Configuration ==========
 
@@ -929,7 +1143,7 @@ class KohubClient:
         if token is not None:
             self.config.token = token
 
-    def load_config(self) -> Dict[str, Any]:
+    def load_config(self) -> dict[str, Any]:
         """Load all configuration values.
 
         Returns:

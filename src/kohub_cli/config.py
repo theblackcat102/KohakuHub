@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 
 class Config:
@@ -26,7 +26,7 @@ class Config:
         self.config_file = self.config_dir / "config.json"
         self._data = self._load()
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         """Load configuration from file."""
         if self.config_file.exists():
             try:
@@ -80,13 +80,92 @@ class Config:
         self._data = {}
         self._save()
 
-    def all(self) -> Dict[str, Any]:
+    def all(self) -> dict[str, Any]:
         """Get all configuration values.
 
         Returns:
             Dictionary of all configuration values
         """
         return self._data.copy()
+
+    # ========== History Tracking ==========
+
+    def add_to_history(self, operation: str, details: dict[str, Any] = None):
+        """Add operation to history.
+
+        Args:
+            operation: Operation name
+            details: Additional operation details
+        """
+        from datetime import datetime
+
+        history = self.get("history", [])
+        if not isinstance(history, list):
+            history = []
+
+        # Keep last 50 operations
+        if len(history) >= 50:
+            history = history[-49:]
+
+        history.append(
+            {
+                "operation": operation,
+                "details": details or {},
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+        self.set("history", history)
+
+    def get_history(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Get recent operation history.
+
+        Args:
+            limit: Maximum number of entries to return
+
+        Returns:
+            List of recent operations
+        """
+        history = self.get("history", [])
+        if not isinstance(history, list):
+            return []
+
+        # Return most recent first
+        return list(reversed(history[-limit:]))
+
+    def clear_history(self):
+        """Clear operation history."""
+        self.delete("history")
+
+    # ========== Theme Configuration ==========
+
+    @property
+    def theme(self) -> str:
+        """Get CLI theme.
+
+        Returns:
+            Theme name (default, dark, light, etc.)
+        """
+        return self.get("theme", "default")
+
+    @theme.setter
+    def theme(self, value: str):
+        """Set CLI theme."""
+        self.set("theme", value)
+
+    @property
+    def use_emoji(self) -> bool:
+        """Get whether to use emoji icons.
+
+        Returns:
+            True if emoji enabled (default: True)
+        """
+        return self.get("use_emoji", True)
+
+    @use_emoji.setter
+    def use_emoji(self, value: bool):
+        """Set whether to use emoji icons."""
+        self.set("use_emoji", value)
 
     @property
     def endpoint(self) -> str:
