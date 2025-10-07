@@ -371,14 +371,17 @@
             <div
               v-for="commit in commits"
               :key="commit.id"
-              class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+              class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+              @click="viewCommit(commit.id)"
             >
               <div class="flex items-start gap-3">
                 <div
                   class="i-carbon-commit text-2xl text-blue-500 flex-shrink-0 mt-1"
                 />
                 <div class="flex-1 min-w-0">
-                  <div class="font-medium text-sm mb-1">{{ commit.title }}</div>
+                  <div class="font-medium text-sm mb-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    {{ commit.title }}
+                  </div>
                   <div
                     class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400"
                   >
@@ -647,6 +650,12 @@ function navigateToSettings() {
 function navigateToUpload() {
   router.push(
     `/${props.repoType}s/${props.namespace}/${props.name}/upload/${currentBranch.value}`,
+  );
+}
+
+function viewCommit(commitId) {
+  router.push(
+    `/${props.repoType}s/${props.namespace}/${props.name}/commit/${commitId}`,
   );
 }
 

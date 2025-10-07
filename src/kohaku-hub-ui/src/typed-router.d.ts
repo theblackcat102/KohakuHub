@@ -22,6 +22,7 @@ declare module 'vue-router/auto-routes' {
     '/[type]s/': RouteRecordInfo<'/[type]s/', '/:type()s', { type: ParamValue<true> }, { type: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/', '/:type()s/:namespace/:name', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/blob/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/blob/[branch]/[...file]', '/:type()s/:namespace/:name/blob/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
+    '/[type]s/[namespace]/[name]/commit/[commit_id]': RouteRecordInfo<'/[type]s/[namespace]/[name]/commit/[commit_id]', '/:type()s/:namespace/:name/commit/:commit_id', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, commit_id: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, commit_id: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/commits/[branch]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/commits/[branch]/', '/:type()s/:namespace/:name/commits/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/edit/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/edit/[branch]/[...file]', '/:type()s/:namespace/:name/edit/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/settings': RouteRecordInfo<'/[type]s/[namespace]/[name]/settings', '/:type()s/:namespace/:name/settings', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false> }>,
@@ -79,6 +80,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/[type]s/[namespace]/[name]/blob/[branch]/[...file].vue': {
       routes: '/[type]s/[namespace]/[name]/blob/[branch]/[...file]'
+      views: never
+    }
+    'src/pages/[type]s/[namespace]/[name]/commit/[commit_id].vue': {
+      routes: '/[type]s/[namespace]/[name]/commit/[commit_id]'
       views: never
     }
     'src/pages/[type]s/[namespace]/[name]/commits/[branch]/index.vue': {
