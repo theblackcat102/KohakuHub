@@ -39,10 +39,14 @@ watch(
 <template>
   <AdminLayout>
     <div class="page-container">
-      <h1 class="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">Quota Management</h1>
+      <h1 class="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">
+        Quota Management
+      </h1>
 
       <el-card class="mb-6">
-        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Select Namespace</h2>
+        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+          Select Namespace
+        </h2>
 
         <div class="flex gap-4 items-end">
           <el-form-item label="Namespace" class="flex-1">

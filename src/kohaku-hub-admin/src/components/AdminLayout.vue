@@ -27,8 +27,12 @@ const menuItems = [
     <!-- Sidebar -->
     <el-aside width="250px" class="sidebar">
       <div class="sidebar-header">
-        <div class="i-carbon-security text-2xl text-blue-600 dark:text-blue-400" />
-        <h2 class="text-xl font-bold ml-2 text-gray-900 dark:text-gray-100">Admin Portal</h2>
+        <div
+          class="i-carbon-security text-2xl text-blue-600 dark:text-blue-400"
+        />
+        <h2 class="text-xl font-bold ml-2 text-gray-900 dark:text-gray-100">
+          Admin Portal
+        </h2>
       </div>
 
       <el-menu
@@ -55,7 +59,9 @@ const menuItems = [
       <!-- Header -->
       <el-header class="header">
         <div class="header-title">
-          <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">KohakuHub Administration</h1>
+          <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            KohakuHub Administration
+          </h1>
         </div>
 
         <div class="header-actions">

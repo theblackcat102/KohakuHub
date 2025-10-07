@@ -44,7 +44,9 @@ onMounted(() => {
 <template>
   <AdminLayout>
     <div class="page-container">
-      <h1 class="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">Dashboard</h1>
+      <h1 class="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">
+        Dashboard
+      </h1>
 
       <div v-loading="loading" class="stats-grid">
         <!-- Users Card -->
@@ -103,7 +105,9 @@ onMounted(() => {
 
       <!-- Quick Actions -->
       <div class="mt-8">
-        <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Quick Actions</h2>
+        <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+          Quick Actions
+        </h2>
         <div class="flex gap-4">
           <el-button
             type="primary"

@@ -177,7 +177,7 @@ export async function verifyAdminToken(token) {
 // ===== Utility Functions =====
 
 /**
- * Format bytes to human-readable size
+ * Format bytes to human-readable size (decimal units: 1000 bytes = 1 KB)
  * @param {number} bytes - Bytes
  * @param {number} decimals - Decimal places
  * @returns {string} Formatted size
@@ -186,7 +186,7 @@ export function formatBytes(bytes, decimals = 2) {
   if (bytes === null || bytes === undefined) return "Unlimited";
   if (bytes === 0) return "0 Bytes";
 
-  const k = 1024;
+  const k = 1000;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
 
@@ -196,7 +196,7 @@ export function formatBytes(bytes, decimals = 2) {
 }
 
 /**
- * Parse human-readable size to bytes
+ * Parse human-readable size to bytes (decimal units: 1 KB = 1000 bytes)
  * @param {string} sizeStr - Size string (e.g., "10GB", "500MB")
  * @returns {number|null} Bytes, or null for unlimited
  */
@@ -205,11 +205,11 @@ export function parseSize(sizeStr) {
 
   const units = {
     b: 1,
-    kb: 1024,
-    mb: 1024 ** 2,
-    gb: 1024 ** 3,
-    tb: 1024 ** 4,
-    pb: 1024 ** 5,
+    kb: 1000,
+    mb: 1000 ** 2,
+    gb: 1000 ** 3,
+    tb: 1000 ** 4,
+    pb: 1000 ** 5,
   };
 
   const match = sizeStr.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)$/i);

@@ -269,7 +269,9 @@ onMounted(() => {
   <AdminLayout>
     <div class="page-container">
       <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">User Management</h1>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          User Management
+        </h1>
         <el-button type="primary" @click="dialogVisible = true" :icon="'Plus'">
           Create User
         </el-button>

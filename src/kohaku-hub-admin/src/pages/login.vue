@@ -41,8 +41,12 @@ async function handleLogin() {
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <div class="i-carbon-security text-4xl text-blue-600 dark:text-blue-400 mb-4" />
-        <h1 class="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">KohakuHub Admin</h1>
+        <div
+          class="i-carbon-security text-4xl text-blue-600 dark:text-blue-400 mb-4"
+        />
+        <h1 class="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">
+          KohakuHub Admin
+        </h1>
         <p class="text-gray-600 dark:text-gray-400">
           Enter your admin token to continue
         </p>

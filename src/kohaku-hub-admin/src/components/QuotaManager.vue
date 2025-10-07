@@ -152,8 +152,12 @@ watch(
       <div v-if="quotaInfo && !editing">
         <!-- Private Quota Section -->
         <div class="quota-section">
-          <h3 class="text-lg font-semibold mb-3 flex items-center text-gray-900 dark:text-gray-100">
-            <div class="i-carbon-locked mr-2 text-orange-600 dark:text-orange-400" />
+          <h3
+            class="text-lg font-semibold mb-3 flex items-center text-gray-900 dark:text-gray-100"
+          >
+            <div
+              class="i-carbon-locked mr-2 text-orange-600 dark:text-orange-400"
+            />
             Private Repositories
           </h3>
 
@@ -190,8 +194,12 @@ watch(
 
         <!-- Public Quota Section -->
         <div class="quota-section">
-          <h3 class="text-lg font-semibold mb-3 flex items-center text-gray-900 dark:text-gray-100">
-            <div class="i-carbon-unlocked mr-2 text-cyan-600 dark:text-cyan-400" />
+          <h3
+            class="text-lg font-semibold mb-3 flex items-center text-gray-900 dark:text-gray-100"
+          >
+            <div
+              class="i-carbon-unlocked mr-2 text-cyan-600 dark:text-cyan-400"
+            />
             Public Repositories
           </h3>
 
@@ -228,8 +236,12 @@ watch(
 
         <!-- Total Usage -->
         <div class="quota-section">
-          <h3 class="text-lg font-semibold mb-3 flex items-center text-gray-900 dark:text-gray-100">
-            <div class="i-carbon-data-volume mr-2 text-blue-600 dark:text-blue-400" />
+          <h3
+            class="text-lg font-semibold mb-3 flex items-center text-gray-900 dark:text-gray-100"
+          >
+            <div
+              class="i-carbon-data-volume mr-2 text-blue-600 dark:text-blue-400"
+            />
             Total Storage
           </h3>
 
