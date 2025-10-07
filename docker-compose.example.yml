@@ -8,7 +8,8 @@ services:
     ports:
       - "28080:80" # Expose Web UI on host port 28080
     volumes:
-      - ./src/kohaku-hub-ui/dist:/usr/share/nginx/html # Mount the built frontend assets
+      - ./src/kohaku-hub-ui/dist:/usr/share/nginx/html # Mount the built main frontend assets
+      - ./src/kohaku-hub-admin/dist:/usr/share/nginx/html-admin # Mount the built admin frontend assets
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf # Mount the Nginx configuration
     depends_on:
       - hub-api
@@ -58,6 +59,21 @@ services:
       - KOHAKU_HUB_SESSION_SECRET=change-this-to-random-string-in-production
       - KOHAKU_HUB_SESSION_EXPIRE_HOURS=168
       - KOHAKU_HUB_TOKEN_EXPIRE_DAYS=365
+      ## Admin API Configuration
+      - KOHAKU_HUB_ADMIN_ENABLED=true
+      - KOHAKU_HUB_ADMIN_SECRET_TOKEN=change-this-to-random-admin-token-in-production
+      # ## Storage Quota Configuration (NULL/unlimited = no limit)
+      # # Default quotas for new users
+      # - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=unlimited  # Unlimited private storage for users
+      # - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=unlimited   # Unlimited public storage for users
+      # # Default quotas for new organizations
+      # - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=unlimited   # Unlimited private storage for orgs
+      # - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=unlimited    # Unlimited public storage for orgs
+      # # Examples (uncomment and modify as needed):
+      - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=10_000_000     # 10MB for user private repos
+      - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=100_000_000      # 20MB for user public repos
+      - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=10_000_000      # 10MB for org private repos
+      - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=100_000_000      # 100MB for org public repos
     volumes:
       - ./hub-meta/hub-api:/hub-api-creds
 
