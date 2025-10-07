@@ -7,8 +7,12 @@
     <div class="container-main flex items-center justify-between h-12 md:h-16">
       <!-- Logo -->
       <RouterLink to="/" class="flex items-center gap-2">
-        <div class="i-carbon-cube text-2xl md:text-3xl text-blue-500" />
-        <span class="text-lg md:text-xl font-bold">KohakuHub</span>
+        <img
+          src="/images/logo-square.svg"
+          alt="KohakuHub"
+          class="h-8 w-8 md:h-10 md:w-10"
+        />
+        <span class="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100">KohakuHub</span>
       </RouterLink>
 
       <!-- Desktop Navigation - hidden on mobile -->

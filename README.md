@@ -1,13 +1,18 @@
-# KohakuHub
+# Kohaku Hub - Self-hosted HuggingFace alternative
+![](images/logo-banner-dark.svg)
+
+---
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/KohakuBlueleaf/KohakuHub)
 
 **⚠️ Work In Progress - Not Production Ready**
 
+Self-hosted HuggingFace alternative with Git-like versioning for AI models and datasets. Fully compatible with the official `huggingface_hub` Python client.
+
+</div>
+
 |![Web UI](image/README/1759520817420.png)|![Dark Mode](image/README/1759521021890.png)|
 |-|-|
-
-Self-hosted HuggingFace Hub alternative with Git-like versioning for AI models and datasets. Fully compatible with the official `huggingface_hub` Python client.
 
 **Join our community:** https://discord.gg/xWYrkyvJ2s
 

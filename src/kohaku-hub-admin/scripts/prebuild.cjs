@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Prebuild script for KohakuHub frontend
- * Copies documentation files from the root docs/ directory to public/
- * so they can be served by the frontend application.
+ * Prebuild script for KohakuHub Admin Portal
+ * Copies logo files from the root images/ directory to public/
+ * so they can be used as favicon and branding assets.
  */
 
 const fs = require('fs');
@@ -11,36 +11,10 @@ const path = require('path');
 // Define paths relative to the script location
 const rootDir = path.join(__dirname, '..', '..', '..');
 const publicDir = path.join(__dirname, '..', 'public');
-const docsPublicDir = path.join(publicDir, 'documentation');
 const imagesPublicDir = path.join(publicDir, 'images');
 
-// Documentation files to copy
+// Files to copy
 const filesToCopy = [
-  {
-    source: path.join(rootDir, 'docs', 'API.md'),
-    dest: path.join(docsPublicDir, 'API.md'),
-  },
-  {
-    source: path.join(rootDir, 'docs', 'CLI.md'),
-    dest: path.join(docsPublicDir, 'CLI.md'),
-  },
-  {
-    source: path.join(rootDir, 'docs', 'setup.md'),
-    dest: path.join(docsPublicDir, 'setup.md'),
-  },
-  {
-    source: path.join(rootDir, 'docs', 'deployment.md'),
-    dest: path.join(docsPublicDir, 'deployment.md'),
-  },
-  {
-    source: path.join(rootDir, 'docs', 'ports.md'),
-    dest: path.join(docsPublicDir, 'ports.md'),
-  },
-  {
-    source: path.join(rootDir, 'CONTRIBUTING.md'),
-    dest: path.join(docsPublicDir, 'contributing.md'),
-  },
-  // Logo files
   {
     source: path.join(rootDir, 'images', 'logo-square.svg'),
     dest: path.join(imagesPublicDir, 'logo-square.svg'),
@@ -86,12 +60,9 @@ function copyFile(source, dest) {
  * Main function
  */
 function main() {
-  console.log('📚 Copying documentation files and logos to public directory...\n');
+  console.log('🎨 Copying logo files to public directory...\n');
 
-  // Create directories if they don't exist
-  if (!fs.existsSync(docsPublicDir)) {
-    fs.mkdirSync(docsPublicDir, { recursive: true });
-  }
+  // Create images directory if it doesn't exist
   if (!fs.existsSync(imagesPublicDir)) {
     fs.mkdirSync(imagesPublicDir, { recursive: true });
   }
@@ -101,7 +72,7 @@ function main() {
     copyFile(file.source, file.dest);
   });
 
-  console.log('\n✅ Documentation files and logos copied successfully!');
+  console.log('\n✅ Logo files copied successfully!');
 }
 
 // Run the script
