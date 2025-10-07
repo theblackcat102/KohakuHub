@@ -117,10 +117,12 @@ See [docs/CLI.md](./docs/CLI.md) for complete CLI documentation.
 
 **Stack:**
 - **FastAPI** - HuggingFace-compatible API
-- **LakeFS** - Git-like versioning (branches, commits, diffs)
+- **LakeFS** - Git-like versioning (branches, commits, diffs) via REST API
 - **MinIO/S3** - Object storage with deduplication
 - **PostgreSQL/SQLite** - Metadata database
 - **Vue 3** - Modern web interface
+
+**Implementation Note:** KohakuHub uses LakeFS REST API directly (not the deprecated lakefs-client Python library), providing pure async operations without thread pool overhead.
 
 **Data Flow:**
 1. Small files (<10MB) → Base64 in commit payload
@@ -215,7 +217,7 @@ AGPL-3.0 (may change to more permissive license later)
 ## Acknowledgments
 
 - [HuggingFace](https://huggingface.co/) - API design and client library
-- [LakeFS](https://lakefs.io/) - Data versioning
+- [LakeFS](https://lakefs.io/) - Data versioning engine (REST API)
 - [MinIO](https://min.io/) - Object storage
 
 ---

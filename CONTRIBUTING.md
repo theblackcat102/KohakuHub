@@ -105,7 +105,7 @@ Create an issue with:
 - Branch and tag management
 - Commit history
 - S3-compatible storage (MinIO, AWS S3, etc.)
-- LakeFS versioning (branches, commits, diffs)
+- LakeFS versioning (branches, commits, diffs) - using REST API directly via httpx
 
 **Authentication:**
 - User registration with email verification (optional)
@@ -217,6 +217,8 @@ We're especially looking for help in:
    - Rebase on main if needed
 
 ## Development Workflow
+
+**Implementation Note:** KohakuHub uses LakeFS REST API directly (httpx AsyncClient) instead of the deprecated lakefs-client library. All LakeFS operations are pure async without thread pool overhead.
 
 ### Backend Development
 
