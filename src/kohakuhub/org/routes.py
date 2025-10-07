@@ -4,17 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from kohakuhub.db_async import (
+    create_organization as create_org_async,
+    create_user_organization,
     execute_db_query,
     get_organization,
     get_user_by_username,
     get_user_organization,
     list_organization_members as list_org_members_async,
 )
-from kohakuhub.db import User, UserOrganization
+from kohakuhub.db import Organization, User, UserOrganization
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.logger import get_logger
 from kohakuhub.org.utils import (
-    create_organization as create_org_util,
     get_organization_details as get_org_details_util,
     add_member_to_organization as add_member_util,
     remove_member_from_organization,
@@ -36,8 +37,24 @@ class CreateOrganizationPayload(BaseModel):
 async def create_organization(
     payload: CreateOrganizationPayload, user: User = Depends(get_current_user)
 ):
-    """Create a new organization."""
-    org = create_org_util(payload.name, payload.description, user)
+    """Create a new organization with default quotas."""
+
+    # Check if organization already exists
+    def _check_exists():
+        return Organization.get_or_none(Organization.name == payload.name)
+
+    existing_org = await execute_db_query(_check_exists)
+    if existing_org:
+        raise HTTPException(400, detail="Organization name already exists")
+
+    # Create organization with default quotas
+    org = await create_org_async(payload.name, payload.description)
+
+    # Add creator as super-admin
+    await create_user_organization(user.id, org.id, "super-admin")
+
+    logger.info(f"User {user.username} created organization: {org.name}")
+
     return {"success": True, "name": org.name}
 
 

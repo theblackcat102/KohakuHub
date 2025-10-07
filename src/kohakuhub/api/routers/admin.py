@@ -224,34 +224,16 @@ async def create_user_admin(
     # Hash password
     password_hash = bcrypt.hashpw(request.password.encode(), bcrypt.gensalt()).decode()
 
-    # Apply default quotas if not specified
-    private_quota = (
-        request.private_quota_bytes
-        if request.private_quota_bytes is not None
-        else cfg.quota.default_user_private_quota_bytes
-    )
-    public_quota = (
-        request.public_quota_bytes
-        if request.public_quota_bytes is not None
-        else cfg.quota.default_user_public_quota_bytes
-    )
-
-    # Create user
+    # Create user with quotas (defaults applied if not specified)
     user = await create_user(
         username=request.username,
         email=request.email,
         password_hash=password_hash,
         email_verified=request.email_verified,
         is_active=request.is_active,
+        private_quota_bytes=request.private_quota_bytes,
+        public_quota_bytes=request.public_quota_bytes,
     )
-
-    # Set quotas
-    def _set_quotas():
-        user.private_quota_bytes = private_quota
-        user.public_quota_bytes = public_quota
-        user.save()
-
-    await execute_db_query(_set_quotas)
 
     logger.info(f"Admin created user: {user.username}")
 

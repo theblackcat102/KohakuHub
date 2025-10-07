@@ -41,9 +41,22 @@ async def get_user_by_email(email: str) -> User | None:
 
 
 async def create_user(
-    username: str, email: str, password_hash: str, email_verified: bool = False
+    username: str,
+    email: str,
+    password_hash: str,
+    email_verified: bool = False,
+    is_active: bool = True,
+    private_quota_bytes: int | None = None,
+    public_quota_bytes: int | None = None,
 ) -> User:
-    """Create a new user."""
+    """Create a new user with default quota values if not specified."""
+    from kohakuhub.config import cfg
+
+    # Apply default quotas if not explicitly provided
+    if private_quota_bytes is None:
+        private_quota_bytes = cfg.quota.default_user_private_quota_bytes
+    if public_quota_bytes is None:
+        public_quota_bytes = cfg.quota.default_user_public_quota_bytes
 
     def _create():
         return User.create(
@@ -51,6 +64,9 @@ async def create_user(
             email=email,
             password_hash=password_hash,
             email_verified=email_verified,
+            is_active=is_active,
+            private_quota_bytes=private_quota_bytes,
+            public_quota_bytes=public_quota_bytes,
         )
 
     return await run_in_db_executor(_create)
@@ -314,12 +330,27 @@ async def get_organization(name: str) -> Organization | None:
 
 
 async def create_organization(
-    name: str, description: str | None = None
+    name: str,
+    description: str | None = None,
+    private_quota_bytes: int | None = None,
+    public_quota_bytes: int | None = None,
 ) -> Organization:
-    """Create a new organization."""
+    """Create a new organization with default quota values if not specified."""
+    from kohakuhub.config import cfg
+
+    # Apply default quotas if not explicitly provided
+    if private_quota_bytes is None:
+        private_quota_bytes = cfg.quota.default_org_private_quota_bytes
+    if public_quota_bytes is None:
+        public_quota_bytes = cfg.quota.default_org_public_quota_bytes
 
     def _create():
-        return Organization.create(name=name, description=description)
+        return Organization.create(
+            name=name,
+            description=description,
+            private_quota_bytes=private_quota_bytes,
+            public_quota_bytes=public_quota_bytes,
+        )
 
     return await run_in_db_executor(_create)
 

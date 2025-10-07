@@ -6,10 +6,22 @@ from kohakuhub.db import User, Organization, UserOrganization
 
 
 def create_organization(name: str, description: str | None, user: User):
+    """Create organization with default quotas (synchronous version).
+
+    Note: This function is deprecated. Use async version from db_async instead.
+    """
+    from kohakuhub.config import cfg
+
     if Organization.get_or_none(Organization.name == name):
         raise HTTPException(400, detail="Organization name already exists")
 
-    org = Organization.create(name=name, description=description)
+    # Apply default quotas
+    org = Organization.create(
+        name=name,
+        description=description,
+        private_quota_bytes=cfg.quota.default_org_private_quota_bytes,
+        public_quota_bytes=cfg.quota.default_org_public_quota_bytes,
+    )
     UserOrganization.create(user=user.id, organization=org.id, role="super-admin")
     return org
 
