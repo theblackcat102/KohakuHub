@@ -1,7 +1,25 @@
 <!-- src/pages/[username]/index.vue -->
 <template>
   <div class="container-main">
-    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+    <!-- User Not Found -->
+    <div v-if="userNotFound" class="text-center py-20">
+      <div
+        class="i-carbon-user-avatar-filled text-8xl text-gray-300 dark:text-gray-600 mb-6 inline-block"
+      />
+      <h1 class="text-4xl font-bold mb-4">User Not Found</h1>
+      <p class="text-xl text-gray-600 dark:text-gray-400 mb-8">
+        The user "<span class="font-mono text-blue-600 dark:text-blue-400">{{
+          username
+        }}</span
+        >" does not exist.
+      </p>
+      <el-button type="primary" @click="$router.push('/')">
+        <div class="i-carbon-home mr-2" />
+        Go to Homepage
+      </el-button>
+    </div>
+
+    <div v-else class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       <!-- Sidebar -->
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div class="card">
@@ -19,6 +37,84 @@
             >
               <div class="i-carbon-calendar" />
               Joined {{ formatDate(userInfo?.created_at) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Storage Quota Card -->
+        <div v-if="quotaInfo" class="card">
+          <h3 class="font-semibold mb-3 flex items-center gap-2">
+            <div class="i-carbon-data-base text-gray-500" />
+            Storage Usage
+          </h3>
+
+          <!-- Public Storage -->
+          <div class="mb-4">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm text-gray-600 dark:text-gray-400"
+                >Public</span
+              >
+              <span class="text-sm font-mono">
+                {{ formatBytes(quotaInfo.public_used_bytes) }}
+                <span
+                  v-if="quotaInfo.public_quota_bytes !== null"
+                  class="text-gray-400"
+                >
+                  / {{ formatBytes(quotaInfo.public_quota_bytes) }}
+                </span>
+                <span v-else class="text-gray-400">/ Unlimited</span>
+              </span>
+            </div>
+            <el-progress
+              v-if="quotaInfo.public_quota_bytes !== null"
+              :percentage="Math.min(100, quotaInfo.public_percentage_used || 0)"
+              :status="getQuotaStatus(quotaInfo.public_percentage_used)"
+              :show-text="false"
+            />
+            <div
+              v-else
+              class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
+            ></div>
+          </div>
+
+          <!-- Private Storage (only if user has permission) -->
+          <div v-if="quotaInfo.can_see_private" class="mb-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm text-gray-600 dark:text-gray-400"
+                >Private</span
+              >
+              <span class="text-sm font-mono">
+                {{ formatBytes(quotaInfo.private_used_bytes) }}
+                <span
+                  v-if="quotaInfo.private_quota_bytes !== null"
+                  class="text-gray-400"
+                >
+                  / {{ formatBytes(quotaInfo.private_quota_bytes) }}
+                </span>
+                <span v-else class="text-gray-400">/ Unlimited</span>
+              </span>
+            </div>
+            <el-progress
+              v-if="quotaInfo.private_quota_bytes !== null"
+              :percentage="
+                Math.min(100, quotaInfo.private_percentage_used || 0)
+              "
+              :status="getQuotaStatus(quotaInfo.private_percentage_used)"
+              :show-text="false"
+            />
+            <div
+              v-else
+              class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
+            ></div>
+          </div>
+
+          <!-- Total -->
+          <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center">
+              <span class="text-sm font-semibold">Total</span>
+              <span class="text-sm font-mono font-semibold">
+                {{ formatBytes(quotaInfo.total_used_bytes) }}
+              </span>
             </div>
           </div>
         </div>
@@ -379,17 +475,24 @@ const router = useRouter();
 const username = computed(() => route.params.username);
 
 const userInfo = ref(null);
-const repos = ref({ model: [], dataset: [], space: [] });
+const repos = ref({ models: [], datasets: [], spaces: [] });
 const userCard = ref("");
+const userNotFound = ref(false);
+const quotaInfo = ref(null);
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 
+// Helper to convert singular type to plural key
+function getPluralKey(type) {
+  return type + "s";
+}
+
 function getCount(type) {
-  return repos.value[type]?.length || 0;
+  return repos.value[getPluralKey(type)]?.length || 0;
 }
 
 function displayedRepos(type) {
-  return (repos.value[type] || []).slice(0, MAX_DISPLAYED);
+  return (repos.value[getPluralKey(type)] || []).slice(0, MAX_DISPLAYED);
 }
 
 function hasMoreRepos(type) {
@@ -398,6 +501,22 @@ function hasMoreRepos(type) {
 
 function formatDate(date) {
   return date ? dayjs(date).fromNow() : "never";
+}
+
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined) return "Unlimited";
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+function getQuotaStatus(percentage) {
+  if (percentage === null || percentage === undefined) return "";
+  if (percentage >= 90) return "exception";
+  if (percentage >= 75) return "warning";
+  return "success";
 }
 
 function goToRepo(type, repo) {
@@ -418,21 +537,21 @@ async function checkIfOrganization() {
   }
 }
 
-async function loadRepos() {
+async function loadUserData() {
   try {
-    const [models, datasets, spaces] = await Promise.all([
-      repoAPI.listRepos("model", { author: username.value }),
-      repoAPI.listRepos("dataset", { author: username.value }),
-      repoAPI.listRepos("space", { author: username.value }),
-    ]);
-
-    repos.value = {
-      model: models.data,
-      dataset: datasets.data,
-      space: spaces.data,
-    };
+    // Get user overview which returns all repos and validates user exists
+    const response = await repoAPI.getUserOverview(username.value);
+    repos.value = response.data;
+    return true;
   } catch (err) {
-    console.error("Failed to load repos:", err);
+    // Check if it's a 404 error
+    if (err.response?.status === 404) {
+      userNotFound.value = true;
+      return false;
+    }
+    // For other errors, show empty repos
+    console.error("Failed to load user data:", err);
+    return true;
   }
 }
 
@@ -448,13 +567,33 @@ async function loadUserCard() {
   }
 }
 
+async function loadQuotaInfo() {
+  try {
+    const response = await axios.get(`/api/quota/${username.value}/public`, {
+      withCredentials: true,
+    });
+    quotaInfo.value = response.data;
+  } catch (err) {
+    console.error("Failed to load quota info:", err);
+    // Don't show error to user - quota info is optional
+    quotaInfo.value = null;
+  }
+}
+
 onMounted(async () => {
   // Check if this is actually an organization
   const isOrg = await checkIfOrganization();
   if (isOrg) return; // Already redirected
 
-  // Continue loading as user
-  loadRepos();
+  // Load user data (repos) - this also validates user exists
+  const userExists = await loadUserData();
+  if (!userExists) {
+    // userNotFound already set to true in loadUserData
+    return;
+  }
+
+  // Load user card and quota info
   loadUserCard();
+  loadQuotaInfo();
 });
 </script>

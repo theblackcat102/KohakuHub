@@ -63,6 +63,84 @@
           </div>
         </div>
 
+        <!-- Storage Quota Card -->
+        <div v-if="quotaInfo" class="card">
+          <h3 class="font-semibold mb-3 flex items-center gap-2">
+            <div class="i-carbon-data-base text-gray-500" />
+            Storage Usage
+          </h3>
+
+          <!-- Public Storage -->
+          <div class="mb-4">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm text-gray-600 dark:text-gray-400"
+                >Public</span
+              >
+              <span class="text-sm font-mono">
+                {{ formatBytes(quotaInfo.public_used_bytes) }}
+                <span
+                  v-if="quotaInfo.public_quota_bytes !== null"
+                  class="text-gray-400"
+                >
+                  / {{ formatBytes(quotaInfo.public_quota_bytes) }}
+                </span>
+                <span v-else class="text-gray-400">/ Unlimited</span>
+              </span>
+            </div>
+            <el-progress
+              v-if="quotaInfo.public_quota_bytes !== null"
+              :percentage="Math.min(100, quotaInfo.public_percentage_used || 0)"
+              :status="getQuotaStatus(quotaInfo.public_percentage_used)"
+              :show-text="false"
+            />
+            <div
+              v-else
+              class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
+            ></div>
+          </div>
+
+          <!-- Private Storage (only if user has permission) -->
+          <div v-if="quotaInfo.can_see_private" class="mb-2">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm text-gray-600 dark:text-gray-400"
+                >Private</span
+              >
+              <span class="text-sm font-mono">
+                {{ formatBytes(quotaInfo.private_used_bytes) }}
+                <span
+                  v-if="quotaInfo.private_quota_bytes !== null"
+                  class="text-gray-400"
+                >
+                  / {{ formatBytes(quotaInfo.private_quota_bytes) }}
+                </span>
+                <span v-else class="text-gray-400">/ Unlimited</span>
+              </span>
+            </div>
+            <el-progress
+              v-if="quotaInfo.private_quota_bytes !== null"
+              :percentage="
+                Math.min(100, quotaInfo.private_percentage_used || 0)
+              "
+              :status="getQuotaStatus(quotaInfo.private_percentage_used)"
+              :show-text="false"
+            />
+            <div
+              v-else
+              class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
+            ></div>
+          </div>
+
+          <!-- Total -->
+          <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center">
+              <span class="text-sm font-semibold">Total</span>
+              <span class="text-sm font-mono font-semibold">
+                {{ formatBytes(quotaInfo.total_used_bytes) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Stats Summary / Tab Navigation -->
         <div class="card">
           <h3 class="font-semibold mb-3">Repositories</h3>
@@ -422,6 +500,7 @@ const orgInfo = ref(null);
 const members = ref([]);
 const repos = ref({ model: [], dataset: [], space: [] });
 const orgCard = ref("");
+const quotaInfo = ref(null);
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 
@@ -439,6 +518,22 @@ function hasMoreRepos(type) {
 
 function formatDate(date) {
   return date ? dayjs(date).fromNow() : "never";
+}
+
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined) return "Unlimited";
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+function getQuotaStatus(percentage) {
+  if (percentage === null || percentage === undefined) return "";
+  if (percentage >= 90) return "exception";
+  if (percentage >= 75) return "warning";
+  return "success";
 }
 
 function goToRepo(type, repo) {
@@ -498,10 +593,24 @@ async function loadOrgCard() {
   }
 }
 
+async function loadQuotaInfo() {
+  try {
+    const response = await axios.get(`/api/quota/${orgname.value}/public`, {
+      withCredentials: true,
+    });
+    quotaInfo.value = response.data;
+  } catch (err) {
+    console.error("Failed to load quota info:", err);
+    // Don't show error to user - quota info is optional
+    quotaInfo.value = null;
+  }
+}
+
 onMounted(() => {
   loadOrgInfo();
   loadMembers();
   loadRepos();
   loadOrgCard();
+  loadQuotaInfo();
 });
 </script>

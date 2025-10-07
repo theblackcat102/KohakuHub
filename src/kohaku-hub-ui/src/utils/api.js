@@ -85,6 +85,15 @@ export const repoAPI = {
   listRepos: (type, params) => api.get(`/api/${type}s`, { params }),
 
   /**
+   * Get user overview with all repositories
+   * @param {string} username - Username
+   * @param {number} limit - Max repos per type
+   * @returns {Promise} - { models: [], datasets: [], spaces: [] }
+   */
+  getUserOverview: (username, limit = 100) =>
+    api.get(`/api/users/${username}/repos`, { params: { limit } }),
+
+  /**
    * List repository file tree
    * @param {string} type - Repository type
    * @param {string} namespace - Owner namespace
