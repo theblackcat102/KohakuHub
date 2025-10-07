@@ -9,8 +9,8 @@ from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.async_utils import get_async_lakefs_client, run_in_lakefs_executor
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
-from kohakuhub.db_async import get_repository
-from kohakuhub.db import Repository, User
+from kohakuhub.db_async import execute_db_query, get_commit, get_repository
+from kohakuhub.db import Commit, Repository, User
 from kohakuhub.logger import get_logger
 
 logger = get_logger("COMMITS")
@@ -91,8 +91,31 @@ async def list_commits(
                 "nextCursor": None,
             }
 
+        # Get all commit IDs to fetch user info from our database
+        commit_ids = [c.id for c in log_result.results]
+
+        # Fetch our commit records (with actual user info)
+        def _get_our_commits():
+            return {
+                c.commit_id: c
+                for c in Commit.select().where(
+                    Commit.commit_id.in_(commit_ids),
+                    Commit.repo_full_id == repo_id,
+                )
+            }
+
+        our_commits = await execute_db_query(_get_our_commits)
+
         for commit in log_result.results:
             try:
+                # Try to get user info from our database
+                our_commit = our_commits.get(commit.id)
+                author = (
+                    our_commit.username
+                    if our_commit
+                    else (commit.committer or "unknown")
+                )
+
                 commits.append(
                     {
                         "id": commit.id,
@@ -100,7 +123,7 @@ async def list_commits(
                         "title": commit.message,
                         "message": commit.message,
                         "date": commit.creation_date,
-                        "author": commit.committer or "unknown",
+                        "author": author,
                         "email": (
                             commit.metadata.get("email", "") if commit.metadata else ""
                         ),
@@ -129,3 +152,74 @@ async def list_commits(
     except Exception as e:
         logger.exception(f"Failed to list commits for {repo_id}/{branch}", e)
         return hf_server_error(f"Failed to list commits: {str(e)}")
+
+
+@router.get("/{repo_type}s/{namespace}/{name}/commit/{commit_id}")
+async def get_commit_detail(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    commit_id: str,
+    user: User | None = Depends(get_optional_user),
+):
+    """Get detailed commit information including user who made it.
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
+        commit_id: Commit ID (SHA)
+        user: Current authenticated user (optional)
+
+    Returns:
+        Detailed commit information with user data
+    """
+    repo_id = f"{namespace}/{name}"
+
+    # Check if repository exists
+    repo_row = await get_repository(repo_type, namespace, name)
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    # Check read permission
+    check_repo_read_permission(repo_row, user)
+
+    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+
+    try:
+        # Get commit from LakeFS
+        async_client = get_async_lakefs_client()
+        lakefs_commit = await async_client.get_commit(
+            repository=lakefs_repo, commit_id=commit_id
+        )
+
+        # Get our commit record (with actual user info)
+        our_commit = await get_commit(commit_id, repo_id)
+
+        # Build response
+        response = {
+            "id": lakefs_commit.id,
+            "oid": lakefs_commit.id,
+            "title": lakefs_commit.message,
+            "message": lakefs_commit.message,
+            "date": lakefs_commit.creation_date,
+            "parents": lakefs_commit.parents or [],
+            "metadata": lakefs_commit.metadata or {},
+        }
+
+        # Add user info if we have it in our database
+        if our_commit:
+            response["author"] = our_commit.username
+            response["user_id"] = our_commit.user_id
+            response["description"] = our_commit.description
+            response["committed_at"] = our_commit.created_at.isoformat()
+        else:
+            response["author"] = lakefs_commit.committer or "unknown"
+
+        logger.debug(f"Retrieved commit {commit_id[:8]} for {repo_id}")
+        return response
+
+    except Exception as e:
+        logger.exception(f"Failed to get commit {commit_id} for {repo_id}", e)
+        return hf_server_error(f"Failed to get commit: {str(e)}")

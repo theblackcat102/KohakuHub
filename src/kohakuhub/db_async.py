@@ -8,6 +8,7 @@ from typing import TypeVar
 
 from kohakuhub.async_utils import run_in_db_executor
 from kohakuhub.db import (
+    Commit,
     EmailVerification,
     File,
     LFSObjectHistory,
@@ -495,6 +496,64 @@ async def list_lfs_history(
             )
             .order_by(LFSObjectHistory.created_at.desc())
         )
+        if limit:
+            query = query.limit(limit)
+        return list(query)
+
+    return await run_in_db_executor(_list)
+
+
+# Commit operations
+async def create_commit(
+    commit_id: str,
+    repo_full_id: str,
+    repo_type: str,
+    branch: str,
+    user_id: int,
+    username: str,
+    message: str,
+    description: str = "",
+) -> Commit:
+    """Create commit record."""
+    from kohakuhub.db import Commit
+
+    def _create():
+        return Commit.create(
+            commit_id=commit_id,
+            repo_full_id=repo_full_id,
+            repo_type=repo_type,
+            branch=branch,
+            user_id=user_id,
+            username=username,
+            message=message,
+            description=description,
+        )
+
+    return await run_in_db_executor(_create)
+
+
+async def get_commit(commit_id: str, repo_full_id: str) -> Commit | None:
+    """Get commit by ID and repo."""
+    from kohakuhub.db import Commit
+
+    return await run_in_db_executor(
+        lambda: Commit.get_or_none(
+            Commit.commit_id == commit_id, Commit.repo_full_id == repo_full_id
+        )
+    )
+
+
+async def list_commits_by_repo(
+    repo_full_id: str, branch: str | None = None, limit: int | None = None
+) -> list[Commit]:
+    """List commits for a repository."""
+    from kohakuhub.db import Commit
+
+    def _list():
+        query = Commit.select().where(Commit.repo_full_id == repo_full_id)
+        if branch:
+            query = query.where(Commit.branch == branch)
+        query = query.order_by(Commit.created_at.desc())
         if limit:
             query = query.limit(limit)
         return list(query)

@@ -19,6 +19,7 @@ from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_write_permission
 from kohakuhub.config import cfg
 from kohakuhub.db_async import (
+    create_commit,
     create_file,
     delete_file,
     execute_db_query,
@@ -693,6 +694,23 @@ async def commit(
         )
     except Exception as e:
         raise HTTPException(500, detail={"error": f"Commit failed: {str(e)}"})
+
+    # Record commit in our database (track the actual user)
+    try:
+        await create_commit(
+            commit_id=commit_result.id,
+            repo_full_id=repo_id,
+            repo_type=repo_type,
+            branch=revision,
+            user_id=user.id,
+            username=user.username,
+            message=commit_msg,
+            description=commit_desc,
+        )
+        logger.info(f"Recorded commit {commit_result.id[:8]} by {user.username}")
+    except Exception as e:
+        logger.warning(f"Failed to record commit in database: {e}")
+        # Don't fail the commit if DB recording fails
 
     # Generate commit URL
     commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result.id}"

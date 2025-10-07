@@ -167,8 +167,26 @@ class UserOrganization(BaseModel):
     role = CharField(default="member")  # keep your role semantics as before
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
+
+class Commit(BaseModel):
+    """Track commits made by users (LakeFS doesn't track the actual user)."""
+
+    id = AutoField()
+    commit_id = CharField(index=True)  # LakeFS commit ID (SHA)
+    repo_full_id = CharField(index=True)  # namespace/name
+    repo_type = CharField(index=True)  # model/dataset/space
+    branch = CharField(index=True)  # Branch name
+    user_id = IntegerField(index=True)  # User who made the commit
+    username = CharField(index=True)  # Username (denormalized for performance)
+    message = TextField()  # Commit message
+    description = TextField(default="")  # Optional description
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
     class Meta:
-        indexes = ((("user", "organization"), True),)
+        indexes = (
+            (("repo_full_id", "branch"), False),  # Query commits by repo+branch
+            (("commit_id", "repo_full_id"), True),  # Unique commit per repo
+        )
 
 
 class LFSObjectHistory(BaseModel):
@@ -207,6 +225,7 @@ def init_db():
             StagingUpload,
             Organization,
             UserOrganization,
+            Commit,
             LFSObjectHistory,
         ],
         safe=True,
