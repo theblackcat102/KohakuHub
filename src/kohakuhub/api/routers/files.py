@@ -20,7 +20,6 @@ from kohakuhub.api.utils.hf import (
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.utils.quota import check_quota
 from kohakuhub.api.utils.s3 import generate_download_presigned_url, parse_s3_uri
-from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.auth.permissions import (
     check_repo_read_permission,
@@ -87,20 +86,20 @@ async def check_file_by_sample(
 
         # Try to get existing file from LakeFS
         try:
-            async_client = get_async_lakefs_client()
-            obj_stat = await async_client.stat_object(
+            client = get_lakefs_client()
+            obj_stat = await client.stat_object(
                 repository=lakefs_repo, ref=revision, path=path
             )
 
             # If file exists and size matches, download and compare
-            if obj_stat.size_bytes == size:
+            if obj_stat["size_bytes"] == size:
                 # Get the actual content to compare
                 try:
-                    obj_content = await async_client.get_object(
+                    obj_content = await client.get_object(
                         repository=lakefs_repo, ref=revision, path=path
                     )
                     # Read the content
-                    existing_data = obj_content.read()
+                    existing_data = obj_content
                     existing_sha256 = hashlib.sha256(existing_data).hexdigest()
 
                     # If content matches, skip upload
@@ -288,20 +287,19 @@ async def get_revision(
 
     # Get branch information
     try:
-        branch = client.branches.get_branch(repository=lakefs_repo, branch=revision)
+        branch = await client.get_branch(repository=lakefs_repo, branch=revision)
     except Exception as e:
         if is_lakefs_not_found_error(e):
             return hf_revision_not_found(repo_id, revision)
         return hf_server_error(f"Failed to get branch: {str(e)}")
 
-    commit_id = branch.commit_id
+    commit_id = branch["commit_id"]
     commit_info = None
 
     # Get commit details if available
     if commit_id:
         try:
-            async_client = get_async_lakefs_client()
-            commit_info = await async_client.get_commit(
+            commit_info = await client.get_commit(
                 repository=lakefs_repo, commit_id=commit_id
             )
         except Exception as e:
@@ -310,8 +308,8 @@ async def get_revision(
 
     # Format last modified date
     last_modified = None
-    if commit_info and commit_info.creation_date:
-        last_modified = datetime.fromtimestamp(commit_info.creation_date).strftime(
+    if commit_info and commit_info.get("creation_date"):
+        last_modified = datetime.fromtimestamp(commit_info["creation_date"]).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
@@ -333,7 +331,7 @@ async def get_revision(
         "revision": revision,
         "commit": {
             "oid": commit_id,
-            "date": commit_info.creation_date if commit_info else None,
+            "date": commit_info.get("creation_date") if commit_info else None,
         },
         "xetEnabled": False,
     }
@@ -368,8 +366,7 @@ async def _get_file_metadata(
 
     try:
         # Get object metadata from LakeFS
-        async_client = get_async_lakefs_client()
-        obj_stat = await async_client.stat_object(
+        obj_stat = await client.stat_object(
             repository=lakefs_repo, ref=revision, path=path
         )
     except Exception as e:
@@ -377,14 +374,14 @@ async def _get_file_metadata(
 
     # Get commit hash for the revision
     try:
-        branch = client.branches.get_branch(repository=lakefs_repo, branch=revision)
-        commit_hash = branch.commit_id
+        branch = await client.get_branch(repository=lakefs_repo, branch=revision)
+        commit_hash = branch["commit_id"]
     except Exception:
         # If not a branch, might be a commit hash already
         commit_hash = revision
 
     # Parse physical address to get S3 bucket and key
-    physical_address = obj_stat.physical_address
+    physical_address = obj_stat["physical_address"]
 
     if not physical_address.startswith("s3://"):
         raise HTTPException(500, detail={"error": "Unsupported storage backend"})
@@ -400,7 +397,7 @@ async def _get_file_metadata(
     )
 
     # Prepare headers required by HuggingFace client
-    file_size = obj_stat.size_bytes
+    file_size = obj_stat["size_bytes"]
 
     # Get correct checksum from database
     # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
@@ -419,10 +416,12 @@ async def _get_file_metadata(
         "Content-Length": str(file_size) if file_size else "0",
         "Accept-Ranges": "bytes",  # Support resume
         # Additional useful headers
-        "Content-Type": obj_stat.content_type or "application/octet-stream",
+        "Content-Type": obj_stat.get("content_type") or "application/octet-stream",
         "Last-Modified": (
-            datetime.fromtimestamp(obj_stat.mtime).strftime("%a, %d %b %Y %H:%M:%S GMT")
-            if obj_stat.mtime
+            datetime.fromtimestamp(obj_stat["mtime"]).strftime(
+                "%a, %d %b %Y %H:%M:%S GMT"
+            )
+            if obj_stat.get("mtime")
             else ""
         ),
         "Content-Disposition": f'attachment; filename="{path}";',

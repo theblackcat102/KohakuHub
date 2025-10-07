@@ -3,7 +3,6 @@
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends
-from lakefs_client.models import RepositoryCreation
 from pydantic import BaseModel
 
 from kohakuhub.api.utils.hf import (
@@ -78,12 +77,10 @@ async def create_repo(
     storage_namespace = f"s3://{cfg.s3.bucket}/{lakefs_repo}"
 
     try:
-        client.repositories.create_repository(
-            repository_creation=RepositoryCreation(
-                name=lakefs_repo,
-                storage_namespace=storage_namespace,
-                default_branch="main",
-            )
+        await client.create_repository(
+            name=lakefs_repo,
+            storage_namespace=storage_namespace,
+            default_branch="main",
         )
     except Exception as e:
         logger.exception(f"LakeFS repository creation failed for {full_id}", e)
@@ -152,7 +149,7 @@ async def delete_repo(
     client = get_lakefs_client()
     try:
         # Note: Deleting a LakeFS repo is generally fast as it only deletes metadata
-        client.repositories.delete_repository(repository=lakefs_repo)
+        await client.delete_repository(repository=lakefs_repo)
         logger.success(f"Successfully deleted LakeFS repository: {lakefs_repo}")
     except Exception as e:
         # LakeFS returns 404 if repo doesn't exist, which is fine

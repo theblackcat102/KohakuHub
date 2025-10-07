@@ -11,7 +11,6 @@ from kohakuhub.api.utils.hf import (
     hf_repo_not_found,
 )
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
@@ -94,21 +93,20 @@ async def get_repo_info(
     last_modified = None
 
     try:
-        branch = client.branches.get_branch(repository=lakefs_repo, branch="main")
-        commit_id = branch.commit_id
+        branch = await client.get_branch(repository=lakefs_repo, branch="main")
+        commit_id = branch["commit_id"]
 
         # Get commit details if available
         if commit_id:
             try:
-                async_client = get_async_lakefs_client()
-                commit_info = await async_client.get_commit(
+                commit_info = await client.get_commit(
                     repository=lakefs_repo, commit_id=commit_id
                 )
-                if commit_info and commit_info.creation_date:
+                if commit_info and commit_info.get("creation_date"):
                     from datetime import datetime
 
                     last_modified = datetime.fromtimestamp(
-                        commit_info.creation_date
+                        commit_info["creation_date"]
                     ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             except Exception as ex:
                 logger.debug(f"Could not get commit info: {str(ex)}")
@@ -246,19 +244,18 @@ async def list_repos(
         # Try to get lastModified from LakeFS main branch
         try:
             lakefs_repo = lakefs_repo_name(rt, r.full_id)
-            branch = client.branches.get_branch(repository=lakefs_repo, branch="main")
-            sha = branch.commit_id
+            branch = await client.get_branch(repository=lakefs_repo, branch="main")
+            sha = branch["commit_id"]
 
             if sha:
-                async_client = get_async_lakefs_client()
-                commit_info = await async_client.get_commit(
+                commit_info = await client.get_commit(
                     repository=lakefs_repo, commit_id=sha
                 )
-                if commit_info and commit_info.creation_date:
+                if commit_info and commit_info.get("creation_date"):
                     from datetime import datetime
 
                     last_modified = datetime.fromtimestamp(
-                        commit_info.creation_date
+                        commit_info["creation_date"]
                     ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         except Exception as e:
             logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
@@ -346,21 +343,18 @@ async def list_user_repos(
             # Try to get lastModified from LakeFS
             try:
                 lakefs_repo = lakefs_repo_name(repo_type, r.full_id)
-                branch = client.branches.get_branch(
-                    repository=lakefs_repo, branch="main"
-                )
-                sha = branch.commit_id
+                branch = await client.get_branch(repository=lakefs_repo, branch="main")
+                sha = branch["commit_id"]
 
                 if sha:
-                    async_client = get_async_lakefs_client()
-                    commit_info = await async_client.get_commit(
+                    commit_info = await client.get_commit(
                         repository=lakefs_repo, commit_id=sha
                     )
-                    if commit_info and commit_info.creation_date:
+                    if commit_info and commit_info.get("creation_date"):
                         from datetime import datetime
 
                         last_modified = datetime.fromtimestamp(
-                            commit_info.creation_date
+                            commit_info["creation_date"]
                         ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             except Exception as e:
                 logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")

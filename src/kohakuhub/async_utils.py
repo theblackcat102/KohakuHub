@@ -263,11 +263,11 @@ class AsyncLakeFSClient:
 
 
 def get_async_lakefs_client():
-    """Get an async-wrapped LakeFS client.
+    """Get LakeFS REST client.
 
     Returns:
-        AsyncLakeFSClient instance
+        LakeFSRestClient instance (already async, no wrapping needed)
     """
-    from kohakuhub.api.utils.lakefs import get_lakefs_client
+    from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 
-    return AsyncLakeFSClient(get_lakefs_client())
+    return get_lakefs_rest_client()

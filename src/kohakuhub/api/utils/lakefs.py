@@ -1,24 +1,16 @@
 """LakeFS client utilities and helper functions."""
 
-import lakefs_client
-
-from lakefs_client.client import LakeFSClient
-
 from kohakuhub.config import cfg
-from kohakuhub.db import Repository
+from kohakuhub.lakefs_rest_client import LakeFSRestClient, get_lakefs_rest_client
 
 
-def get_lakefs_client() -> LakeFSClient:
-    """Create configured LakeFS client.
+def get_lakefs_client() -> LakeFSRestClient:
+    """Get configured LakeFS REST client.
 
     Returns:
-        Configured LakeFSClient instance.
+        Configured LakeFSRestClient instance.
     """
-    config = lakefs_client.Configuration()
-    config.username = cfg.lakefs.access_key
-    config.password = cfg.lakefs.secret_key
-    config.host = f"{cfg.lakefs.endpoint}/api/v1"
-    return LakeFSClient(config)
+    return get_lakefs_rest_client()
 
 
 def lakefs_repo_name(repo_type: str, repo_id: str) -> str:

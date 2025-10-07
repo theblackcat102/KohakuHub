@@ -13,8 +13,7 @@ from kohakuhub.api.utils.hf import (
     is_lakefs_not_found_error,
     is_lakefs_revision_error,
 )
-from kohakuhub.api.utils.lakefs import lakefs_repo_name
-from kohakuhub.async_utils import get_async_lakefs_client
+from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
@@ -45,14 +44,14 @@ async def fetch_lakefs_objects(
     Raises:
         Exception: If listing fails
     """
-    async_client = get_async_lakefs_client()
+    client = get_lakefs_client()
 
     all_results = []
     after = ""
     has_more = True
 
     while has_more:
-        result = await async_client.list_objects(
+        result = await client.list_objects(
             repository=lakefs_repo,
             ref=revision,
             prefix=prefix,
@@ -61,11 +60,11 @@ async def fetch_lakefs_objects(
             after=after,
         )
 
-        all_results.extend(result.results)
+        all_results.extend(result["results"])
 
         # Check pagination
-        if result.pagination and result.pagination.has_more:
-            after = result.pagination.next_offset
+        if result.get("pagination") and result["pagination"].get("has_more"):
+            after = result["pagination"]["next_offset"]
             has_more = True
         else:
             has_more = False
@@ -90,8 +89,8 @@ async def calculate_folder_stats(
     folder_latest_mtime = None
 
     try:
-        async_client = get_async_lakefs_client()
-        folder_contents = await async_client.list_objects(
+        client = get_lakefs_client()
+        folder_contents = await client.list_objects(
             repository=lakefs_repo,
             ref=revision,
             prefix=folder_path,
@@ -100,15 +99,15 @@ async def calculate_folder_stats(
         )
 
         # Calculate total size and find latest modification
-        for child_obj in folder_contents.results:
-            if child_obj.path_type == "object":
-                folder_size += child_obj.size_bytes or 0
-                if hasattr(child_obj, "mtime") and child_obj.mtime:
+        for child_obj in folder_contents["results"]:
+            if child_obj["path_type"] == "object":
+                folder_size += child_obj.get("size_bytes") or 0
+                if child_obj.get("mtime"):
                     if (
                         folder_latest_mtime is None
-                        or child_obj.mtime > folder_latest_mtime
+                        or child_obj["mtime"] > folder_latest_mtime
                     ):
-                        folder_latest_mtime = child_obj.mtime
+                        folder_latest_mtime = child_obj["mtime"]
 
     except Exception as e:
         logger.debug(f"Could not calculate stats for folder {folder_path}: {str(e)}")
@@ -120,35 +119,35 @@ async def convert_file_object(obj, repo_id: str, prefix_len: int) -> dict:
     """Convert LakeFS file object to HuggingFace format.
 
     Args:
-        obj: LakeFS object
+        obj: LakeFS object dict
         repo_id: Repository ID
         prefix_len: Length of path prefix to remove
 
     Returns:
         HuggingFace formatted file object
     """
-    is_lfs = obj.size_bytes > cfg.app.lfs_threshold_bytes
+    is_lfs = obj["size_bytes"] > cfg.app.lfs_threshold_bytes
 
     # Remove prefix from path to get relative path
-    relative_path = obj.path[prefix_len:] if prefix_len else obj.path
+    relative_path = obj["path"][prefix_len:] if prefix_len else obj["path"]
 
     # Get correct checksum from database
-    file_record = await get_file(repo_id, obj.path)
+    file_record = await get_file(repo_id, obj["path"])
 
     checksum = (
-        file_record.sha256 if file_record and file_record.sha256 else obj.checksum
+        file_record.sha256 if file_record and file_record.sha256 else obj["checksum"]
     )
 
     file_obj = {
         "type": "file",
         "oid": checksum,  # Git blob SHA1 for non-LFS, SHA256 for LFS
-        "size": obj.size_bytes,
+        "size": obj["size_bytes"],
         "path": relative_path,
     }
 
     # Add last modified info if available
-    if hasattr(obj, "mtime") and obj.mtime:
-        file_obj["lastModified"] = datetime.fromtimestamp(obj.mtime).strftime(
+    if obj.get("mtime"):
+        file_obj["lastModified"] = datetime.fromtimestamp(obj["mtime"]).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
@@ -156,7 +155,7 @@ async def convert_file_object(obj, repo_id: str, prefix_len: int) -> dict:
     if is_lfs:
         file_obj["lfs"] = {
             "oid": checksum,  # SHA256 for LFS files
-            "size": obj.size_bytes,
+            "size": obj["size_bytes"],
             "pointerSize": 134,  # Standard Git LFS pointer size
         }
 
@@ -169,7 +168,7 @@ async def convert_directory_object(
     """Convert LakeFS directory object to HuggingFace format.
 
     Args:
-        obj: LakeFS common_prefix object
+        obj: LakeFS common_prefix object dict
         lakefs_repo: LakeFS repository name
         revision: Branch or commit
         prefix_len: Length of path prefix to remove
@@ -178,16 +177,16 @@ async def convert_directory_object(
         HuggingFace formatted directory object
     """
     # Remove prefix from path to get relative path
-    relative_path = obj.path[prefix_len:] if prefix_len else obj.path
+    relative_path = obj["path"][prefix_len:] if prefix_len else obj["path"]
 
     # Calculate folder stats
     folder_size, folder_latest_mtime = await calculate_folder_stats(
-        lakefs_repo, revision, obj.path
+        lakefs_repo, revision, obj["path"]
     )
 
     dir_obj = {
         "type": "directory",
-        "oid": (obj.checksum if hasattr(obj, "checksum") and obj.checksum else ""),
+        "oid": obj.get("checksum", ""),
         "size": folder_size,
         "path": relative_path.rstrip("/"),  # Remove trailing slash
     }
@@ -197,8 +196,8 @@ async def convert_directory_object(
         dir_obj["lastModified"] = datetime.fromtimestamp(folder_latest_mtime).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
-    elif hasattr(obj, "mtime") and obj.mtime:
-        dir_obj["lastModified"] = datetime.fromtimestamp(obj.mtime).strftime(
+    elif obj.get("mtime"):
+        dir_obj["lastModified"] = datetime.fromtimestamp(obj["mtime"]).strftime(
             "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
@@ -280,7 +279,7 @@ async def list_repo_tree(
     prefix_len = len(prefix)
 
     for obj in all_results:
-        match obj.path_type:
+        match obj["path_type"]:
             case "object":
                 # File object
                 file_obj = await convert_file_object(obj, repo_id, prefix_len)
@@ -348,15 +347,15 @@ async def get_paths_info(
 
         try:
             # Try to get object stats
-            async_client = get_async_lakefs_client()
-            obj_stats = await async_client.stat_object(
+            client = get_lakefs_client()
+            obj_stats = await client.stat_object(
                 repository=lakefs_repo,
                 ref=revision,
                 path=clean_path,
             )
 
             # It's a file
-            is_lfs = obj_stats.size_bytes > cfg.app.lfs_threshold_bytes
+            is_lfs = obj_stats["size_bytes"] > cfg.app.lfs_threshold_bytes
 
             # Get correct checksum from database
             file_record = await get_file(repo_id, clean_path)
@@ -364,13 +363,13 @@ async def get_paths_info(
             checksum = (
                 file_record.sha256
                 if file_record and file_record.sha256
-                else obj_stats.checksum
+                else obj_stats["checksum"]
             )
 
             file_info = {
                 "type": "file",
                 "path": clean_path,
-                "size": obj_stats.size_bytes,
+                "size": obj_stats["size_bytes"],
                 "oid": checksum,  # Git blob SHA1 for non-LFS, SHA256 for LFS
                 "lfs": None,
                 "last_commit": None,
@@ -381,7 +380,7 @@ async def get_paths_info(
             if is_lfs:
                 file_info["lfs"] = {
                     "oid": checksum,  # SHA256 for LFS files
-                    "size": obj_stats.size_bytes,
+                    "size": obj_stats["size_bytes"],
                     "pointerSize": 134,
                 }
 
@@ -392,11 +391,11 @@ async def get_paths_info(
             if is_lakefs_not_found_error(e):
                 try:
                     # Try to list objects with this path as prefix
-                    async_client = get_async_lakefs_client()
+                    client = get_lakefs_client()
                     prefix = (
                         clean_path if clean_path.endswith("/") else clean_path + "/"
                     )
-                    list_result = await async_client.list_objects(
+                    list_result = await client.list_objects(
                         repository=lakefs_repo,
                         ref=revision,
                         prefix=prefix,
@@ -404,13 +403,11 @@ async def get_paths_info(
                     )
 
                     # If we get results, it's a directory
-                    if list_result.results:
+                    if list_result["results"]:
                         # Try to get an oid from the first result if available
                         oid = ""
-                        if list_result.results and hasattr(
-                            list_result.results[0], "checksum"
-                        ):
-                            oid = list_result.results[0].checksum or ""
+                        if list_result["results"]:
+                            oid = list_result["results"][0].get("checksum", "")
 
                         return {
                             "type": "directory",

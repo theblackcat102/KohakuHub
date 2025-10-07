@@ -7,7 +7,6 @@ for users and organizations with separate tracking for private and public reposi
 import asyncio
 
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.async_utils import get_async_lakefs_client, run_in_lakefs_executor
 from kohakuhub.config import cfg
 from kohakuhub.db import LFSObjectHistory, Organization, Repository, User
 from kohakuhub.db_async import execute_db_query
@@ -30,7 +29,7 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
         - lfs_unique_bytes: Unique LFS storage (deduplicated by SHA256)
     """
     lakefs_repo = lakefs_repo_name(repo.repo_type, repo.full_id)
-    async_client = get_async_lakefs_client()
+    client = get_lakefs_client()
 
     # Calculate current branch storage
     current_branch_bytes = 0
@@ -40,7 +39,7 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
         has_more = True
 
         while has_more:
-            result = await async_client.list_objects(
+            result = await client.list_objects(
                 repository=lakefs_repo,
                 ref="main",
                 delimiter="",  # Recursive
@@ -48,12 +47,12 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
                 after=after,
             )
 
-            for obj in result.results:
-                if obj.path_type == "object":
-                    current_branch_bytes += obj.size_bytes or 0
+            for obj in result["results"]:
+                if obj["path_type"] == "object":
+                    current_branch_bytes += obj.get("size_bytes") or 0
 
-            if result.pagination and result.pagination.has_more:
-                after = result.pagination.next_offset
+            if result.get("pagination") and result["pagination"].get("has_more"):
+                after = result["pagination"]["next_offset"]
                 has_more = True
             else:
                 has_more = False

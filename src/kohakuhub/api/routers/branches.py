@@ -71,18 +71,16 @@ async def create_branch(
         source_ref = payload.revision or "main"
 
         # Get commit ID from source ref
-        source_branch = client.branches.get_branch(
+        source_branch = await client.get_branch(
             repository=lakefs_repo, branch=source_ref
         )
-        source_commit = source_branch.commit_id
+        source_commit = source_branch["commit_id"]
 
         # Create new branch
-        client.branches.create_branch(
+        await client.create_branch(
             repository=lakefs_repo,
-            branch_creation={
-                "name": payload.branch,
-                "source": source_commit,
-            },
+            name=payload.branch,
+            source=source_commit,
         )
     except Exception as e:
         return hf_server_error(f"Failed to create branch: {str(e)}")
@@ -133,7 +131,7 @@ async def delete_branch(
     client = get_lakefs_client()
 
     try:
-        client.branches.delete_branch(repository=lakefs_repo, branch=branch)
+        await client.delete_branch(repository=lakefs_repo, branch=branch)
     except Exception as e:
         return hf_server_error(f"Failed to delete branch: {str(e)}")
 
@@ -187,18 +185,16 @@ async def create_tag(
         source_ref = payload.revision or "main"
 
         # Get commit ID from source ref
-        source_branch = client.branches.get_branch(
+        source_branch = await client.get_branch(
             repository=lakefs_repo, branch=source_ref
         )
-        source_commit = source_branch.commit_id
+        source_commit = source_branch["commit_id"]
 
         # Create new tag
-        client.tags.create_tag(
+        await client.create_tag(
             repository=lakefs_repo,
-            tag_creation={
-                "id": payload.tag,
-                "ref": source_commit,
-            },
+            id=payload.tag,
+            ref=source_commit,
         )
     except Exception as e:
         return hf_server_error(f"Failed to create tag: {str(e)}")
@@ -241,7 +237,7 @@ async def delete_tag(
     client = get_lakefs_client()
 
     try:
-        client.tags.delete_tag(repository=lakefs_repo, tag=tag)
+        await client.delete_tag(repository=lakefs_repo, tag=tag)
     except Exception as e:
         return hf_server_error(f"Failed to delete tag: {str(e)}")
 

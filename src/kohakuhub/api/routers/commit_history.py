@@ -1,16 +1,19 @@
 """Commit history API endpoints."""
 
+import difflib
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, Query
 
 from kohakuhub.api.utils.hf import hf_repo_not_found, hf_server_error
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.async_utils import get_async_lakefs_client, run_in_lakefs_executor
+from kohakuhub.api.utils.lakefs import lakefs_repo_name
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.config import cfg
 from kohakuhub.db_async import execute_db_query, get_commit, get_repository
 from kohakuhub.db import Commit, Repository, User
+from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 from kohakuhub.logger import get_logger
 
 logger = get_logger("COMMITS")
@@ -55,35 +58,28 @@ async def list_commits(
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
 
     try:
-        # Get commits from LakeFS using refs.log_commits
-        client = get_lakefs_client()
+        # Get commits from LakeFS using REST API
+        client = get_lakefs_rest_client()
 
         logger.debug(
             f"Fetching commits for {lakefs_repo}/{branch}, limit={limit}, after={after}"
         )
 
-        # Call log_commits with proper keyword arguments
-        kwargs = {
-            "amount": limit,
-        }
-        if after:
-            kwargs["after"] = after
-
-        log_result = await run_in_lakefs_executor(
-            client.refs.log_commits,
-            lakefs_repo,  # repository (positional)
-            branch,  # ref (positional)
-            **kwargs,  # amount, after (keyword)
+        log_result = await client.log_commits(
+            repository=lakefs_repo,
+            ref=branch,
+            amount=limit,
+            after=after,
         )
 
         logger.debug(
-            f"Got {len(log_result.results) if log_result and log_result.results else 0} commits"
+            f"Got {len(log_result.get('results', [])) if log_result else 0} commits"
         )
 
         # Format commits for HuggingFace Hub compatibility
         commits = []
 
-        if not log_result or not log_result.results:
+        if not log_result or not log_result.get("results"):
             logger.warning(f"No commits found for {lakefs_repo}/{branch}")
             return {
                 "commits": [],
@@ -92,7 +88,7 @@ async def list_commits(
             }
 
         # Get all commit IDs to fetch user info from our database
-        commit_ids = [c.id for c in log_result.results]
+        commit_ids = [c["id"] for c in log_result["results"]]
 
         # Fetch our commit records (with actual user info)
         def _get_our_commits():
@@ -106,43 +102,40 @@ async def list_commits(
 
         our_commits = await execute_db_query(_get_our_commits)
 
-        for commit in log_result.results:
+        for commit in log_result["results"]:
             try:
                 # Try to get user info from our database
-                our_commit = our_commits.get(commit.id)
+                our_commit = our_commits.get(commit["id"])
                 author = (
                     our_commit.username
                     if our_commit
-                    else (commit.committer or "unknown")
+                    else (commit.get("committer") or "unknown")
                 )
 
                 commits.append(
                     {
-                        "id": commit.id,
-                        "oid": commit.id,
-                        "title": commit.message,
-                        "message": commit.message,
-                        "date": commit.creation_date,
+                        "id": commit["id"],
+                        "oid": commit["id"],
+                        "title": commit.get("message", ""),
+                        "message": commit.get("message", ""),
+                        "date": commit.get("creation_date"),
                         "author": author,
-                        "email": (
-                            commit.metadata.get("email", "") if commit.metadata else ""
-                        ),
-                        "parents": commit.parents or [],
+                        "email": commit.get("metadata", {}).get("email", ""),
+                        "parents": commit.get("parents", []),
                     }
                 )
             except Exception as ex:
-                logger.warning(f"Failed to parse commit {commit.id}: {str(ex)}")
+                logger.warning(
+                    f"Failed to parse commit {commit.get('id', 'unknown')}: {str(ex)}"
+                )
                 continue
 
+        pagination = log_result.get("pagination", {})
         response = {
             "commits": commits,
-            "hasMore": (
-                log_result.pagination.has_more if log_result.pagination else False
-            ),
+            "hasMore": pagination.get("has_more", False),
             "nextCursor": (
-                log_result.pagination.next_offset
-                if (log_result.pagination and log_result.pagination.has_more)
-                else None
+                pagination.get("next_offset") if pagination.get("has_more") else None
             ),
         }
 
@@ -189,8 +182,8 @@ async def get_commit_detail(
 
     try:
         # Get commit from LakeFS
-        async_client = get_async_lakefs_client()
-        lakefs_commit = await async_client.get_commit(
+        client = get_lakefs_rest_client()
+        lakefs_commit = await client.get_commit(
             repository=lakefs_repo, commit_id=commit_id
         )
 
@@ -199,13 +192,13 @@ async def get_commit_detail(
 
         # Build response
         response = {
-            "id": lakefs_commit.id,
-            "oid": lakefs_commit.id,
-            "title": lakefs_commit.message,
-            "message": lakefs_commit.message,
-            "date": lakefs_commit.creation_date,
-            "parents": lakefs_commit.parents or [],
-            "metadata": lakefs_commit.metadata or {},
+            "id": lakefs_commit["id"],
+            "oid": lakefs_commit["id"],
+            "title": lakefs_commit.get("message", ""),
+            "message": lakefs_commit.get("message", ""),
+            "date": lakefs_commit.get("creation_date"),
+            "parents": lakefs_commit.get("parents", []),
+            "metadata": lakefs_commit.get("metadata", {}),
         }
 
         # Add user info if we have it in our database
@@ -215,7 +208,7 @@ async def get_commit_detail(
             response["description"] = our_commit.description
             response["committed_at"] = our_commit.created_at.isoformat()
         else:
-            response["author"] = lakefs_commit.committer or "unknown"
+            response["author"] = lakefs_commit.get("committer") or "unknown"
 
         logger.debug(f"Retrieved commit {commit_id[:8]} for {repo_id}")
         return response
@@ -223,3 +216,255 @@ async def get_commit_detail(
     except Exception as e:
         logger.exception(f"Failed to get commit {commit_id} for {repo_id}", e)
         return hf_server_error(f"Failed to get commit: {str(e)}")
+
+
+@router.get("/{repo_type}s/{namespace}/{name}/commit/{commit_id}/diff")
+async def get_commit_diff(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    commit_id: str,
+    user: User | None = Depends(get_optional_user),
+):
+    """Get commit diff showing files changed.
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
+        commit_id: Commit ID (SHA)
+        user: Current authenticated user (optional)
+
+    Returns:
+        List of file changes with before/after info
+    """
+    repo_id = f"{namespace}/{name}"
+
+    # Check if repository exists
+    repo_row = await get_repository(repo_type, namespace, name)
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    # Check read permission
+    check_repo_read_permission(repo_row, user)
+
+    lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+
+    try:
+        # Get commit from LakeFS
+        client = get_lakefs_rest_client()
+        lakefs_commit = await client.get_commit(
+            repository=lakefs_repo, commit_id=commit_id
+        )
+
+        # Get parent commit ID (compare with parent to see what changed)
+        parent_id = (
+            lakefs_commit.get("parents", [])[0]
+            if lakefs_commit.get("parents")
+            else None
+        )
+
+        if not parent_id:
+            # First commit - return empty diff
+            logger.info(f"Commit {commit_id[:8]} is the first commit (no parent)")
+            return {"files": [], "parent_commit": None}
+
+        # Get diff between parent and this commit using REST API
+        diff_result = await client.diff_refs(
+            repository=lakefs_repo,
+            left_ref=parent_id,
+            right_ref=commit_id,
+        )
+
+        # Get all file paths from diff to check LFS status from our database
+        diff_results = diff_result.get("results", []) if diff_result else []
+        file_paths = [d["path"] for d in diff_results]
+
+        # Fetch File records for LFS status
+        def _get_file_records():
+            from kohakuhub.db import File
+
+            return {
+                f.path_in_repo: f
+                for f in File.select().where(
+                    File.repo_full_id == repo_id, File.path_in_repo.in_(file_paths)
+                )
+            }
+
+        file_records = await execute_db_query(_get_file_records) if file_paths else {}
+
+        # Process diff results
+        files = []
+        for diff_entry in diff_results:
+            path = diff_entry["path"]
+
+            # Check if file is LFS from our database or size threshold
+            file_record = file_records.get(path)
+            is_lfs = (
+                file_record.lfs
+                if file_record
+                else (
+                    diff_entry.get("size_bytes")
+                    and diff_entry.get("size_bytes") > cfg.app.lfs_threshold_bytes
+                )
+            )
+
+            file_info = {
+                "path": path,
+                "type": diff_entry.get("type"),  # added, removed, changed
+                "path_type": diff_entry.get("path_type"),  # object, common_prefix
+                "size_bytes": diff_entry.get("size_bytes"),
+                "is_lfs": is_lfs,
+            }
+
+            # Get current file size and SHA256
+            current_size = None
+            current_sha256 = None
+            previous_size = None
+            previous_sha256 = None
+
+            if diff_entry.get("type") in ["changed", "added"]:
+                try:
+                    obj_stat = await client.stat_object(
+                        repository=lakefs_repo, ref=commit_id, path=path
+                    )
+                    current_size = obj_stat.get("size_bytes")
+                    checksum = obj_stat.get("checksum", "")
+                    if checksum and ":" in checksum:
+                        current_sha256 = checksum.split(":", 1)[1]
+                    else:
+                        current_sha256 = checksum
+                except Exception as e:
+                    logger.debug(f"Failed to get current file stat for {path}: {e}")
+
+            # Get previous file info for changed/removed
+            if diff_entry.get("type") in ["changed", "removed"] and parent_id:
+                try:
+                    parent_obj_stat = await client.stat_object(
+                        repository=lakefs_repo, ref=parent_id, path=path
+                    )
+                    previous_size = parent_obj_stat.get("size_bytes")
+                    checksum = parent_obj_stat.get("checksum", "")
+                    if checksum and ":" in checksum:
+                        previous_sha256 = checksum.split(":", 1)[1]
+                    else:
+                        previous_sha256 = checksum
+                except Exception as e:
+                    logger.debug(f"Failed to get previous file stat for {path}: {e}")
+
+            # Add size and SHA256 info
+            if current_size is not None:
+                file_info["size_bytes"] = current_size
+            if current_sha256:
+                file_info["sha256"] = current_sha256
+            if previous_size is not None:
+                file_info["previous_size"] = previous_size
+            if previous_sha256:
+                file_info["previous_sha256"] = previous_sha256
+
+            # For non-LFS files, fetch actual diff (let frontend decide if renderable)
+            # Skip diff for very large files (>1MB) to avoid memory issues
+            max_diff_size = 1024 * 1024  # 1MB
+
+            if not is_lfs and diff_entry.get("type") in ["changed", "added", "removed"]:
+                # Check size constraints
+                skip_diff = False
+                if current_size and current_size >= max_diff_size:
+                    skip_diff = True
+                    logger.debug(
+                        f"Skipping diff for {path}: current size {current_size} >= {max_diff_size}"
+                    )
+                if previous_size and previous_size >= max_diff_size:
+                    skip_diff = True
+                    logger.debug(
+                        f"Skipping diff for {path}: previous size {previous_size} >= {max_diff_size}"
+                    )
+
+                if not skip_diff:
+                    # Get file content and generate diff
+                    try:
+                        logger.debug(
+                            f"Generating diff for {path} (type={diff_entry.get('type')}, is_lfs={is_lfs})"
+                        )
+
+                        # Get current content (for added/changed)
+                        current_lines = []
+                        if diff_entry.get("type") in ["changed", "added"]:
+                            current_bytes = await client.get_object(
+                                repository=lakefs_repo, ref=commit_id, path=path
+                            )
+                            current_content = current_bytes.decode(
+                                "utf-8", errors="ignore"
+                            )
+                            current_lines = current_content.splitlines(keepends=True)
+                            logger.debug(
+                                f"Fetched current content for {path}: {len(current_content)} chars, {len(current_lines)} lines"
+                            )
+
+                        # Get previous content (for changed/removed)
+                        previous_lines = []
+                        if (
+                            diff_entry.get("type") in ["changed", "removed"]
+                            and parent_id
+                        ):
+                            previous_bytes = await client.get_object(
+                                repository=lakefs_repo, ref=parent_id, path=path
+                            )
+                            previous_content = previous_bytes.decode(
+                                "utf-8", errors="ignore"
+                            )
+                            previous_lines = previous_content.splitlines(keepends=True)
+                            logger.debug(
+                                f"Fetched previous content for {path}: {len(previous_content)} chars, {len(previous_lines)} lines"
+                            )
+
+                        # Generate unified diff
+                        diff_lines = list(
+                            difflib.unified_diff(
+                                previous_lines,
+                                current_lines,
+                                fromfile=f"a/{path}",
+                                tofile=f"b/{path}",
+                                lineterm="",
+                            )
+                        )
+                        diff_text = "".join(diff_lines)
+                        # Keep diff even if empty string (don't convert to None)
+                        file_info["diff"] = diff_text
+                        logger.info(
+                            f"Generated diff for {path}: {len(diff_text)} chars, {len(diff_lines)} lines, type={diff_entry.get('type')}"
+                        )
+                    except Exception as e:
+                        logger.exception(f"Failed to generate diff for {path}", e)
+                        file_info["diff"] = None
+                else:
+                    logger.info(
+                        f"Skipping diff for {path}: file too large (current={current_size}, prev={previous_size})"
+                    )
+                    file_info["diff"] = None
+
+            files.append(file_info)
+
+        # Get our commit record for user info
+        our_commit = await get_commit(commit_id, repo_id)
+
+        response = {
+            "commit_id": commit_id,
+            "parent_commit": parent_id,
+            "message": lakefs_commit.get("message", ""),
+            "author": (
+                our_commit.username
+                if our_commit
+                else (lakefs_commit.get("committer") or "unknown")
+            ),
+            "date": lakefs_commit.get("creation_date"),
+            "files": files,
+        }
+
+        logger.debug(f"Retrieved diff for commit {commit_id[:8]}: {len(files)} files")
+        return response
+
+    except Exception as e:
+        logger.exception(f"Failed to get commit diff for {repo_id}/{commit_id}", e)
+        return hf_server_error(f"Failed to get commit diff: {str(e)}")

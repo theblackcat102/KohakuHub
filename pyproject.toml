@@ -19,7 +19,6 @@ dependencies = [
     "click-completion",
     "fastapi",
     "httpx",
-    "lakefs-client",
     "peewee",
     "psycopg2-binary",
     "pydantic[email]",

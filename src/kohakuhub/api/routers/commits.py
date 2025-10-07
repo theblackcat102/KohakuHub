@@ -2,19 +2,16 @@
 
 import base64
 import hashlib
-import io
 import json
 from datetime import datetime, timezone
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadata
 
 from kohakuhub.api.utils.gc import run_gc_for_file, track_lfs_object
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.utils.quota import update_namespace_storage
 from kohakuhub.api.utils.s3 import get_object_metadata, object_exists
-from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_write_permission
 from kohakuhub.config import cfg
@@ -106,12 +103,12 @@ async def process_regular_file(
 
     # Upload to LakeFS
     try:
-        async_client = get_async_lakefs_client()
-        await async_client.upload_object(
+        client = get_lakefs_client()
+        await client.upload_object(
             repository=lakefs_repo,
             branch=revision,
             path=path,
-            content=io.BytesIO(data),
+            content=data,
         )
     except Exception as e:
         raise HTTPException(500, detail={"error": f"Failed to upload {path}: {e}"})
@@ -213,20 +210,14 @@ async def process_lfs_file(
 
     # Link the physical S3 object to LakeFS
     try:
-        staging_location = StagingLocation(
-            physical_address=physical_address,
-            checksum=f"{algo}:{oid}",
-            size_bytes=size,
-        )
+        staging_metadata = {
+            "physical_address": physical_address,
+            "checksum": f"{algo}:{oid}",
+            "size_bytes": size,
+        }
 
-        staging_metadata = StagingMetadata(
-            staging=staging_location,
-            checksum=f"{algo}:{oid}",
-            size_bytes=size,
-        )
-
-        async_client = get_async_lakefs_client()
-        await async_client.link_physical_address(
+        client = get_lakefs_client()
+        await client.link_physical_address(
             repository=lakefs_repo,
             branch=revision,
             path=path,
@@ -289,10 +280,8 @@ async def process_deleted_file(
     logger.info(f"Deleting file: {path}")
 
     try:
-        async_client = get_async_lakefs_client()
-        await async_client.delete_object(
-            repository=lakefs_repo, branch=revision, path=path
-        )
+        client = get_lakefs_client()
+        await client.delete_object(repository=lakefs_repo, branch=revision, path=path)
         logger.success(f"Successfully deleted file from LakeFS: {path}")
     except Exception as e:
         # File might not exist, log warning but continue
@@ -335,7 +324,7 @@ async def process_deleted_folder(
     logger.info(f"Deleting folder: {folder_path}")
 
     try:
-        async_client = get_async_lakefs_client()
+        client = get_lakefs_client()
 
         # List all objects in the folder with pagination
         all_folder_objects = []
@@ -343,7 +332,7 @@ async def process_deleted_folder(
         has_more = True
 
         while has_more:
-            objects = await async_client.list_objects(
+            objects = await client.list_objects(
                 repository=lakefs_repo,
                 ref=revision,
                 prefix=folder_path,
@@ -352,10 +341,10 @@ async def process_deleted_folder(
                 after=after,
             )
 
-            all_folder_objects.extend(objects.results)
+            all_folder_objects.extend(objects["results"])
 
-            if objects.pagination and objects.pagination.has_more:
-                after = objects.pagination.next_offset
+            if objects.get("pagination") and objects["pagination"].get("has_more"):
+                after = objects["pagination"]["next_offset"]
                 has_more = True
             else:
                 has_more = False
@@ -363,15 +352,15 @@ async def process_deleted_folder(
         # Delete each file
         deleted_files = []
         for obj in all_folder_objects:
-            if obj.path_type == "object":
+            if obj["path_type"] == "object":
                 try:
-                    await async_client.delete_object(
-                        repository=lakefs_repo, branch=revision, path=obj.path
+                    await client.delete_object(
+                        repository=lakefs_repo, branch=revision, path=obj["path"]
                     )
-                    deleted_files.append(obj.path)
-                    logger.info(f"  Deleted: {obj.path}")
+                    deleted_files.append(obj["path"])
+                    logger.info(f"  Deleted: {obj['path']}")
                 except Exception as e:
-                    logger.warning(f"  Failed to delete {obj.path}: {e}")
+                    logger.warning(f"  Failed to delete {obj['path']}: {e}")
 
         logger.success(f"Deleted {len(deleted_files)} files from folder {folder_path}")
 
@@ -432,23 +421,19 @@ async def process_copy_file(
 
     try:
         # Get source file metadata from LakeFS
-        async_client = get_async_lakefs_client()
-        src_obj = await async_client.stat_object(
+        client = get_lakefs_client()
+        src_obj = await client.stat_object(
             repository=lakefs_repo, ref=src_revision, path=src_path
         )
 
         # Use LakeFS staging API to link the physical address
-        staging_metadata = StagingMetadata(
-            staging=StagingLocation(
-                physical_address=src_obj.physical_address,
-                checksum=src_obj.checksum,
-                size_bytes=src_obj.size_bytes,
-            ),
-            checksum=src_obj.checksum,
-            size_bytes=src_obj.size_bytes,
-        )
+        staging_metadata = {
+            "physical_address": src_obj["physical_address"],
+            "checksum": src_obj["checksum"],
+            "size_bytes": src_obj["size_bytes"],
+        }
 
-        await async_client.link_physical_address(
+        await client.link_physical_address(
             repository=lakefs_repo,
             branch=revision,
             path=dest_path,
@@ -481,18 +466,18 @@ async def process_copy_file(
                 ).execute()
             else:
                 # If not in database, create entry based on LakeFS info
-                is_lfs = src_obj.size_bytes >= cfg.app.lfs_threshold_bytes
+                is_lfs = src_obj["size_bytes"] >= cfg.app.lfs_threshold_bytes
                 File.insert(
                     repo_full_id=repo_id,
                     path_in_repo=dest_path,
-                    size=src_obj.size_bytes,
-                    sha256=src_obj.checksum,
+                    size=src_obj["size_bytes"],
+                    sha256=src_obj["checksum"],
                     lfs=is_lfs,
                 ).on_conflict(
                     conflict_target=(File.repo_full_id, File.path_in_repo),
                     update={
-                        File.sha256: src_obj.checksum,
-                        File.size: src_obj.size_bytes,
+                        File.sha256: src_obj["checksum"],
+                        File.size: src_obj["size_bytes"],
                         File.lfs: is_lfs,
                         File.updated_at: datetime.now(timezone.utc),
                     },
@@ -664,8 +649,8 @@ async def commit(
     # If no files changed, return early
     if not files_changed:
         try:
-            branch = client.branches.get_branch(repository=lakefs_repo, branch=revision)
-            commit_id = branch.commit_id
+            branch = await client.get_branch(repository=lakefs_repo, branch=revision)
+            commit_id = branch["commit_id"]
         except Exception:
             commit_id = "no-changes"
 
@@ -683,14 +668,11 @@ async def commit(
     logger.info(f"Commit message: {commit_msg}")
 
     try:
-        async_client = get_async_lakefs_client()
-        commit_result = await async_client.commit(
+        commit_result = await client.commit(
             repository=lakefs_repo,
             branch=revision,
-            commit_creation=CommitCreation(
-                message=commit_msg,
-                metadata={"description": commit_desc} if commit_desc else {},
-            ),
+            message=commit_msg,
+            metadata={"description": commit_desc} if commit_desc else None,
         )
     except Exception as e:
         raise HTTPException(500, detail={"error": f"Commit failed: {str(e)}"})
@@ -698,7 +680,7 @@ async def commit(
     # Record commit in our database (track the actual user)
     try:
         await create_commit(
-            commit_id=commit_result.id,
+            commit_id=commit_result["id"],
             repo_full_id=repo_id,
             repo_type=repo_type,
             branch=revision,
@@ -707,13 +689,13 @@ async def commit(
             message=commit_msg,
             description=commit_desc,
         )
-        logger.info(f"Recorded commit {commit_result.id[:8]} by {user.username}")
+        logger.info(f"Recorded commit {commit_result['id'][:8]} by {user.username}")
     except Exception as e:
         logger.warning(f"Failed to record commit in database: {e}")
         # Don't fail the commit if DB recording fails
 
     # Generate commit URL
-    commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result.id}"
+    commit_url = f"{cfg.app.base_url}/{repo_id}/commit/{commit_result['id']}"
     logger.success(f"Commit URL: {commit_url}")
 
     # Track LFS objects and run GC
@@ -724,14 +706,14 @@ async def commit(
                 path_in_repo=lfs_info["path"],
                 sha256=lfs_info["sha256"],
                 size=lfs_info["size"],
-                commit_id=commit_result.id,
+                commit_id=commit_result["id"],
             )
 
             if cfg.app.lfs_auto_gc and lfs_info.get("old_sha256"):
                 deleted_count = run_gc_for_file(
                     repo_full_id=repo_id,
                     path_in_repo=lfs_info["path"],
-                    current_commit_id=commit_result.id,
+                    current_commit_id=commit_result["id"],
                 )
                 if deleted_count > 0:
                     logger.info(
@@ -758,6 +740,6 @@ async def commit(
 
     return {
         "commitUrl": commit_url,
-        "commitOid": commit_result.id,
+        "commitOid": commit_result["id"],
         "pullRequestUrl": None,
     }
