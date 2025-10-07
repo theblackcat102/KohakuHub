@@ -7,19 +7,19 @@ from pydantic import BaseModel
 
 
 class S3Config(BaseModel):
-    public_endpoint: str
-    endpoint: str
-    access_key: str
-    secret_key: str
-    bucket: str
+    public_endpoint: str = "http://localhost:9000"
+    endpoint: str = "http://localhost:9000"
+    access_key: str = "test-access-key"
+    secret_key: str = "test-secret-key"
+    bucket: str = "test-bucket"
     region: str = "us-east-1"
     force_path_style: bool = True
 
 
 class LakeFSConfig(BaseModel):
-    endpoint: str
-    access_key: str
-    secret_key: str
+    endpoint: str = "http://localhost:8000"
+    access_key: str = "test-access-key"
+    secret_key: str = "test-secret-key"
     repo_namespace: str = "hf"
 
 
@@ -40,8 +40,24 @@ class AuthConfig(BaseModel):
     token_expire_days: int = 365
 
 
+class AdminConfig(BaseModel):
+    """Admin API configuration."""
+
+    enabled: bool = True
+    secret_token: str = "change-me-in-production"
+
+
+class QuotaConfig(BaseModel):
+    """Storage quota configuration."""
+
+    default_user_private_quota_bytes: int | None = None  # None = unlimited
+    default_user_public_quota_bytes: int | None = None  # None = unlimited
+    default_org_private_quota_bytes: int | None = None  # None = unlimited
+    default_org_public_quota_bytes: int | None = None  # None = unlimited
+
+
 class AppConfig(BaseModel):
-    base_url: str
+    base_url: str = "http://localhost:48888"
     api_base: str = "/api"
     db_backend: str = "sqlite"
     database_url: str = "sqlite:///./hub.db"
@@ -61,7 +77,41 @@ class Config(BaseModel):
     lakefs: LakeFSConfig
     smtp: SMTPConfig = SMTPConfig()
     auth: AuthConfig = AuthConfig()
+    admin: AdminConfig = AdminConfig()
+    quota: QuotaConfig = QuotaConfig()
     app: AppConfig
+
+    def validate_production_safety(self) -> list[str]:
+        """Check if configuration uses unsafe default values.
+
+        Returns:
+            List of warning messages for unsafe defaults
+        """
+        warnings = []
+
+        # S3 credentials
+        if self.s3.access_key == "test-access-key":
+            warnings.append("S3 access_key is using test default value")
+        if self.s3.secret_key == "test-secret-key":
+            warnings.append("S3 secret_key is using test default value")
+        if self.s3.bucket == "test-bucket":
+            warnings.append("S3 bucket is using test default value")
+
+        # LakeFS credentials
+        if self.lakefs.access_key == "test-access-key":
+            warnings.append("LakeFS access_key is using test default value")
+        if self.lakefs.secret_key == "test-secret-key":
+            warnings.append("LakeFS secret_key is using test default value")
+
+        # Auth secrets
+        if self.auth.session_secret == "change-me-in-production":
+            warnings.append("Session secret is using default value - SECURITY RISK!")
+        if self.admin.secret_token == "change-me-in-production":
+            warnings.append(
+                "Admin secret token is using default value - SECURITY RISK!"
+            )
+
+        return warnings
 
 
 @lru_cache(maxsize=1)
@@ -69,19 +119,27 @@ def load_config(path: str = None) -> Config:
     path = path or os.environ.get("HUB_CONFIG", None)
     if path is None:
         s3_config = S3Config(
-            public_endpoint=os.environ["KOHAKU_HUB_S3_PUBLIC_ENDPOINT"],
-            endpoint=os.environ["KOHAKU_HUB_S3_ENDPOINT"],
-            access_key=os.environ["KOHAKU_HUB_S3_ACCESS_KEY"],
-            secret_key=os.environ["KOHAKU_HUB_S3_SECRET_KEY"],
-            bucket=os.environ.get("KOHAKU_HUB_S3_BUCKET", "hub_storage"),
+            public_endpoint=os.environ.get(
+                "KOHAKU_HUB_S3_PUBLIC_ENDPOINT", "http://localhost:9000"
+            ),
+            endpoint=os.environ.get("KOHAKU_HUB_S3_ENDPOINT", "http://localhost:9000"),
+            access_key=os.environ.get("KOHAKU_HUB_S3_ACCESS_KEY", "test-access-key"),
+            secret_key=os.environ.get("KOHAKU_HUB_S3_SECRET_KEY", "test-secret-key"),
+            bucket=os.environ.get("KOHAKU_HUB_S3_BUCKET", "test-bucket"),
             region=os.environ.get("KOHAKU_HUB_S3_REGION", "us-east-1"),
         )
 
         lakefs_config = LakeFSConfig(
-            endpoint=os.environ["KOHAKU_HUB_LAKEFS_ENDPOINT"],
-            access_key=os.environ["KOHAKU_HUB_LAKEFS_ACCESS_KEY"],
-            secret_key=os.environ["KOHAKU_HUB_LAKEFS_SECRET_KEY"],
-            repo_namespace=os.environ.get("KOHAKU_HUB_LAKEFS_REPO_NAMESPACE", ""),
+            endpoint=os.environ.get(
+                "KOHAKU_HUB_LAKEFS_ENDPOINT", "http://localhost:8000"
+            ),
+            access_key=os.environ.get(
+                "KOHAKU_HUB_LAKEFS_ACCESS_KEY", "test-access-key"
+            ),
+            secret_key=os.environ.get(
+                "KOHAKU_HUB_LAKEFS_SECRET_KEY", "test-secret-key"
+            ),
+            repo_namespace=os.environ.get("KOHAKU_HUB_LAKEFS_REPO_NAMESPACE", "hf"),
         )
 
         smtp_config = SMTPConfig(
@@ -111,18 +169,53 @@ def load_config(path: str = None) -> Config:
             ),
         )
 
+        admin_config = AdminConfig(
+            enabled=os.environ.get("KOHAKU_HUB_ADMIN_ENABLED", "true").lower()
+            == "true",
+            secret_token=os.environ.get(
+                "KOHAKU_HUB_ADMIN_SECRET_TOKEN", "change-me-in-production"
+            ),
+        )
+
+        def _parse_quota(value: str | None) -> int | None:
+            """Parse quota value from environment variable."""
+            if value is None or value.lower() in ("", "none", "unlimited"):
+                return None
+            return int(value)
+
+        quota_config = QuotaConfig(
+            default_user_private_quota_bytes=_parse_quota(
+                os.environ.get("KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES")
+            ),
+            default_user_public_quota_bytes=_parse_quota(
+                os.environ.get("KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES")
+            ),
+            default_org_private_quota_bytes=_parse_quota(
+                os.environ.get("KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES")
+            ),
+            default_org_public_quota_bytes=_parse_quota(
+                os.environ.get("KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES")
+            ),
+        )
+
         app_config = AppConfig(
-            base_url=os.environ.get("KOHAKU_HUB_BASE_URL", "127.0.0.1:48888"),
+            base_url=os.environ.get("KOHAKU_HUB_BASE_URL", "http://localhost:48888"),
             api_base=os.environ.get("KOHAKU_HUB_API_BASE", "/api"),
-            db_backend=os.environ["KOHAKU_HUB_DB_BACKEND"],
-            database_url=os.environ["KOHAKU_HUB_DATABASE_URL"],
+            db_backend=os.environ.get("KOHAKU_HUB_DB_BACKEND", "sqlite"),
+            database_url=os.environ.get(
+                "KOHAKU_HUB_DATABASE_URL", "sqlite:///./hub.db"
+            ),
             lfs_threshold_bytes=int(
-                os.environ.get("KOHAKU_HUB_LFS_THRESHOLD_BYTES", "10000000")
+                os.environ.get("KOHAKU_HUB_LFS_THRESHOLD_BYTES", "5242880")
             ),
             lfs_keep_versions=int(os.environ.get("KOHAKU_HUB_LFS_KEEP_VERSIONS", "5")),
             lfs_auto_gc=os.environ.get("KOHAKU_HUB_LFS_AUTO_GC", "false").lower()
             == "true",
             site_name=os.environ.get("KOHAKU_HUB_SITE_NAME", "KohakuHub"),
+            debug_log_payloads=os.environ.get(
+                "KOHAKU_HUB_DEBUG_LOG_PAYLOADS", "false"
+            ).lower()
+            == "true",
         )
 
         return Config(
@@ -130,6 +223,8 @@ def load_config(path: str = None) -> Config:
             lakefs=lakefs_config,
             smtp=smtp_config,
             auth=auth_config,
+            admin=admin_config,
+            quota=quota_config,
             app=app_config,
         )
     else:

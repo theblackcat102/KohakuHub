@@ -1,5 +1,6 @@
 """File upload/download API endpoints (preupload, revision, download)."""
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -17,6 +18,7 @@ from kohakuhub.api.utils.hf import (
     is_lakefs_not_found_error,
 )
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.utils.quota import check_quota
 from kohakuhub.api.utils.s3 import generate_download_presigned_url, parse_s3_uri
 from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
@@ -26,7 +28,7 @@ from kohakuhub.auth.permissions import (
 )
 from kohakuhub.config import cfg
 from kohakuhub.db_async import execute_db_query, get_file, get_repository
-from kohakuhub.db import File, Repository, User
+from kohakuhub.db import File, Organization, Repository, User
 from kohakuhub.logger import get_logger
 
 logger = get_logger("FILE")
@@ -208,18 +210,41 @@ async def preupload(
     if not isinstance(files, list):
         raise HTTPException(400, detail={"error": "Missing or invalid 'files' array"})
 
+    # Calculate total upload size
+    total_upload_bytes = sum(int(f.get("size", 0)) for f in files)
+
+    # Check if namespace is organization
+    def _check_org():
+        return Organization.get_or_none(Organization.name == namespace)
+
+    org = await execute_db_query(_check_org)
+    is_org = org is not None
+
+    # Check storage quota before upload (based on repo privacy)
+    is_private = repo_row.private
+    allowed, error_msg = await check_quota(
+        namespace, total_upload_bytes, is_private, is_org
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=413,  # Payload Too Large
+            detail={
+                "error": "Storage quota exceeded",
+                "message": error_msg,
+            },
+        )
+
     # Get LakeFS repository name
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
     threshold = cfg.app.lfs_threshold_bytes
 
-    # Process each file
-    result_files: List[Dict[str, Any]] = []
-
-    for f in files:
-        file_result = await process_preupload_file(
-            f, repo_id, lakefs_repo, revision, threshold
-        )
-        result_files.append(file_result)
+    # Process all files in parallel
+    result_files = await asyncio.gather(
+        *[
+            process_preupload_file(f, repo_id, lakefs_repo, revision, threshold)
+            for f in files
+        ]
+    )
 
     return {"files": result_files}
 

@@ -311,7 +311,7 @@ async def list_user_repos(
         if not target_org:
             return hf_error_response(
                 404,
-                HFErrorCode.INVALID_USERNAME,
+                HFErrorCode.BAD_REQUEST,
                 f"User or organization '{username}' not found",
             )
 

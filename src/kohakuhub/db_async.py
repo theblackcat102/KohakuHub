@@ -67,6 +67,41 @@ async def update_user(user: User, **fields) -> None:
     await run_in_db_executor(_update)
 
 
+async def delete_user(user: User) -> None:
+    """Delete a user and all related data.
+
+    This will delete:
+    - All sessions
+    - All tokens
+    - All email verifications
+    - All user-organization memberships
+    - The user record itself
+
+    Note: Repositories owned by the user are NOT deleted automatically.
+    Delete repositories separately before calling this function.
+    """
+
+    def _delete():
+        user_id = user.id
+
+        # Delete all sessions
+        Session.delete().where(Session.user_id == user_id).execute()
+
+        # Delete all tokens
+        Token.delete().where(Token.user_id == user_id).execute()
+
+        # Delete all email verifications
+        EmailVerification.delete().where(EmailVerification.user == user_id).execute()
+
+        # Delete all user-organization memberships
+        UserOrganization.delete().where(UserOrganization.user == user_id).execute()
+
+        # Finally delete the user
+        user.delete_instance()
+
+    await run_in_db_executor(_delete)
+
+
 # Session operations
 async def get_session(session_id: str) -> Session | None:
     """Get session by session ID."""

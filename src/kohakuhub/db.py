@@ -4,6 +4,7 @@ from functools import partial
 from datetime import datetime, timezone
 from peewee import (
     AutoField,
+    BigIntegerField,
     BooleanField,
     CharField,
     DateTimeField,
@@ -60,6 +61,11 @@ class User(BaseModel):
     password_hash = CharField()
     email_verified = BooleanField(default=False)
     is_active = BooleanField(default=True)
+    # Separate quotas for private and public repositories
+    private_quota_bytes = BigIntegerField(null=True)  # NULL = unlimited
+    public_quota_bytes = BigIntegerField(null=True)  # NULL = unlimited
+    private_used_bytes = BigIntegerField(default=0)
+    public_used_bytes = BigIntegerField(default=0)
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
@@ -136,6 +142,11 @@ class Organization(BaseModel):
     id = AutoField()
     name = CharField(unique=True, index=True)
     description = TextField(null=True)
+    # Separate quotas for private and public repositories
+    private_quota_bytes = BigIntegerField(null=True)  # NULL = unlimited
+    public_quota_bytes = BigIntegerField(null=True)  # NULL = unlimited
+    private_used_bytes = BigIntegerField(default=0)
+    public_used_bytes = BigIntegerField(default=0)
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 

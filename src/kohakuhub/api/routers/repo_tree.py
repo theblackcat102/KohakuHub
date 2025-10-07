@@ -1,5 +1,6 @@
 """Repository tree listing and path information endpoints - Refactored version."""
 
+import asyncio
 from datetime import datetime
 from typing import Literal
 
@@ -340,11 +341,9 @@ async def get_paths_info(
 
     lakefs_repo = lakefs_repo_name(repo_type, repo_id)
 
-    # Get information for each path
-    result = []
-
-    for path in paths:
-        # Clean path
+    # Helper function to process a single path
+    async def process_path(path: str) -> dict | None:
+        """Process single path and return its info, or None if path doesn't exist."""
         clean_path = path.lstrip("/")
 
         try:
@@ -386,7 +385,7 @@ async def get_paths_info(
                     "pointerSize": 134,
                 }
 
-            result.append(file_info)
+            return file_info
 
         except Exception as e:
             # Check if it might be a directory by trying to list with prefix
@@ -413,19 +412,24 @@ async def get_paths_info(
                         ):
                             oid = list_result.results[0].checksum or ""
 
-                        result.append(
-                            {
-                                "type": "directory",
-                                "path": clean_path,
-                                "oid": oid,
-                                "tree_id": oid,
-                                "last_commit": None,
-                            }
-                        )
-                    # else: path doesn't exist, skip it (as per HF behavior)
+                        return {
+                            "type": "directory",
+                            "path": clean_path,
+                            "oid": oid,
+                            "tree_id": oid,
+                            "last_commit": None,
+                        }
+                    # Path doesn't exist, return None
+                    return None
                 except Exception as ex:
                     # Path doesn't exist, skip it (as per HF behavior)
                     logger.debug(f"Path {clean_path} doesn't exist or is invalid")
-            # For other errors, also skip the path
+                    return None
+            # For other errors, also return None
+            return None
 
-    return result
+    # Process all paths in parallel
+    results = await asyncio.gather(*[process_path(path) for path in paths])
+
+    # Filter out None values (paths that don't exist)
+    return [r for r in results if r is not None]

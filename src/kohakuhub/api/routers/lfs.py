@@ -4,6 +4,7 @@ This module implements the Git LFS Batch API specification for handling
 large file uploads (>10MB). It provides presigned S3 URLs for direct uploads.
 """
 
+import asyncio
 import base64
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from kohakuhub.api.utils.quota import check_quota
 from kohakuhub.api.utils.s3 import (
     generate_download_presigned_url,
     generate_upload_presigned_url,
@@ -25,7 +27,7 @@ from kohakuhub.auth.permissions import (
 )
 from kohakuhub.config import cfg
 from kohakuhub.db_async import execute_db_query, get_file_by_sha256
-from kohakuhub.db import Repository, User
+from kohakuhub.db import Organization, Repository, User
 from kohakuhub.logger import get_logger
 
 logger = get_logger("LFS")
@@ -275,6 +277,30 @@ async def lfs_batch(
                     )
                 check_repo_write_permission(repo_row, user)
 
+                # Check storage quota for uploads
+                total_upload_bytes = sum(obj.size for obj in batch_req.objects)
+
+                # Check if namespace is organization
+                def _check_org():
+                    return Organization.get_or_none(Organization.name == namespace)
+
+                org = await execute_db_query(_check_org)
+                is_org = org is not None
+
+                # Check quota (based on repo privacy)
+                is_private = repo_row.private
+                allowed, error_msg = await check_quota(
+                    namespace, total_upload_bytes, is_private, is_org
+                )
+                if not allowed:
+                    raise HTTPException(
+                        status_code=413,  # Payload Too Large
+                        detail={
+                            "error": "Storage quota exceeded",
+                            "message": error_msg,
+                        },
+                    )
+
             case "download":
                 # Download requires read permission (may be public)
                 check_repo_read_permission(repo_row, user)
@@ -283,21 +309,26 @@ async def lfs_batch(
         logger.debug("==== LFS Batch Request ====")
         logger.debug(body)
 
-    # Process objects using match-case
-    objects_response = []
-
-    for obj in batch_req.objects:
-        oid = obj.oid
-        size = obj.size
-
+    # Process all objects in parallel
+    async def process_object(obj: LFSObject) -> LFSObjectResponse:
+        """Process single LFS object based on operation type."""
         match batch_req.operation:
             case "upload":
-                response_obj = await process_upload_object(oid, size, repo_id)
-                objects_response.append(response_obj)
-
+                return await process_upload_object(obj.oid, obj.size, repo_id)
             case "download":
-                response_obj = await process_download_object(oid, size)
-                objects_response.append(response_obj)
+                return await process_download_object(obj.oid, obj.size)
+            case _:
+                return LFSObjectResponse(
+                    oid=obj.oid,
+                    size=obj.size,
+                    error=LFSError(
+                        code=400, message=f"Unknown operation: {batch_req.operation}"
+                    ),
+                )
+
+    objects_response = await asyncio.gather(
+        *[process_object(obj) for obj in batch_req.objects]
+    )
 
     # Return response with exclude_none to omit null fields
     response = LFSBatchResponse(

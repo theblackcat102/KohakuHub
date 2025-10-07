@@ -6,12 +6,14 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from kohakuhub.api.routers import (
+    admin,
     branches,
     commit_history,
     commits,
     files,
     lfs,
     misc,
+    quota,
     repo_crud,
     repo_info,
     repo_tree,
@@ -31,6 +33,20 @@ logger = get_logger("MAIN")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Validate configuration for production safety
+    config_warnings = cfg.validate_production_safety()
+    if config_warnings:
+        logger.warning("=" * 80)
+        logger.warning("CONFIGURATION WARNINGS - Using default/test values:")
+        logger.warning("=" * 80)
+        for warning in config_warnings:
+            logger.warning(f"  - {warning}")
+        logger.warning("=" * 80)
+        logger.warning(
+            "These defaults are fine for development/testing but MUST be changed for production!"
+        )
+        logger.warning("=" * 80)
+
     init_storage()
     yield
 
@@ -61,6 +77,8 @@ app.include_router(commit_history.router, prefix=cfg.app.api_base, tags=["commit
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(branches.router, prefix=cfg.app.api_base, tags=["branches"])
 app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
+app.include_router(quota.router, tags=["quota"])
+app.include_router(admin.router, prefix="/admin/api", tags=["admin"])
 app.include_router(misc.router, prefix=cfg.app.api_base, tags=["utils"])
 app.include_router(org_router, prefix="/org", tags=["organizations"])
 

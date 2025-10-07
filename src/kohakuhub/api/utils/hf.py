@@ -14,23 +14,28 @@ class HFErrorCode:
     These error codes are read by huggingface_hub client's hf_raise_for_status()
     function to provide specific error types.
 
+    HuggingFace Hub officially supports:
+    - RepoNotFound
+    - RevisionNotFound
+    - EntryNotFound
+    - GatedRepo
+
+    We add additional codes for KohakuHub-specific errors that don't map to HF codes.
+
     Reference: huggingface_hub/utils/_http.py
     """
 
-    # Repository errors
+    # HuggingFace official error codes (DO NOT CHANGE)
     REPO_NOT_FOUND = "RepoNotFound"
-    REPO_EXISTS = "RepoExists"
+    REVISION_NOT_FOUND = "RevisionNotFound"
+    ENTRY_NOT_FOUND = "EntryNotFound"
     GATED_REPO = "GatedRepo"
 
-    # Revision/branch errors
-    REVISION_NOT_FOUND = "RevisionNotFound"
-
-    # File/entry errors
-    ENTRY_NOT_FOUND = "EntryNotFound"
-
-    # Generic errors
+    # KohakuHub custom error codes (not in official HF Hub)
+    REPO_EXISTS = "RepoExists"
     BAD_REQUEST = "BadRequest"
     INVALID_REPO_TYPE = "InvalidRepoType"
+    INVALID_REPO_ID = "InvalidRepoId"
     SERVER_ERROR = "ServerError"
 
 

@@ -12,6 +12,7 @@ from lakefs_client.models import CommitCreation, StagingLocation, StagingMetadat
 
 from kohakuhub.api.utils.gc import run_gc_for_file, track_lfs_object
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.utils.quota import update_namespace_storage
 from kohakuhub.api.utils.s3 import get_object_metadata, object_exists
 from kohakuhub.async_utils import get_async_lakefs_client
 from kohakuhub.auth.dependencies import get_current_user
@@ -24,7 +25,7 @@ from kohakuhub.db_async import (
     get_file,
     update_file,
 )
-from kohakuhub.db import File, Repository, User
+from kohakuhub.db import File, Organization, Repository, User
 from kohakuhub.logger import get_logger
 
 logger = get_logger("FILE")
@@ -718,6 +719,24 @@ async def commit(
                     logger.info(
                         f"GC: Cleaned up {deleted_count} old version(s) of {lfs_info['path']}"
                     )
+
+    # Update storage usage for namespace after successful commit
+    try:
+        # Check if namespace is organization
+        def _check_org():
+            return Organization.get_or_none(Organization.name == namespace)
+
+        org = await execute_db_query(_check_org)
+        is_org = org is not None
+
+        # Recalculate storage usage
+        await update_namespace_storage(namespace, is_org)
+        logger.debug(
+            f"Updated storage usage for {'org' if is_org else 'user'} {namespace}"
+        )
+    except Exception as e:
+        # Log error but don't fail the commit
+        logger.warning(f"Failed to update storage usage for {namespace}: {e}")
 
     return {
         "commitUrl": commit_url,
