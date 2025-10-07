@@ -17,8 +17,8 @@
   <line x1="60" y1="45" x2="35" y2="65" stroke="white" stroke-width="2.5" opacity="0.75" stroke-linecap="round" />
   <line x1="60" y1="45" x2="35" y2="35" stroke="white" stroke-width="2.5" opacity="0.75" stroke-linecap="round" />
 
-  <!-- Center hexagon with solid white fill (regular hexagon: radius 10) -->
-  <path d="M 60 35 L 68.66 40 L 68.66 50 L 60 55 L 51.34 50 L 51.34 40 Z" fill="white" stroke="none" />
+  <!-- Center hexagon with amber fill (regular hexagon: radius 10) -->
+  <path d="M 60 35 L 68.66 40 L 68.66 50 L 60 55 L 51.34 50 L 51.34 40 Z" fill="#FFBF00" fill-opacity="0.85" stroke="none" />
 
   <!-- Outer nodes with solid white fill -->
   <circle cx="60" cy="20" r="5" fill="white" />
