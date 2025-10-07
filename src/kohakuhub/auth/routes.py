@@ -119,8 +119,20 @@ async def verify_email(token: str, response: Response):
 
     verification = await get_email_verification(token)
 
-    if not verification or verification.expires_at <= datetime.now(timezone.utc):
-        logger.warning(f"Invalid or expired verification token: {token[:8]}...")
+    if not verification:
+        logger.warning(f"Invalid verification token: {token[:8]}...")
+        return RedirectResponse(
+            url=f"/?error=invalid_token&message=Invalid+or+expired+verification+token",
+            status_code=302,
+        )
+
+    # Ensure expires_at is timezone-aware for comparison
+    expires_at = verification.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at <= datetime.now(timezone.utc):
+        logger.warning(f"Expired verification token: {token[:8]}...")
         # Redirect to login with error message
         return RedirectResponse(
             url=f"/?error=invalid_token&message=Invalid+or+expired+verification+token",
