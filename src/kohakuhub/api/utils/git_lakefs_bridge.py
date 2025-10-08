@@ -287,26 +287,37 @@ class GitLakeFSBridge:
         # Build directory tree structure
         tree_entries = {}  # path -> (oid, mode)
 
-        for obj in objects:
-            if obj.get("path_type") != "object":
-                continue
+        # Filter to only file objects
+        file_objects = [obj for obj in objects if obj.get("path_type") == "object"]
 
+        # Process all objects concurrently
+        async def process_object(obj):
             path = obj["path"]
-
-            # Download object content
             try:
+                # Download object content
                 content = await self.lakefs_client.get_object(
                     repository=self.lakefs_repo, ref=branch, path=path
                 )
 
                 # Create blob (run in thread pool)
                 blob_oid = await asyncio.to_thread(repo.create_blob, content)
-                tree_entries[path] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
 
                 logger.debug(f"Created blob for {path}: {blob_oid}")
 
+                return path, blob_oid, pygit2.GIT_FILEMODE_BLOB
+
             except Exception as e:
                 logger.warning(f"Failed to download {path}: {e}")
+                return None
+
+        # Download and create blobs concurrently
+        results = await asyncio.gather(*[process_object(obj) for obj in file_objects])
+
+        # Build tree_entries from results
+        for result in results:
+            if result is not None:
+                path, blob_oid, mode = result
+                tree_entries[path] = (blob_oid, mode)
 
         if not tree_entries:
             return None
