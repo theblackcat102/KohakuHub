@@ -107,20 +107,29 @@
         <div class="space-y-4">
           <p class="text-gray-700 dark:text-gray-300">
             This will create a new commit that undoes the changes from commit
-            <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs">
+            <code
+              class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs"
+            >
               {{ commitData?.commit_id?.substring(0, 8) }}
             </code>
           </p>
 
           <el-alert type="warning" :closable="false" show-icon>
             <template #title>
-              Revert creates a new commit that undoes changes. It does not delete history.
+              Revert creates a new commit that undoes changes. It does not
+              delete history.
             </template>
           </el-alert>
 
           <div>
-            <label class="block text-sm font-medium mb-2">Branch to revert on:</label>
-            <el-select v-model="selectedBranch" placeholder="Select branch" class="w-full">
+            <label class="block text-sm font-medium mb-2"
+              >Branch to revert on:</label
+            >
+            <el-select
+              v-model="selectedBranch"
+              placeholder="Select branch"
+              class="w-full"
+            >
               <el-option value="main" label="main" />
             </el-select>
           </div>
@@ -134,11 +143,7 @@
 
         <template #footer>
           <el-button @click="revertDialogVisible = false">Cancel</el-button>
-          <el-button
-            type="warning"
-            @click="doRevert"
-            :loading="reverting"
-          >
+          <el-button type="warning" @click="doRevert" :loading="reverting">
             Revert
           </el-button>
         </template>
@@ -152,27 +157,39 @@
       >
         <div class="space-y-4">
           <p class="text-gray-700 dark:text-gray-300">
-            This will create a new commit that restores the branch to the state of commit
-            <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs">
+            This will create a new commit that restores the branch to the state
+            of commit
+            <code
+              class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs"
+            >
               {{ commitData?.commit_id?.substring(0, 8) }}
             </code>
           </p>
 
           <el-alert type="info" :closable="false" show-icon>
             <template #title>
-              Reset creates a new commit. History is preserved - newer commits remain accessible.
+              Reset creates a new commit. History is preserved - newer commits
+              remain accessible.
             </template>
           </el-alert>
 
           <div>
-            <label class="block text-sm font-medium mb-2">Branch to reset:</label>
-            <el-select v-model="selectedBranch" placeholder="Select branch" class="w-full">
+            <label class="block text-sm font-medium mb-2"
+              >Branch to reset:</label
+            >
+            <el-select
+              v-model="selectedBranch"
+              placeholder="Select branch"
+              class="w-full"
+            >
               <el-option value="main" label="main" />
             </el-select>
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-2">Commit Message (optional):</label>
+            <label class="block text-sm font-medium mb-2"
+              >Commit Message (optional):</label
+            >
             <el-input
               v-model="resetMessage"
               placeholder="Reset to previous state"
@@ -190,11 +207,7 @@
 
         <template #footer>
           <el-button @click="resetDialogVisible = false">Cancel</el-button>
-          <el-button
-            type="primary"
-            @click="doReset"
-            :loading="resetting"
-          >
+          <el-button type="primary" @click="doReset" :loading="resetting">
             Create Reset Commit
           </el-button>
         </template>
@@ -273,20 +286,35 @@
             <div class="p-4 bg-gray-50 dark:bg-gray-900">
               <!-- Image comparison (for image files) -->
               <div v-if="isImageFile(file.path)" class="space-y-4">
-                <div class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                <div
+                  class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3"
+                >
                   Image Comparison
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <!-- Before image (for modified/removed files) -->
-                  <div v-if="(file.type === 'changed' || file.type === 'removed') && commitData.parent_commit" class="space-y-2">
-                    <div class="text-xs font-semibold text-red-600 dark:text-red-400">
-                      {{ file.type === 'removed' ? 'Removed' : 'Before' }}
-                      <span v-if="file.previous_size" class="ml-2 text-gray-500">
+                  <div
+                    v-if="
+                      (file.type === 'changed' || file.type === 'removed') &&
+                      commitData.parent_commit
+                    "
+                    class="space-y-2"
+                  >
+                    <div
+                      class="text-xs font-semibold text-red-600 dark:text-red-400"
+                    >
+                      {{ file.type === "removed" ? "Removed" : "Before" }}
+                      <span
+                        v-if="file.previous_size"
+                        class="ml-2 text-gray-500"
+                      >
                         ({{ formatBytes(file.previous_size) }})
                       </span>
                     </div>
-                    <div class="border-2 border-red-200 dark:border-red-800 rounded p-2 bg-white dark:bg-gray-800">
+                    <div
+                      class="border-2 border-red-200 dark:border-red-800 rounded p-2 bg-white dark:bg-gray-800"
+                    >
                       <img
                         :src="getImageUrl(file.path, commitData.parent_commit)"
                         :alt="`${file.path} (before)`"
@@ -297,14 +325,22 @@
                   </div>
 
                   <!-- After image (for added/modified files) -->
-                  <div v-if="file.type !== 'removed'" :class="file.type === 'changed' ? '' : 'md:col-span-2'" class="space-y-2">
-                    <div class="text-xs font-semibold text-green-600 dark:text-green-400">
-                      {{ file.type === 'added' ? 'Added' : 'After' }}
+                  <div
+                    v-if="file.type !== 'removed'"
+                    :class="file.type === 'changed' ? '' : 'md:col-span-2'"
+                    class="space-y-2"
+                  >
+                    <div
+                      class="text-xs font-semibold text-green-600 dark:text-green-400"
+                    >
+                      {{ file.type === "added" ? "Added" : "After" }}
                       <span v-if="file.size_bytes" class="ml-2 text-gray-500">
                         ({{ formatBytes(file.size_bytes) }})
                       </span>
                     </div>
-                    <div class="border-2 border-green-200 dark:border-green-800 rounded p-2 bg-white dark:bg-gray-800">
+                    <div
+                      class="border-2 border-green-200 dark:border-green-800 rounded p-2 bg-white dark:bg-gray-800"
+                    >
                       <img
                         :src="getImageUrl(file.path, commitData.commit_id)"
                         :alt="`${file.path} (after)`"
@@ -316,14 +352,24 @@
                 </div>
 
                 <!-- LFS badge and metadata for images -->
-                <div v-if="file.is_lfs" class="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800">
+                <div
+                  v-if="file.is_lfs"
+                  class="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800"
+                >
                   <div class="flex items-center gap-2 text-sm">
                     <el-tag type="warning" size="small">LFS</el-tag>
-                    <span class="text-gray-700 dark:text-gray-300">This image is stored using Git LFS</span>
+                    <span class="text-gray-700 dark:text-gray-300"
+                      >This image is stored using Git LFS</span
+                    >
                   </div>
-                  <div v-if="file.sha256" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                  <div
+                    v-if="file.sha256"
+                    class="mt-2 text-xs text-gray-600 dark:text-gray-400"
+                  >
                     <span class="font-semibold">SHA256:</span>
-                    <code class="ml-2 font-mono break-all">{{ file.sha256 }}</code>
+                    <code class="ml-2 font-mono break-all">{{
+                      file.sha256
+                    }}</code>
                   </div>
                 </div>
               </div>
@@ -339,7 +385,10 @@
               </div>
 
               <!-- LFS/Binary file metadata (for non-image binary files) -->
-              <div v-else-if="file.is_lfs || isBinaryFile(file.path) || !file.diff" class="space-y-3">
+              <div
+                v-else-if="file.is_lfs || isBinaryFile(file.path) || !file.diff"
+                class="space-y-3"
+              >
                 <div
                   class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3"
                 >
@@ -555,7 +604,7 @@ async function doRevert() {
         parent_number: 1,
         force: revertForce.value,
         allow_empty: false,
-      }
+      },
     );
 
     ElMessage.success("Commit reverted successfully!");
@@ -563,7 +612,7 @@ async function doRevert() {
 
     // Redirect to commits page
     router.push(
-      `/${type.value}s/${namespace.value}/${name.value}/commits/${selectedBranch.value}`
+      `/${type.value}s/${namespace.value}/${name.value}/commits/${selectedBranch.value}`,
     );
   } catch (err) {
     console.error("Revert failed:", err);
@@ -596,7 +645,7 @@ async function doReset() {
 
     await axios.post(
       `/api/${type.value}s/${repoId.value}/branch/${selectedBranch.value}/reset`,
-      payload
+      payload,
     );
 
     ElMessage.success("Reset commit created successfully!");
@@ -604,7 +653,7 @@ async function doReset() {
 
     // Redirect to commits page to see the new commit
     router.push(
-      `/${type.value}s/${namespace.value}/${name.value}/commits/${selectedBranch.value}`
+      `/${type.value}s/${namespace.value}/${name.value}/commits/${selectedBranch.value}`,
     );
   } catch (err) {
     console.error("Reset failed:", err);
@@ -655,34 +704,92 @@ function viewFile(path) {
 
 function isBinaryFile(path) {
   // Check file extension to determine if it's a binary file
-  const ext = path.split('.').pop()?.toLowerCase();
+  const ext = path.split(".").pop()?.toLowerCase();
 
   const binaryExtensions = new Set([
     // Images
-    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'ico', 'svg', 'tiff', 'tif',
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "bmp",
+    "webp",
+    "ico",
+    "svg",
+    "tiff",
+    "tif",
     // Videos
-    'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', 'm4v',
+    "mp4",
+    "avi",
+    "mov",
+    "wmv",
+    "flv",
+    "webm",
+    "mkv",
+    "m4v",
     // Audio
-    'mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma',
+    "mp3",
+    "wav",
+    "flac",
+    "aac",
+    "m4a",
+    "ogg",
+    "wma",
     // Archives
-    'zip', 'tar', 'gz', 'bz2', '7z', 'rar', 'xz',
+    "zip",
+    "tar",
+    "gz",
+    "bz2",
+    "7z",
+    "rar",
+    "xz",
     // Executables
-    'exe', 'dll', 'so', 'dylib', 'bin',
+    "exe",
+    "dll",
+    "so",
+    "dylib",
+    "bin",
     // Documents
-    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    "pdf",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "ppt",
+    "pptx",
     // Models & Data
-    'safetensors', 'pt', 'pth', 'ckpt', 'pkl', 'bin', 'h5', 'pb',
+    "safetensors",
+    "pt",
+    "pth",
+    "ckpt",
+    "pkl",
+    "bin",
+    "h5",
+    "pb",
     // Fonts
-    'ttf', 'otf', 'woff', 'woff2', 'eot',
+    "ttf",
+    "otf",
+    "woff",
+    "woff2",
+    "eot",
   ]);
 
   return binaryExtensions.has(ext);
 }
 
 function isImageFile(path) {
-  const ext = path.split('.').pop()?.toLowerCase();
+  const ext = path.split(".").pop()?.toLowerCase();
   const imageExtensions = new Set([
-    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'ico', 'svg', 'tiff', 'tif'
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "bmp",
+    "webp",
+    "ico",
+    "svg",
+    "tiff",
+    "tif",
   ]);
   return imageExtensions.has(ext);
 }

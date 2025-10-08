@@ -55,6 +55,15 @@
                   <span class="text-gray-700 dark:text-gray-300">{{
                     name
                   }}</span>
+                  <button
+                    @click="copyRepoId"
+                    class="ml-1 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                    title="Copy repository ID"
+                  >
+                    <div
+                      class="i-carbon-copy text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    />
+                  </button>
                 </div>
               </div>
             </div>
@@ -485,41 +494,104 @@
     </div>
 
     <!-- Clone Dialog -->
-    <el-dialog v-model="showCloneDialog" title="Clone Repository" width="600px">
+    <el-dialog v-model="showCloneDialog" title="Clone Repository" width="700px">
       <div class="space-y-4">
+        <!-- Git Clone Section -->
         <div>
-          <label for="clone-url-input" class="block text-sm font-medium mb-2"
-            >Clone with HTTPS (Currently Not supported)</label
-          >
-          <el-input
-            id="clone-url-input"
-            :value="cloneUrl"
-            readonly
-            class="font-mono text-sm"
-          >
+          <label class="block text-sm font-medium mb-2 flex items-center gap-2">
+            <div class="i-carbon-code text-lg" />
+            Clone with Git (Recommended)
+          </label>
+          <el-input :value="gitCloneUrl" readonly class="font-mono text-sm">
             <template #append>
-              <el-button @click="copyCloneUrl">
+              <el-button @click="copyGitCloneUrl">
                 <div class="i-carbon-copy" />
               </el-button>
             </template>
           </el-input>
+
+          <div
+            class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded mt-3 text-sm"
+          >
+            <p class="font-medium text-blue-900 dark:text-blue-100 mb-2">
+              <span class="i-carbon-terminal inline-block mr-1" />
+              Quick Start:
+            </p>
+            <pre
+              class="text-xs overflow-x-auto bg-white dark:bg-gray-800 p-2 rounded mb-2 text-gray-800 dark:text-gray-200"
+            >
+git clone {{ gitCloneUrl }}</pre
+            >
+            <p class="text-blue-800 dark:text-blue-200 text-xs mt-2">
+              This will clone the repository with all files and commit history.
+            </p>
+          </div>
         </div>
 
-        <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded text-sm">
-          <p class="mb-2 font-medium">Usage:</p>
-          <p class="mb-2 text-gray-600 dark:text-gray-400">Set the endpoint:</p>
-          <pre class="text-xs overflow-x-auto mb-3">
-export HF_ENDPOINT={{ baseUrl }}</pre
-          >
-          <p class="text-gray-600 dark:text-gray-400">
-            Use
-            <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded"
-              >huggingface-cli</code
-            >:
+        <!-- Authentication Section (only show for private repos or authenticated users) -->
+        <div
+          v-if="repoInfo?.private || authStore.isLoggedIn"
+          class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-4 rounded text-sm"
+        >
+          <p class="font-medium text-yellow-900 dark:text-yellow-100 mb-2">
+            <span class="i-carbon-locked inline-block mr-1" />
+            Authentication Required
           </p>
-          <pre class="text-xs overflow-x-auto mt-1">
-huggingface-cli download {{ repoInfo?.id }}</pre
+          <p class="text-yellow-800 dark:text-yellow-200 text-xs mb-2">
+            For
+            {{
+              repoInfo?.private ? "this private repository" : "push operations"
+            }}, you'll need to authenticate using an access token:
+          </p>
+          <ol
+            class="list-decimal list-inside space-y-1 text-xs text-yellow-900 dark:text-yellow-100 ml-2"
           >
+            <li>Generate an access token in your settings</li>
+            <li>Use your username and token when prompted</li>
+            <li>
+              Username:
+              <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded">{{
+                authStore.user?.username || "your-username"
+              }}</code>
+            </li>
+            <li>
+              Password:
+              <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded"
+                >your-access-token</code
+              >
+            </li>
+          </ol>
+        </div>
+
+        <!-- HuggingFace CLI Alternative -->
+        <div>
+          <label class="block text-sm font-medium mb-2 flex items-center gap-2">
+            <div class="i-carbon-download text-lg" />
+            Alternative: HuggingFace CLI
+          </label>
+          <div
+            class="bg-gray-50 dark:bg-gray-900 p-4 rounded text-sm border border-gray-200 dark:border-gray-700"
+          >
+            <p class="mb-2 text-gray-600 dark:text-gray-400">
+              Set the endpoint:
+            </p>
+            <pre
+              class="text-xs overflow-x-auto bg-white dark:bg-gray-800 p-2 rounded mb-3 text-gray-800 dark:text-gray-200"
+            >
+export HF_ENDPOINT={{ baseUrl }}</pre
+            >
+            <p class="text-gray-600 dark:text-gray-400 mb-1">
+              Download using
+              <code class="bg-white dark:bg-gray-800 px-1 py-0.5 rounded"
+                >huggingface-cli</code
+              >:
+            </p>
+            <pre
+              class="text-xs overflow-x-auto bg-white dark:bg-gray-800 p-2 rounded text-gray-800 dark:text-gray-200"
+            >
+huggingface-cli download {{ repoInfo?.id }}</pre
+            >
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -589,6 +661,10 @@ const isOwner = computed(() => {
 
 const cloneUrl = computed(() => {
   return `${baseUrl}/${repoInfo.value?.id}.git`;
+});
+
+const gitCloneUrl = computed(() => {
+  return `${baseUrl}/${props.namespace}/${props.name}.git`;
 });
 
 const pathSegments = computed(() => {
@@ -859,6 +935,17 @@ async function createReadme() {
 function copyCloneUrl() {
   navigator.clipboard.writeText(cloneUrl.value);
   ElMessage.success("Clone URL copied to clipboard");
+}
+
+function copyGitCloneUrl() {
+  navigator.clipboard.writeText(gitCloneUrl.value);
+  ElMessage.success("Git clone URL copied to clipboard");
+}
+
+function copyRepoId() {
+  const repoId = `${props.namespace}/${props.name}`;
+  navigator.clipboard.writeText(repoId);
+  ElMessage.success("Repository ID copied to clipboard");
 }
 
 // Watchers

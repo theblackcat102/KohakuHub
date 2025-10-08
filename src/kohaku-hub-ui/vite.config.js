@@ -97,6 +97,25 @@ export default defineConfig({
         target: 'http://localhost:48888',
         changeOrigin: true
       },
+      // Proxy Git HTTP Smart Protocol endpoints
+      // This catches: /{namespace}/{name}.git/info/refs, /{namespace}/{name}.git/git-upload-pack, etc.
+      // Enables native Git clone/push operations
+      '^/[^/]+/[^/]+\\.git/(info/refs|git-upload-pack|git-receive-pack|HEAD)': {
+        target: 'http://localhost:48888',
+        changeOrigin: true,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            // Disable buffering for Git protocol streaming
+            proxyReq.setHeader('X-Forwarded-Proto', 'http');
+          });
+        }
+      },
+      // Proxy Git LFS endpoints
+      // This catches: /{namespace}/{name}.git/info/lfs/*
+      '^/[^/]+/[^/]+\\.git/info/lfs/': {
+        target: 'http://localhost:48888',
+        changeOrigin: true
+      },
       // Proxy file resolve/download endpoints (models/datasets/spaces)
       // This catches: /models/*/resolve/*, /datasets/*/resolve/*, /spaces/*/resolve/*
       '^/(models|datasets|spaces)/.+/resolve/': {

@@ -212,6 +212,22 @@ class LFSObjectHistory(BaseModel):
         )
 
 
+class SSHKey(BaseModel):
+    """User SSH public keys for Git operations."""
+
+    id = AutoField()
+    user_id = IntegerField(index=True)
+    key_type = CharField()  # "ssh-rsa", "ssh-ed25519", "ecdsa-sha2-nistp256", etc.
+    public_key = TextField()  # Full public key content
+    fingerprint = CharField(unique=True, index=True)  # SHA256 fingerprint for lookup
+    title = CharField()  # User-friendly title/name for the key
+    last_used = DateTimeField(null=True)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = ((("user_id", "fingerprint"), True),)  # Unique per user
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
@@ -227,6 +243,7 @@ def init_db():
             UserOrganization,
             Commit,
             LFSObjectHistory,
+            SSHKey,
         ],
         safe=True,
     )
