@@ -20,6 +20,9 @@ from .errors import (
     NotFoundError,
 )
 
+# UI Styles
+_STYLE_SUCCESS = "bold green"
+
 
 class InteractiveState:
     """State management for interactive CLI mode."""
@@ -57,8 +60,8 @@ class InteractiveState:
         # User status
         user_text = Text()
         if self.username:
-            user_text.append("👤 ", style="bold green")
-            user_text.append(self.username, style="bold green")
+            user_text.append("👤 ", style=_STYLE_SUCCESS)
+            user_text.append(self.username, style=_STYLE_SUCCESS)
         else:
             user_text.append("👤 ", style="bold red")
             user_text.append("Not logged in", style="bold red")
@@ -211,7 +214,7 @@ def login(state: InteractiveState):
     ).ask()
 
     # Login with progress
-    with state.console.status("[bold green]Logging in..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Logging in..."):
         try:
             result = state.client.login(username, password)
             state.username = username
@@ -219,7 +222,7 @@ def login(state: InteractiveState):
             state.handle_error(e, "Login")
             return
 
-    state.console.print(f"\n✓ Logged in as {username}", style="bold green")
+    state.console.print(f"\n✓ Logged in as {username}", style=_STYLE_SUCCESS)
 
     # Offer to create and save token
     if questionary.confirm(
@@ -231,7 +234,7 @@ def login(state: InteractiveState):
         ).ask()
 
         try:
-            with state.console.status("[bold green]Creating token..."):
+            with state.console.status(f"[{_STYLE_SUCCESS}]Creating token..."):
                 token_result = state.client.create_token(token_name)
 
             token_value = token_result["token"]
@@ -241,7 +244,7 @@ def login(state: InteractiveState):
             state.client.token = token_value
 
             state.console.print(
-                "\n✓ Token created and saved to config", style="bold green"
+                "\n✓ Token created and saved to config", style=_STYLE_SUCCESS
             )
             state.console.print("[dim]You won't need to enter password again[/dim]")
         except Exception as e:
@@ -278,7 +281,7 @@ def register(state: InteractiveState):
         return
 
     # Register with progress
-    with state.console.status("[bold green]Creating account..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Creating account..."):
         try:
             result = state.client.register(username, email, password)
         except AlreadyExistsError as e:
@@ -288,7 +291,7 @@ def register(state: InteractiveState):
             state.handle_error(e, "Registration")
             return
 
-    state.console.print(f"\n✓ Account created: {username}", style="bold green")
+    state.console.print(f"\n✓ Account created: {username}", style=_STYLE_SUCCESS)
 
     message = result.get("message", "")
     if message:
@@ -298,11 +301,11 @@ def register(state: InteractiveState):
     if result.get("email_verified", False):
         if questionary.confirm("\nLogin now?", default=True).ask():
             try:
-                with state.console.status("[bold green]Logging in..."):
+                with state.console.status(f"[{_STYLE_SUCCESS}]Logging in..."):
                     state.client.login(username, password)
                     state.username = username
 
-                state.console.print("✓ Logged in", style="bold green")
+                state.console.print("✓ Logged in", style=_STYLE_SUCCESS)
 
                 # Create and save token
                 if questionary.confirm(
@@ -313,7 +316,7 @@ def register(state: InteractiveState):
                         state.config.token = token_result["token"]
                         state.client.token = token_result["token"]
                         state.console.print(
-                            "✓ Token created and saved", style="bold green"
+                            "✓ Token created and saved", style=_STYLE_SUCCESS
                         )
                     except Exception:
                         pass
@@ -325,7 +328,7 @@ def register(state: InteractiveState):
 
 def whoami(state: InteractiveState):
     """Show current user info."""
-    with state.console.status("[bold green]Fetching user info..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching user info..."):
         try:
             info = state.client.whoami()
         except Exception as e:
@@ -381,7 +384,7 @@ def create_token(state: InteractiveState):
     # Display token prominently
     token_display = Text()
     token_display.append("🔑 Your API Token:\n\n", style="bold yellow")
-    token_display.append(token_value, style="bold green")
+    token_display.append(token_value, style=_STYLE_SUCCESS)
     token_display.append(
         "\n\n⚠️  Save this token now - you won't see it again!", style="bold red"
     )
@@ -399,7 +402,7 @@ def create_token(state: InteractiveState):
     if questionary.confirm("\nSave token to config?", default=True).ask():
         state.config.token = token_value
         state.client.token = token_value
-        state.console.print("✓ Token saved to config", style="bold green")
+        state.console.print("✓ Token saved to config", style=_STYLE_SUCCESS)
 
     state.console.print(f"\n[bold]To use this token:[/bold]")
     state.console.print(f"  export HF_TOKEN={token_value}")
@@ -409,7 +412,7 @@ def create_token(state: InteractiveState):
 
 def list_tokens(state: InteractiveState):
     """List all API tokens."""
-    with state.console.status("[bold green]Fetching tokens..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching tokens..."):
         try:
             tokens = state.client.list_tokens()
         except Exception as e:
@@ -477,14 +480,14 @@ def delete_token(state: InteractiveState):
         return
 
     # Delete with progress
-    with state.console.status("[bold green]Deleting token..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Deleting token..."):
         try:
             state.client.revoke_token(token_id)
         except Exception as e:
             state.handle_error(e, "Token deletion")
             return
 
-    state.console.print("\n✓ Token deleted successfully", style="bold green")
+    state.console.print("\n✓ Token deleted successfully", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 
@@ -500,7 +503,7 @@ def my_orgs(state: InteractiveState):
             input("\nPress Enter to continue...")
             return
 
-    with state.console.status("[bold green]Fetching organizations..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching organizations..."):
         try:
             orgs = state.client.list_user_organizations()
         except Exception as e:
@@ -541,7 +544,7 @@ def logout(state: InteractiveState):
     if not questionary.confirm(f"Logout from {state.username}?", default=True).ask():
         return
 
-    with state.console.status("[bold green]Logging out..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Logging out..."):
         try:
             state.client.logout()
         except Exception as e:
@@ -549,7 +552,7 @@ def logout(state: InteractiveState):
             pass
 
     state.username = None
-    state.console.print("\n✓ Logged out", style="bold green")
+    state.console.print("\n✓ Logged out", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 
@@ -632,7 +635,7 @@ def create_organization(state: InteractiveState):
         return
 
     # Create with progress
-    with state.console.status("[bold green]Creating organization..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Creating organization..."):
         try:
             result = state.client.create_organization(name, description=description)
         except AlreadyExistsError:
@@ -646,7 +649,7 @@ def create_organization(state: InteractiveState):
             return
 
     state.console.print(
-        f"\n✓ Organization '{name}' created successfully", style="bold green"
+        f"\n✓ Organization '{name}' created successfully", style=_STYLE_SUCCESS
     )
     input("\nPress Enter to continue...")
 
@@ -655,7 +658,7 @@ def organization_info(state: InteractiveState):
     """Show organization information."""
     org_name = questionary.text("Organization name:").ask()
 
-    with state.console.status("[bold green]Fetching organization info..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching organization info..."):
         try:
             info = state.client.get_organization(org_name)
         except Exception as e:
@@ -686,7 +689,7 @@ def list_org_members(state: InteractiveState):
     """List organization members."""
     org_name = questionary.text("Organization name:").ask()
 
-    with state.console.status("[bold green]Fetching members..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching members..."):
         try:
             members = state.client.list_organization_members(org_name)
         except Exception as e:
@@ -728,7 +731,7 @@ def add_member(state: InteractiveState):
         input("\nPress Enter to continue...")
         return
 
-    with state.console.status("[bold green]Adding member..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Adding member..."):
         try:
             state.client.add_organization_member(org_name, username, role=role)
         except Exception as e:
@@ -736,7 +739,7 @@ def add_member(state: InteractiveState):
             return
 
     state.console.print(
-        f"\n✓ Added {username} to {org_name} as {role}", style="bold green"
+        f"\n✓ Added {username} to {org_name} as {role}", style=_STYLE_SUCCESS
     )
     input("\nPress Enter to continue...")
 
@@ -771,14 +774,14 @@ def remove_member(state: InteractiveState):
         input("\nPress Enter to continue...")
         return
 
-    with state.console.status("[bold green]Removing member..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Removing member..."):
         try:
             state.client.remove_organization_member(org_name, username)
         except Exception as e:
             state.handle_error(e, "Remove member")
             return
 
-    state.console.print(f"\n✓ Removed {username} from {org_name}", style="bold green")
+    state.console.print(f"\n✓ Removed {username} from {org_name}", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 
@@ -798,14 +801,16 @@ def update_member_role(state: InteractiveState):
         input("\nPress Enter to continue...")
         return
 
-    with state.console.status("[bold green]Updating role..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Updating role..."):
         try:
             state.client.update_organization_member(org_name, username, role=role)
         except Exception as e:
             state.handle_error(e, "Update member role")
             return
 
-    state.console.print(f"\n✓ Updated {username}'s role to {role}", style="bold green")
+    state.console.print(
+        f"\n✓ Updated {username}'s role to {role}", style=_STYLE_SUCCESS
+    )
     input("\nPress Enter to continue...")
 
 
@@ -889,7 +894,7 @@ def create_repo(state: InteractiveState):
         return
 
     # Create with progress
-    with state.console.status("[bold green]Creating repository..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Creating repository..."):
         try:
             result = state.client.create_repo(
                 repo_id, repo_type=repo_type, private=private
@@ -905,7 +910,7 @@ def create_repo(state: InteractiveState):
             return
 
     state.console.print(
-        f"\n✓ Repository created: {result.get('url')}", style="bold green"
+        f"\n✓ Repository created: {result.get('url')}", style=_STYLE_SUCCESS
     )
     input("\nPress Enter to continue...")
 
@@ -918,7 +923,7 @@ def list_repos(state: InteractiveState):
 
     author = questionary.text("Filter by author (optional, leave blank for all):").ask()
 
-    with state.console.status("[bold green]Fetching repositories..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching repositories..."):
         try:
             repos = state.client.list_repos(
                 repo_type=repo_type, author=author or None, limit=50
@@ -966,7 +971,7 @@ def repo_info(state: InteractiveState):
         validate=lambda x: "/" in x or "Format: namespace/name",
     ).ask()
 
-    with state.console.status("[bold green]Fetching repository info..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching repository info..."):
         try:
             info = state.client.repo_info(repo_id, repo_type=repo_type)
         except Exception as e:
@@ -1027,7 +1032,7 @@ def repo_tree(state: InteractiveState):
 
     recursive = questionary.confirm("List recursively?", default=False).ask()
 
-    with state.console.status("[bold green]Fetching file tree..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching file tree..."):
         try:
             files = state.client.list_repo_tree(
                 repo_id,
@@ -1124,7 +1129,7 @@ def repo_settings(state: InteractiveState):
         input("\nPress Enter to continue...")
         return
 
-    with state.console.status("[bold green]Updating settings..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Updating settings..."):
         try:
             state.client.update_repo_settings(
                 repo_id, repo_type=repo_type, private=private
@@ -1133,7 +1138,7 @@ def repo_settings(state: InteractiveState):
             state.handle_error(e, "Update settings")
             return
 
-    state.console.print("\n✓ Settings updated", style="bold green")
+    state.console.print("\n✓ Settings updated", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 
@@ -1165,7 +1170,7 @@ def move_repo(state: InteractiveState):
         input("\nPress Enter to continue...")
         return
 
-    with state.console.status("[bold green]Moving repository..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Moving repository..."):
         try:
             result = state.client.move_repo(
                 from_repo=from_repo, to_repo=to_repo, repo_type=repo_type
@@ -1175,7 +1180,7 @@ def move_repo(state: InteractiveState):
             return
 
     state.console.print(
-        f"\n✓ Repository moved: {result.get('url')}", style="bold green"
+        f"\n✓ Repository moved: {result.get('url')}", style=_STYLE_SUCCESS
     )
     input("\nPress Enter to continue...")
 
@@ -1239,7 +1244,7 @@ def delete_repo(state: InteractiveState):
             state.handle_error(e, "Repository deletion")
             return
 
-    state.console.print(f"\n✓ Repository {repo_id} deleted", style="bold green")
+    state.console.print(f"\n✓ Repository {repo_id} deleted", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 
@@ -1295,7 +1300,7 @@ def set_endpoint(state: InteractiveState):
     state.config.endpoint = endpoint
     state.client.endpoint = endpoint
 
-    state.console.print(f"\n✓ Endpoint set to {endpoint}", style="bold green")
+    state.console.print(f"\n✓ Endpoint set to {endpoint}", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 
@@ -1312,7 +1317,7 @@ def set_token(state: InteractiveState):
     state.config.token = token
     state.client.token = token
 
-    with state.console.status("[bold green]Verifying token..."):
+    with state.console.status(f"[{_STYLE_SUCCESS}]Verifying token..."):
         try:
             user_info = state.client.whoami()
             state.username = user_info.get("username")
@@ -1322,7 +1327,7 @@ def set_token(state: InteractiveState):
             return
 
     state.console.print(
-        f"\n✓ Token saved and verified (user: {state.username})", style="bold green"
+        f"\n✓ Token saved and verified (user: {state.username})", style=_STYLE_SUCCESS
     )
     input("\nPress Enter to continue...")
 
@@ -1363,7 +1368,7 @@ def clear_config(state: InteractiveState):
     state.client.token = None
     state.username = None
 
-    state.console.print("\n✓ Configuration cleared", style="bold green")
+    state.console.print("\n✓ Configuration cleared", style=_STYLE_SUCCESS)
     input("\nPress Enter to continue...")
 
 

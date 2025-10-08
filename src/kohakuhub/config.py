@@ -5,10 +5,13 @@ import tomllib
 from functools import lru_cache
 from pydantic import BaseModel
 
+# Default configuration values
+_DEFAULT_S3_ENDPOINT = "http://localhost:9000"
+
 
 class S3Config(BaseModel):
-    public_endpoint: str = "http://localhost:9000"
-    endpoint: str = "http://localhost:9000"
+    public_endpoint: str = _DEFAULT_S3_ENDPOINT
+    endpoint: str = _DEFAULT_S3_ENDPOINT
     access_key: str = "test-access-key"
     secret_key: str = "test-secret-key"
     bucket: str = "test-bucket"
@@ -120,9 +123,9 @@ def load_config(path: str = None) -> Config:
     if path is None:
         s3_config = S3Config(
             public_endpoint=os.environ.get(
-                "KOHAKU_HUB_S3_PUBLIC_ENDPOINT", "http://localhost:9000"
+                "KOHAKU_HUB_S3_PUBLIC_ENDPOINT", _DEFAULT_S3_ENDPOINT
             ),
-            endpoint=os.environ.get("KOHAKU_HUB_S3_ENDPOINT", "http://localhost:9000"),
+            endpoint=os.environ.get("KOHAKU_HUB_S3_ENDPOINT", _DEFAULT_S3_ENDPOINT),
             access_key=os.environ.get("KOHAKU_HUB_S3_ACCESS_KEY", "test-access-key"),
             secret_key=os.environ.get("KOHAKU_HUB_S3_SECRET_KEY", "test-secret-key"),
             bucket=os.environ.get("KOHAKU_HUB_S3_BUCKET", "test-bucket"),

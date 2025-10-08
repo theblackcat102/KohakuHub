@@ -4,6 +4,9 @@ from fastapi import HTTPException
 
 from kohakuhub.db import User, Organization, UserOrganization
 
+# Error messages
+_ERR_USER_NOT_FOUND = "User not found"
+
 
 def create_organization(name: str, description: str | None, user: User):
     """Create organization with default quotas (synchronous version).
@@ -33,7 +36,7 @@ def get_organization_details(name: str):
 def add_member_to_organization(org_id: int, username: str, role: str):
     user = User.get_or_none(User.username == username)
     if not user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
 
     if UserOrganization.get_or_none(
         (UserOrganization.user == user.id) & (UserOrganization.organization == org_id)
@@ -46,7 +49,7 @@ def add_member_to_organization(org_id: int, username: str, role: str):
 def remove_member_from_organization(org_id: int, username: str):
     user = User.get_or_none(User.username == username)
     if not user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
 
     user_org = UserOrganization.get_or_none(
         (UserOrganization.user == user.id) & (UserOrganization.organization == org_id)
@@ -73,7 +76,7 @@ def get_user_organizations(user_id: int):
 def update_member_role(org_id: int, username: str, role: str):
     user = User.get_or_none(User.username == username)
     if not user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
 
     user_org = UserOrganization.get_or_none(
         (UserOrganization.user == user.id) & (UserOrganization.organization == org_id)

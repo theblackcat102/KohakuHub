@@ -231,7 +231,7 @@ async function handleMoveRepo() {
       },
     );
 
-    const { data } = await settingsAPI.moveRepo({
+    await settingsAPI.moveRepo({
       fromRepo: repoId.value,
       toRepo: moveToRepo.value,
       type: repoType.value,
@@ -264,7 +264,7 @@ async function handleDeleteRepo() {
     );
 
     // Second confirmation
-    const { value } = await ElMessageBox.prompt(
+    await ElMessageBox.prompt(
       `Please type the repository name "${route.params.name}" to confirm`,
       "Confirm Deletion",
       {

@@ -12,6 +12,9 @@ from .errors import (
 
 RepoType = Literal["model", "dataset", "space"]
 
+# Error messages
+_ERR_INVALID_REPO_ID = "repo_id must be in format 'namespace/name'"
+
 
 class KohubClient:
     """Python API client for KohakuHub.
@@ -471,7 +474,7 @@ class KohubClient:
         if "/" in repo_id:
             namespace, name = repo_id.split("/", 1)
         else:
-            raise ValueError("repo_id must be in format 'namespace/name'")
+            raise ValueError(_ERR_INVALID_REPO_ID)
 
         if revision:
             path = f"/api/{repo_type}s/{namespace}/{name}/revision/{revision}"
@@ -593,7 +596,7 @@ class KohubClient:
         if "/" in repo_id:
             namespace, name = repo_id.split("/", 1)
         else:
-            raise ValueError("repo_id must be in format 'namespace/name'")
+            raise ValueError(_ERR_INVALID_REPO_ID)
 
         api_path = (
             f"/api/{repo_type}s/{namespace}/{name}/tree/{revision}/{path}".rstrip("/")

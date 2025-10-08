@@ -19,7 +19,10 @@
       </RouterLink>
 
       <!-- Desktop Navigation - hidden on mobile -->
-      <nav class="hidden md:flex items-center gap-6">
+      <nav
+        class="hidden md:flex items-center gap-6"
+        aria-label="Main navigation"
+      >
         <RouterLink
           to="/models"
           class="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
@@ -166,7 +169,10 @@
     >
       <div class="flex flex-col h-full">
         <!-- Navigation Links -->
-        <nav class="flex flex-col gap-1 mb-6 px-4 pt-4">
+        <nav
+          class="flex flex-col gap-1 mb-6 px-4 pt-4"
+          aria-label="Mobile navigation"
+        >
           <RouterLink
             to="/models"
             @click="mobileMenuOpen = false"

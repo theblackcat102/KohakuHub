@@ -20,6 +20,12 @@
 
     <div class="code-container">
       <table class="code-table">
+        <thead class="sr-only">
+          <tr>
+            <th scope="col">Line Number</th>
+            <th scope="col">Code Content</th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="(line, index) in codeLines" :key="index" class="code-line">
             <td class="line-number">{{ index + 1 }}</td>
@@ -310,6 +316,19 @@ onMounted(() => {
 .dark .code-container :deep(.hljs-template-variable),
 .dark .code-container :deep(.hljs-attribute) {
   color: #79c0ff; /* Brighter blue for JSON keys in dark mode */
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* Line numbers */

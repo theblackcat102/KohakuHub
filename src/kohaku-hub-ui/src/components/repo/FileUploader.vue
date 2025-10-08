@@ -50,8 +50,11 @@
 
       <!-- Upload Path Input -->
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Upload to path:</label>
+        <label for="upload-path-input" class="block text-sm font-medium mb-1"
+          >Upload to path:</label
+        >
         <el-input
+          id="upload-path-input"
           v-model="uploadPath"
           placeholder="Leave empty for root, or enter folder path (e.g., data/images)"
           size="small"
@@ -62,8 +65,11 @@
 
       <!-- Commit Message -->
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Commit message:</label>
+        <label for="commit-message-input" class="block text-sm font-medium mb-1"
+          >Commit message:</label
+        >
         <el-input
+          id="commit-message-input"
           v-model="commitMessage"
           type="textarea"
           :rows="2"

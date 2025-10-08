@@ -203,10 +203,6 @@ function resetContent() {
 function updateTheme() {
   if (!editor.value) return;
 
-  const isDark =
-    document.documentElement.classList.contains("dark") ||
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-
   // Recreate editor with new theme
   const currentValue = editor.value.state.doc.toString();
   editor.value.destroy();

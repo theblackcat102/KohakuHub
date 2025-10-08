@@ -488,10 +488,15 @@
     <el-dialog v-model="showCloneDialog" title="Clone Repository" width="600px">
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium mb-2"
+          <label for="clone-url-input" class="block text-sm font-medium mb-2"
             >Clone with HTTPS (Currently Not supported)</label
           >
-          <el-input :value="cloneUrl" readonly class="font-mono text-sm">
+          <el-input
+            id="clone-url-input"
+            :value="cloneUrl"
+            readonly
+            class="font-mono text-sm"
+          >
             <template #append>
               <el-button @click="copyCloneUrl">
                 <div class="i-carbon-copy" />

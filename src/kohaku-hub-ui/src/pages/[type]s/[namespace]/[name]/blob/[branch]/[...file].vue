@@ -138,7 +138,9 @@
             controls
             class="max-w-full h-auto mx-auto"
             style="max-height: 600px"
+            :aria-label="`Video: ${fileName}`"
           >
+            <track kind="captions" :label="`${fileName} captions`" />
             Your browser does not support video playback.
           </video>
         </div>

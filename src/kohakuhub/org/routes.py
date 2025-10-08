@@ -3,6 +3,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+# Error messages
+_ERR_ORG_NOT_FOUND = "Organization not found"
+
 from kohakuhub.db_async import (
     create_organization as create_org_async,
     create_user_organization,
@@ -63,7 +66,7 @@ async def get_organization_info(org_name: str):
     """Get organization details."""
     org = get_org_details_util(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
     return {
         "name": org.name,
         "description": org.description,
@@ -85,7 +88,7 @@ async def add_member(
     """Add a member to an organization."""
     org = get_org_details_util(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Check if the current user is an admin of the organization
     user_org = await get_user_organization(current_user.id, org.id)
@@ -105,7 +108,7 @@ async def remove_member(
     """Remove a member from an organization."""
     org = get_org_details_util(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Check if the current user is an admin of the organization
     user_org = await get_user_organization(current_user.id, org.id)
@@ -150,7 +153,7 @@ async def update_member_role(
     """Update a member's role in an organization."""
     org = get_org_details_util(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Check if the current user is an admin of the organization
     user_org = await get_user_organization(current_user.id, org.id)
@@ -166,7 +169,7 @@ async def list_organization_members(org_name: str):
     """List organization members."""
     org = await get_organization(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Get all members
     members = await list_org_members_async(org.id)
