@@ -297,23 +297,32 @@ class TestBranchMerge:
         ndjson_lines = []
 
         # Header
-        ndjson_lines.append(json.dumps({
-            "key": "header",
-            "value": {"summary": "Add dev files", "description": ""}
-        }))
+        ndjson_lines.append(
+            json.dumps(
+                {
+                    "key": "header",
+                    "value": {"summary": "Add dev files", "description": ""},
+                }
+            )
+        )
 
         # Dev text file
-        ndjson_lines.append(json.dumps({
-            "key": "file",
-            "value": {
-                "path": "dev.txt",
-                "content": base64.b64encode(dev_txt_content).decode(),
-                "encoding": "base64"
-            }
-        }))
+        ndjson_lines.append(
+            json.dumps(
+                {
+                    "key": "file",
+                    "value": {
+                        "path": "dev.txt",
+                        "content": base64.b64encode(dev_txt_content).decode(),
+                        "encoding": "base64",
+                    },
+                }
+            )
+        )
 
         # Dev LFS file - upload to S3 first
         import hashlib
+
         sha256 = hashlib.sha256(dev_lfs_content).hexdigest()
 
         # Get LFS upload URL
@@ -321,8 +330,8 @@ class TestBranchMerge:
             f"/{repo_type}s/{repo_id}.git/info/lfs/objects/batch",
             json={
                 "operation": "upload",
-                "objects": [{"oid": sha256, "size": len(dev_lfs_content)}]
-            }
+                "objects": [{"oid": sha256, "size": len(dev_lfs_content)}],
+            },
         )
         assert lfs_resp.status_code == 200
 
@@ -330,25 +339,30 @@ class TestBranchMerge:
 
         # Upload to S3
         import requests
+
         s3_resp = requests.put(upload_url, data=dev_lfs_content)
         assert s3_resp.status_code in (200, 204)
 
         # Add LFS file to commit
-        ndjson_lines.append(json.dumps({
-            "key": "lfsFile",
-            "value": {
-                "path": "dev-lfs.bin",
-                "oid": sha256,
-                "size": len(dev_lfs_content),
-                "algo": "sha256"
-            }
-        }))
+        ndjson_lines.append(
+            json.dumps(
+                {
+                    "key": "lfsFile",
+                    "value": {
+                        "path": "dev-lfs.bin",
+                        "oid": sha256,
+                        "size": len(dev_lfs_content),
+                        "algo": "sha256",
+                    },
+                }
+            )
+        )
 
         # Commit to dev branch
         commit_resp = http_auth.post(
             f"/api/{repo_type}s/{repo_id}/commit/dev",
             data="\n".join(ndjson_lines),
-            headers={"Content-Type": "application/x-ndjson"}
+            headers={"Content-Type": "application/x-ndjson"},
         )
         assert commit_resp.status_code == 200
 

@@ -2,19 +2,29 @@
 
 import hashlib
 import secrets
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from peewee import fn
 from pydantic import BaseModel
 
+from kohakuhub.config import cfg
+from kohakuhub.db import Commit, File, LFSObjectHistory, Organization, Repository, User
+from kohakuhub.db_async import (
+    create_user,
+    delete_repository,
+    delete_user,
+    execute_db_query,
+)
+from kohakuhub.logger import get_logger
 from kohakuhub.api.utils.quota import (
     get_storage_info,
     set_quota,
     update_namespace_storage,
 )
-from kohakuhub.config import cfg
-from kohakuhub.db import Organization, User
-from kohakuhub.db_async import create_user, delete_user, execute_db_query
-from kohakuhub.logger import get_logger
+from kohakuhub.api.utils.s3 import get_s3_client
+from kohakuhub.async_utils import run_in_s3_executor
 
 logger = get_logger("ADMIN")
 router = APIRouter()
@@ -200,7 +210,6 @@ async def create_user_admin(
     Raises:
         HTTPException: If username or email already exists
     """
-    import bcrypt
 
     # Check if user already exists
     def _check_exists():
@@ -276,8 +285,6 @@ async def delete_user_admin(
     """
 
     def _get_user_and_repos():
-        from kohakuhub.db import Repository
-
         user = User.get_or_none(User.username == username)
         if not user:
             return None, []
@@ -307,8 +314,6 @@ async def delete_user_admin(
     # Delete user's repositories if force=true
     deleted_repos = []
     if owned_repos and force:
-        from kohakuhub.db_async import delete_repository
-
         for repo in owned_repos:
             await delete_repository(repo)
             deleted_repos.append(f"{repo.repo_type}:{repo.full_id}")
@@ -545,8 +550,6 @@ async def get_system_stats(
     """
 
     def _get_stats():
-        from kohakuhub.db import Repository
-
         user_count = User.select().count()
         org_count = Organization.select().count()
         repo_count = Repository.select().count()
@@ -570,3 +573,583 @@ async def get_system_stats(
     stats = await execute_db_query(_get_stats)
 
     return stats
+
+
+# ===== Repository Management Endpoints =====
+
+
+@router.get("/repositories")
+async def list_repositories_admin(
+    repo_type: str | None = None,
+    namespace: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """List all repositories with filters.
+
+    Args:
+        repo_type: Filter by repository type (model/dataset/space)
+        namespace: Filter by namespace
+        limit: Maximum number to return
+        offset: Offset for pagination
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        List of repositories with metadata
+    """
+
+    def _list_repos():
+        query = Repository.select()
+        if repo_type:
+            query = query.where(Repository.repo_type == repo_type)
+        if namespace:
+            query = query.where(Repository.namespace == namespace)
+
+        query = query.order_by(Repository.created_at.desc()).limit(limit).offset(offset)
+
+        repos = []
+        for repo in query:
+            # Get owner username
+            owner = User.get_or_none(User.id == repo.owner_id)
+            owner_username = owner.username if owner else "unknown"
+
+            repos.append(
+                {
+                    "id": repo.id,
+                    "repo_type": repo.repo_type,
+                    "namespace": repo.namespace,
+                    "name": repo.name,
+                    "full_id": repo.full_id,
+                    "private": repo.private,
+                    "owner_id": repo.owner_id,
+                    "owner_username": owner_username,
+                    "created_at": repo.created_at.isoformat(),
+                }
+            )
+
+        return repos
+
+    repos = await execute_db_query(_list_repos)
+
+    return {"repositories": repos, "limit": limit, "offset": offset}
+
+
+@router.get("/repositories/{repo_type}/{namespace}/{name}")
+async def get_repository_admin(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Get detailed repository information.
+
+    Args:
+        repo_type: Repository type
+        namespace: Repository namespace
+        name: Repository name
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        Repository details including file count and commit count
+
+    Raises:
+        HTTPException: If repository not found
+    """
+
+    def _get_repo_details():
+        repo = Repository.get_or_none(
+            Repository.repo_type == repo_type,
+            Repository.namespace == namespace,
+            Repository.name == name,
+        )
+
+        if not repo:
+            return None
+
+        # Get owner
+        owner = User.get_or_none(User.id == repo.owner_id)
+
+        # Count files
+        file_count = File.select().where(File.repo_full_id == repo.full_id).count()
+
+        # Count commits
+        commit_count = (
+            Commit.select()
+            .where(
+                Commit.repo_full_id == repo.full_id, Commit.repo_type == repo.repo_type
+            )
+            .count()
+        )
+
+        # Get total file size
+        total_size = (
+            File.select()
+            .where(File.repo_full_id == repo.full_id)
+            .select(File.size)
+            .scalar(as_tuple=False)
+        )
+        if total_size is None:
+            total_size = 0
+
+        return {
+            "id": repo.id,
+            "repo_type": repo.repo_type,
+            "namespace": repo.namespace,
+            "name": repo.name,
+            "full_id": repo.full_id,
+            "private": repo.private,
+            "owner_id": repo.owner_id,
+            "owner_username": owner.username if owner else "unknown",
+            "created_at": repo.created_at.isoformat(),
+            "file_count": file_count,
+            "commit_count": commit_count,
+            "total_size": total_size,
+        }
+
+    repo_info = await execute_db_query(_get_repo_details)
+
+    if not repo_info:
+        raise HTTPException(
+            404,
+            detail={"error": f"Repository not found: {repo_type}/{namespace}/{name}"},
+        )
+
+    return repo_info
+
+
+# ===== Commit History Endpoints =====
+
+
+@router.get("/commits")
+async def list_commits_admin(
+    repo_full_id: str | None = None,
+    username: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """List commits with filters.
+
+    Args:
+        repo_full_id: Filter by repository full ID
+        username: Filter by author username
+        limit: Maximum number to return
+        offset: Offset for pagination
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        List of commits
+    """
+
+    def _list_commits():
+        query = Commit.select()
+
+        if repo_full_id:
+            query = query.where(Commit.repo_full_id == repo_full_id)
+        if username:
+            query = query.where(Commit.username == username)
+
+        query = query.order_by(Commit.created_at.desc()).limit(limit).offset(offset)
+
+        commits = []
+        for commit in query:
+            commits.append(
+                {
+                    "id": commit.id,
+                    "commit_id": commit.commit_id,
+                    "repo_full_id": commit.repo_full_id,
+                    "repo_type": commit.repo_type,
+                    "branch": commit.branch,
+                    "user_id": commit.user_id,
+                    "username": commit.username,
+                    "message": commit.message,
+                    "description": commit.description,
+                    "created_at": commit.created_at.isoformat(),
+                }
+            )
+
+        return commits
+
+    commits = await execute_db_query(_list_commits)
+
+    return {"commits": commits, "limit": limit, "offset": offset}
+
+
+# ===== S3 Storage Information =====
+
+
+@router.get("/storage/buckets")
+async def list_s3_buckets(
+    _admin: bool = Depends(verify_admin_token),
+):
+    """List S3 buckets and their sizes.
+
+    Args:
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        List of buckets with sizes
+    """
+
+    def _list_buckets():
+        s3 = get_s3_client()
+        buckets = s3.list_buckets()
+
+        bucket_info = []
+        for bucket in buckets.get("Buckets", []):
+            bucket_name = bucket["Name"]
+
+            # Get bucket size (sum of all objects)
+            try:
+                total_size = 0
+                paginator = s3.get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=bucket_name):
+                    for obj in page.get("Contents", []):
+                        total_size += obj.get("Size", 0)
+
+                object_count = sum(
+                    len(page.get("Contents", []))
+                    for page in paginator.paginate(Bucket=bucket_name)
+                )
+
+                bucket_info.append(
+                    {
+                        "name": bucket_name,
+                        "creation_date": bucket["CreationDate"].isoformat(),
+                        "total_size": total_size,
+                        "object_count": object_count,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to get size for bucket {bucket_name}: {e}")
+                bucket_info.append(
+                    {
+                        "name": bucket_name,
+                        "creation_date": bucket["CreationDate"].isoformat(),
+                        "total_size": 0,
+                        "object_count": 0,
+                        "error": str(e),
+                    }
+                )
+
+        return bucket_info
+
+    buckets = await run_in_s3_executor(_list_buckets)
+
+    return {"buckets": buckets}
+
+
+@router.get("/storage/objects/{bucket}")
+async def list_s3_objects(
+    bucket: str,
+    prefix: str = "",
+    limit: int = 100,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """List S3 objects in a bucket.
+
+    Args:
+        bucket: Bucket name
+        prefix: Key prefix filter
+        limit: Maximum objects to return
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        List of S3 objects
+    """
+
+    def _list_objects():
+        s3 = get_s3_client()
+
+        try:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=limit)
+
+            objects = []
+            for obj in response.get("Contents", []):
+                objects.append(
+                    {
+                        "key": obj["Key"],
+                        "size": obj["Size"],
+                        "last_modified": obj["LastModified"].isoformat(),
+                        "storage_class": obj.get("StorageClass", "STANDARD"),
+                    }
+                )
+
+            return {
+                "objects": objects,
+                "is_truncated": response.get("IsTruncated", False),
+                "key_count": len(objects),
+            }
+        except Exception as e:
+            logger.error(f"Failed to list objects in bucket {bucket}: {e}")
+            raise HTTPException(500, detail={"error": str(e)})
+
+    result = await run_in_s3_executor(_list_objects)
+
+    return result
+
+
+# ===== Enhanced Statistics =====
+
+
+@router.get("/stats/detailed")
+async def get_detailed_stats(
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Get detailed system statistics.
+
+    Args:
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        Detailed statistics from database
+    """
+
+    def _get_detailed_stats():
+        # User stats
+        total_users = User.select().count()
+        active_users = User.select().where(User.is_active == True).count()
+        verified_users = User.select().where(User.email_verified == True).count()
+
+        # Organization stats
+        total_orgs = Organization.select().count()
+
+        # Repository stats
+        total_repos = Repository.select().count()
+        private_repos = Repository.select().where(Repository.private == True).count()
+        public_repos = Repository.select().where(Repository.private == False).count()
+
+        # Repos by type
+        model_repos = Repository.select().where(Repository.repo_type == "model").count()
+        dataset_repos = (
+            Repository.select().where(Repository.repo_type == "dataset").count()
+        )
+        space_repos = Repository.select().where(Repository.repo_type == "space").count()
+
+        # Commit stats
+        total_commits = Commit.select().count()
+
+        # Top contributors
+        top_contributors = (
+            Commit.select(Commit.username, fn.COUNT(Commit.id).alias("commit_count"))
+            .group_by(Commit.username)
+            .order_by(fn.COUNT(Commit.id).desc())
+            .limit(10)
+        )
+
+        contributors = [
+            {"username": c.username, "commit_count": c.commit_count}
+            for c in top_contributors
+        ]
+
+        # LFS object stats
+        total_lfs_objects = LFSObjectHistory.select().count()
+        total_lfs_size = (
+            LFSObjectHistory.select(
+                fn.SUM(LFSObjectHistory.size).alias("total")
+            ).scalar()
+            or 0
+        )
+
+        # Storage stats
+        total_private_used = (
+            User.select(fn.SUM(User.private_used_bytes).alias("total")).scalar() or 0
+        )
+        total_public_used = (
+            User.select(fn.SUM(User.public_used_bytes).alias("total")).scalar() or 0
+        )
+
+        return {
+            "users": {
+                "total": total_users,
+                "active": active_users,
+                "verified": verified_users,
+                "inactive": total_users - active_users,
+            },
+            "organizations": {
+                "total": total_orgs,
+            },
+            "repositories": {
+                "total": total_repos,
+                "private": private_repos,
+                "public": public_repos,
+                "by_type": {
+                    "model": model_repos,
+                    "dataset": dataset_repos,
+                    "space": space_repos,
+                },
+            },
+            "commits": {
+                "total": total_commits,
+                "top_contributors": contributors,
+            },
+            "lfs": {
+                "total_objects": total_lfs_objects,
+                "total_size": total_lfs_size,
+            },
+            "storage": {
+                "private_used": total_private_used,
+                "public_used": total_public_used,
+                "total_used": total_private_used + total_public_used,
+            },
+        }
+
+    stats = await execute_db_query(_get_detailed_stats)
+
+    return stats
+
+
+@router.get("/stats/timeseries")
+async def get_timeseries_stats(
+    days: int = Query(default=30, ge=1, le=365),
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Get time-series statistics for charts.
+
+    Args:
+        days: Number of days to include
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        Time-series data for various metrics
+    """
+
+    def _get_timeseries():
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+        # Repositories created per day
+        repos_by_day = (
+            Repository.select(
+                Repository.created_at,
+                Repository.repo_type,
+            )
+            .where(Repository.created_at >= cutoff_date)
+            .order_by(Repository.created_at.asc())
+        )
+
+        # Group by date
+        daily_repos = {}
+        for repo in repos_by_day:
+            date_key = repo.created_at.date().isoformat()
+            if date_key not in daily_repos:
+                daily_repos[date_key] = {"model": 0, "dataset": 0, "space": 0}
+            daily_repos[date_key][repo.repo_type] += 1
+
+        # Commits created per day
+        commits_by_day = (
+            Commit.select(Commit.created_at)
+            .where(Commit.created_at >= cutoff_date)
+            .order_by(Commit.created_at.asc())
+        )
+
+        daily_commits = {}
+        for commit in commits_by_day:
+            date_key = commit.created_at.date().isoformat()
+            daily_commits[date_key] = daily_commits.get(date_key, 0) + 1
+
+        # Users created per day
+        users_by_day = (
+            User.select(User.created_at)
+            .where(User.created_at >= cutoff_date)
+            .order_by(User.created_at.asc())
+        )
+
+        daily_users = {}
+        for user in users_by_day:
+            date_key = user.created_at.date().isoformat()
+            daily_users[date_key] = daily_users.get(date_key, 0) + 1
+
+        return {
+            "repositories_by_day": daily_repos,
+            "commits_by_day": daily_commits,
+            "users_by_day": daily_users,
+        }
+
+    stats = await execute_db_query(_get_timeseries)
+
+    return stats
+
+
+@router.get("/stats/top-repos")
+async def get_top_repositories(
+    limit: int = Query(default=10, ge=1, le=100),
+    by: str = Query(default="commits", regex="^(commits|size)$"),
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Get top repositories by various metrics.
+
+    Args:
+        limit: Number of top repos to return
+        by: Sort by 'commits' or 'size'
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        List of top repositories
+    """
+
+    def _get_top_repos():
+        if by == "commits":
+            # Top repos by commit count
+            top_repos = (
+                Commit.select(
+                    Commit.repo_full_id,
+                    Commit.repo_type,
+                    fn.COUNT(Commit.id).alias("count"),
+                )
+                .group_by(Commit.repo_full_id, Commit.repo_type)
+                .order_by(fn.COUNT(Commit.id).desc())
+                .limit(limit)
+            )
+
+            result = []
+            for item in top_repos:
+                repo = Repository.get_or_none(
+                    Repository.full_id == item.repo_full_id,
+                    Repository.repo_type == item.repo_type,
+                )
+                result.append(
+                    {
+                        "repo_full_id": item.repo_full_id,
+                        "repo_type": item.repo_type,
+                        "commit_count": item.count,
+                        "private": repo.private if repo else False,
+                    }
+                )
+
+        else:  # by size
+            # Top repos by total file size
+            top_repos = (
+                File.select(File.repo_full_id, fn.SUM(File.size).alias("total_size"))
+                .group_by(File.repo_full_id)
+                .order_by(fn.SUM(File.size).desc())
+                .limit(limit)
+            )
+
+            result = []
+            for item in top_repos:
+                # Find repo in any type
+                repo = None
+                for repo_type in ["model", "dataset", "space"]:
+                    r = Repository.get_or_none(
+                        Repository.full_id == item.repo_full_id,
+                        Repository.repo_type == repo_type,
+                    )
+                    if r:
+                        repo = r
+                        break
+
+                result.append(
+                    {
+                        "repo_full_id": item.repo_full_id,
+                        "repo_type": repo.repo_type if repo else "unknown",
+                        "total_size": item.total_size,
+                        "private": repo.private if repo else False,
+                    }
+                )
+
+        return result
+
+    repos = await execute_db_query(_get_top_repos)
+
+    return {"top_repositories": repos, "sorted_by": by}
