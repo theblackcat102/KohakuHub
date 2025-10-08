@@ -1,5 +1,6 @@
 """Admin API endpoints - requires admin secret token authentication."""
 
+import asyncio
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -314,10 +315,15 @@ async def delete_user_admin(
     # Delete user's repositories if force=true
     deleted_repos = []
     if owned_repos and force:
-        for repo in owned_repos:
+        # Delete repositories concurrently
+        async def delete_repo_and_log(repo):
             await delete_repository(repo)
-            deleted_repos.append(f"{repo.repo_type}:{repo.full_id}")
             logger.warning(f"Admin deleted repository: {repo.full_id}")
+            return f"{repo.repo_type}:{repo.full_id}"
+
+        deleted_repos = await asyncio.gather(
+            *[delete_repo_and_log(repo) for repo in owned_repos]
+        )
 
     # Delete user
     await delete_user(user)

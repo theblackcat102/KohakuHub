@@ -1,14 +1,15 @@
 """Garbage collection utilities for LFS objects."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory
-from kohakuhub.logger import get_logger
 from kohakuhub.db_async import execute_db_query
-from kohakuhub.api.utils.s3 import get_s3_client, object_exists
+from kohakuhub.logger import get_logger
 from kohakuhub.api.utils.lakefs import get_lakefs_client
+from kohakuhub.api.utils.s3 import get_s3_client, object_exists
 
 logger = get_logger("GC")
 
@@ -228,17 +229,22 @@ async def check_lfs_recoverability(
 
     missing_files = []
 
-    for lfs_obj in lfs_objects:
+    # Check S3 existence concurrently
+    async def check_lfs_object(lfs_obj):
         lfs_key = f"lfs/{lfs_obj.sha256[:2]}/{lfs_obj.sha256[2:4]}/{lfs_obj.sha256}"
-
-        # Check if object exists in S3
         exists = await object_exists(cfg.s3.bucket, lfs_key)
 
         if not exists:
-            missing_files.append(lfs_obj.path_in_repo)
             logger.warning(
                 f"LFS object missing for {lfs_obj.path_in_repo}: {lfs_obj.sha256[:8]}"
             )
+            return lfs_obj.path_in_repo
+        return None
+
+    results = await asyncio.gather(
+        *[check_lfs_object(lfs_obj) for lfs_obj in lfs_objects]
+    )
+    missing_files = [path for path in results if path is not None]
 
     all_recoverable = len(missing_files) == 0
 
@@ -310,12 +316,19 @@ async def check_commit_range_recoverability(
         all_missing_files = []
         affected_commits = []
 
-        for commit in commits_to_check:
+        # Check all commits concurrently
+        async def check_commit(commit):
             commit_id = commit["id"]
             recoverable, missing = await check_lfs_recoverability(
                 repo_full_id, commit_id
             )
+            return recoverable, missing, commit_id
 
+        results = await asyncio.gather(
+            *[check_commit(commit) for commit in commits_to_check]
+        )
+
+        for recoverable, missing, commit_id in results:
             if not recoverable:
                 all_missing_files.extend(missing)
                 affected_commits.append(commit_id)

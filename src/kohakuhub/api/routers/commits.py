@@ -1,5 +1,6 @@
 """Commit creation endpoint - Refactored version with smaller functions."""
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -353,18 +354,24 @@ async def process_deleted_folder(
             else:
                 has_more = False
 
-        # Delete each file
-        deleted_files = []
-        for obj in all_folder_objects:
-            if obj["path_type"] == "object":
-                try:
-                    await client.delete_object(
-                        repository=lakefs_repo, branch=revision, path=obj["path"]
-                    )
-                    deleted_files.append(obj["path"])
-                    logger.info(f"  Deleted: {obj['path']}")
-                except Exception as e:
-                    logger.warning(f"  Failed to delete {obj['path']}: {e}")
+        # Delete each file concurrently
+        file_objects = [
+            obj for obj in all_folder_objects if obj["path_type"] == "object"
+        ]
+
+        async def delete_file_obj(obj):
+            try:
+                await client.delete_object(
+                    repository=lakefs_repo, branch=revision, path=obj["path"]
+                )
+                logger.info(f"  Deleted: {obj['path']}")
+                return obj["path"]
+            except Exception as e:
+                logger.warning(f"  Failed to delete {obj['path']}: {e}")
+                return None
+
+        results = await asyncio.gather(*[delete_file_obj(obj) for obj in file_objects])
+        deleted_files = [path for path in results if path is not None]
 
         logger.success(f"Deleted {len(deleted_files)} files from folder {folder_path}")
 

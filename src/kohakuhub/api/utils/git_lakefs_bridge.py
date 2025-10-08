@@ -553,15 +553,19 @@ class GitLakeFSBridge:
         Returns:
             Commit ID
         """
-        # Upload all files
-        for path, content in tree_data.items():
+
+        # Upload all files concurrently
+        async def upload_file(path, content):
             if isinstance(content, str):
                 content = content.encode("utf-8")
 
-            # Upload to LakeFS
             await self.lakefs_client.upload_object(
                 repository=self.lakefs_repo, branch=branch, path=path, content=content
             )
+
+        await asyncio.gather(
+            *[upload_file(path, content) for path, content in tree_data.items()]
+        )
 
         # Create commit
         commit_result = await self.lakefs_client.commit(
