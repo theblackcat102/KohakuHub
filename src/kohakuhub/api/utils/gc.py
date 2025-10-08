@@ -3,10 +3,12 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from kohakuhub.api.utils.s3 import get_s3_client, object_exists
 from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory
 from kohakuhub.logger import get_logger
+from kohakuhub.db_async import execute_db_query
+from kohakuhub.api.utils.s3 import get_s3_client, object_exists
+from kohakuhub.api.utils.lakefs import get_lakefs_client
 
 logger = get_logger("GC")
 
@@ -272,8 +274,6 @@ async def check_commit_range_recoverability(
     Returns:
         Tuple of (all_recoverable: bool, missing_files: list[str], affected_commits: list[str])
     """
-    from kohakuhub.api.utils.lakefs import get_lakefs_client
-
     client = get_lakefs_client()
 
     # Get all commits from target to HEAD
@@ -358,8 +358,6 @@ async def sync_file_table_with_commit(
     Returns:
         Number of files synced
     """
-    from kohakuhub.api.utils.lakefs import get_lakefs_client
-
     client = get_lakefs_client()
 
     try:
@@ -373,8 +371,6 @@ async def sync_file_table_with_commit(
         list_result = await client.list_objects(
             repository=lakefs_repo,
             ref=commit_id,  # Use commit ID, not branch name!
-            prefix="",
-            after="",
             amount=10000,  # Large enough for most repos
         )
 
@@ -449,8 +445,6 @@ async def sync_file_table_with_commit(
                 )
             return 0
 
-        from kohakuhub.db_async import execute_db_query
-
         removed_count = await execute_db_query(_cleanup_removed_files)
 
         if removed_count > 0:
@@ -485,8 +479,6 @@ async def track_commit_lfs_objects(
     Returns:
         Number of LFS objects tracked
     """
-    from kohakuhub.api.utils.lakefs import get_lakefs_client
-
     client = get_lakefs_client()
 
     # Get commit details to find parent
@@ -508,7 +500,6 @@ async def track_commit_lfs_objects(
             repository=lakefs_repo,
             left_ref=parent_commit,
             right_ref=commit_id,
-            amount=1000,  # Should be enough for most commits
         )
 
         tracked_count = 0
@@ -592,8 +583,6 @@ async def track_commit_lfs_objects(
                     )
                     .execute()
                 )
-
-            from kohakuhub.db_async import execute_db_query
 
             removed_count = await execute_db_query(_cleanup_removed_files)
             logger.info(f"Removed {removed_count} deleted file(s) from File table")

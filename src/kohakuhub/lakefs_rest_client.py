@@ -152,6 +152,7 @@ class LakeFSRestClient:
                 auth=self.auth,
                 timeout=30.0,
             )
+            print(response.text)
             response.raise_for_status()
             return response.json()
 
@@ -266,6 +267,7 @@ class LakeFSRestClient:
             response = await client.get(
                 url, params=params, auth=self.auth, timeout=30.0
             )
+            print(response.text)
             response.raise_for_status()
             return response.json()
 
@@ -293,11 +295,14 @@ class LakeFSRestClient:
         """
         url = f"{self.base_url}/repositories/{repository}/refs/{ref}/objects/ls"
 
-        params: dict[str, Any] = {
-            "prefix": prefix,
-            "after": after,
-            "amount": amount,
-        }
+        # Build params - only include non-empty values to avoid LakeFS issues
+        params: dict[str, Any] = {"amount": amount}
+
+        # Only add prefix/after/delimiter if they have values
+        if prefix:
+            params["prefix"] = prefix
+        if after:
+            params["after"] = after
         if delimiter:
             params["delimiter"] = delimiter
 

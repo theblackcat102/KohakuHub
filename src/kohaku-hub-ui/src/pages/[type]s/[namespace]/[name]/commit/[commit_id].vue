@@ -62,6 +62,26 @@
           </div>
         </div>
 
+        <!-- Action Buttons -->
+        <div class="flex gap-3 mb-4">
+          <el-button
+            type="warning"
+            size="small"
+            @click="showRevertDialog"
+            :icon="'RefreshLeft'"
+          >
+            Revert Commit
+          </el-button>
+          <el-button
+            type="primary"
+            size="small"
+            @click="showResetDialog"
+            :icon="'ArrowLeft'"
+          >
+            Reset to This State
+          </el-button>
+        </div>
+
         <!-- Parent commit link -->
         <div
           v-if="commitData.parent_commit"
@@ -77,6 +97,108 @@
           </div>
         </div>
       </div>
+
+      <!-- Revert Dialog -->
+      <el-dialog
+        v-model="revertDialogVisible"
+        title="Revert Commit"
+        width="500px"
+      >
+        <div class="space-y-4">
+          <p class="text-gray-700 dark:text-gray-300">
+            This will create a new commit that undoes the changes from commit
+            <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs">
+              {{ commitData?.commit_id?.substring(0, 8) }}
+            </code>
+          </p>
+
+          <el-alert type="warning" :closable="false" show-icon>
+            <template #title>
+              Revert creates a new commit that undoes changes. It does not delete history.
+            </template>
+          </el-alert>
+
+          <div>
+            <label class="block text-sm font-medium mb-2">Branch to revert on:</label>
+            <el-select v-model="selectedBranch" placeholder="Select branch" class="w-full">
+              <el-option value="main" label="main" />
+            </el-select>
+          </div>
+
+          <div>
+            <el-checkbox v-model="revertForce">
+              Force revert (ignore conflicts)
+            </el-checkbox>
+          </div>
+        </div>
+
+        <template #footer>
+          <el-button @click="revertDialogVisible = false">Cancel</el-button>
+          <el-button
+            type="warning"
+            @click="doRevert"
+            :loading="reverting"
+          >
+            Revert
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <!-- Reset Dialog -->
+      <el-dialog
+        v-model="resetDialogVisible"
+        title="Reset Branch to This Commit"
+        width="500px"
+      >
+        <div class="space-y-4">
+          <p class="text-gray-700 dark:text-gray-300">
+            This will create a new commit that restores the branch to the state of commit
+            <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs">
+              {{ commitData?.commit_id?.substring(0, 8) }}
+            </code>
+          </p>
+
+          <el-alert type="info" :closable="false" show-icon>
+            <template #title>
+              Reset creates a new commit. History is preserved - newer commits remain accessible.
+            </template>
+          </el-alert>
+
+          <div>
+            <label class="block text-sm font-medium mb-2">Branch to reset:</label>
+            <el-select v-model="selectedBranch" placeholder="Select branch" class="w-full">
+              <el-option value="main" label="main" />
+            </el-select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-2">Commit Message (optional):</label>
+            <el-input
+              v-model="resetMessage"
+              placeholder="Reset to previous state"
+              type="textarea"
+              :rows="2"
+            />
+          </div>
+
+          <div>
+            <el-checkbox v-model="resetForce">
+              Force reset (required for main branch)
+            </el-checkbox>
+          </div>
+        </div>
+
+        <template #footer>
+          <el-button @click="resetDialogVisible = false">Cancel</el-button>
+          <el-button
+            type="primary"
+            @click="doReset"
+            :loading="resetting"
+          >
+            Create Reset Commit
+          </el-button>
+        </template>
+      </el-dialog>
 
       <!-- Files Changed -->
       <div class="card">
@@ -350,6 +472,7 @@
 import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { ElMessage } from "element-plus";
 
 dayjs.extend(relativeTime);
 
@@ -365,6 +488,20 @@ const repoId = computed(() => `${namespace.value}/${name.value}`);
 const loading = ref(true);
 const error = ref(null);
 const commitData = ref(null);
+
+// Revert state
+const revertDialogVisible = ref(false);
+const reverting = ref(false);
+const revertForce = ref(false);
+
+// Reset state
+const resetDialogVisible = ref(false);
+const resetting = ref(false);
+const resetForce = ref(false);
+const resetMessage = ref("");
+
+// Selected branch for operations
+const selectedBranch = ref("main");
 
 async function loadCommitDetails() {
   loading.value = true;
@@ -391,6 +528,96 @@ async function loadCommitDetails() {
       err.response?.data?.detail?.error || "Failed to load commit details";
   } finally {
     loading.value = false;
+  }
+}
+
+function showRevertDialog() {
+  selectedBranch.value = "main";
+  revertForce.value = false;
+  revertDialogVisible.value = true;
+}
+
+function showResetDialog() {
+  selectedBranch.value = "main";
+  resetForce.value = false;
+  resetMessage.value = "";
+  resetDialogVisible.value = true;
+}
+
+async function doRevert() {
+  reverting.value = true;
+
+  try {
+    await axios.post(
+      `/api/${type.value}s/${repoId.value}/branch/${selectedBranch.value}/revert`,
+      {
+        ref: commitId.value,
+        parent_number: 1,
+        force: revertForce.value,
+        allow_empty: false,
+      }
+    );
+
+    ElMessage.success("Commit reverted successfully!");
+    revertDialogVisible.value = false;
+
+    // Redirect to commits page
+    router.push(
+      `/${type.value}s/${namespace.value}/${name.value}/commits/${selectedBranch.value}`
+    );
+  } catch (err) {
+    console.error("Revert failed:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to revert commit";
+
+    if (err.response?.status === 409) {
+      ElMessage.error("Revert conflict: " + errorMsg);
+    } else {
+      ElMessage.error(errorMsg);
+    }
+  } finally {
+    reverting.value = false;
+  }
+}
+
+async function doReset() {
+  resetting.value = true;
+
+  try {
+    const payload = {
+      ref: commitId.value,
+      force: resetForce.value,
+    };
+
+    // Add custom message if provided
+    if (resetMessage.value.trim()) {
+      payload.message = resetMessage.value.trim();
+    }
+
+    await axios.post(
+      `/api/${type.value}s/${repoId.value}/branch/${selectedBranch.value}/reset`,
+      payload
+    );
+
+    ElMessage.success("Reset commit created successfully!");
+    resetDialogVisible.value = false;
+
+    // Redirect to commits page to see the new commit
+    router.push(
+      `/${type.value}s/${namespace.value}/${name.value}/commits/${selectedBranch.value}`
+    );
+  } catch (err) {
+    console.error("Reset failed:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to reset branch";
+
+    if (err.response?.status === 400 && errorMsg.includes("LFS")) {
+      ElMessage.error("LFS files missing: " + errorMsg);
+    } else {
+      ElMessage.error(errorMsg);
+    }
+  } finally {
+    resetting.value = false;
   }
 }
 
