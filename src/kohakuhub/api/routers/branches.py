@@ -496,6 +496,7 @@ async def merge_branches(
             f"Successfully merged {source_ref} into {destination_branch} in {repo_id}"
         )
     except Exception as e:
+        logger.exception(f"Failed to merge {source_ref} into {destination_branch}", e)
         error_msg = str(e)
         logger.error(f"Failed to merge branches: {error_msg}")
 

@@ -152,7 +152,6 @@ class LakeFSRestClient:
                 auth=self.auth,
                 timeout=30.0,
             )
-            print(response.text)
             response.raise_for_status()
             return response.json()
 
@@ -267,7 +266,6 @@ class LakeFSRestClient:
             response = await client.get(
                 url, params=params, auth=self.auth, timeout=30.0
             )
-            print(response.text)
             response.raise_for_status()
             return response.json()
 
