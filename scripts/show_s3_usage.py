@@ -84,7 +84,7 @@ def analyze_storage(s3_client, bucket):
         TextColumn("[progress.description]{task.description}"),
         transient=True,
     ) as progress:
-        task = progress.add_task("Analyzing storage...", total=None)
+        progress.add_task("Analyzing storage...", total=None)
 
         paginator = s3_client.get_paginator("list_objects_v2")
         try:

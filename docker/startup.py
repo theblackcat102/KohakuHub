@@ -102,7 +102,6 @@ def main():
                 write_credentials(access_key, secret_key)
             except Exception as e:
                 print(f"[startup] Setup failed: {e}")
-                pass
             os.environ["KOHAKU_HUB_LAKEFS_ACCESS_KEY"] = access_key
             os.environ["KOHAKU_HUB_LAKEFS_SECRET_KEY"] = secret_key
 
