@@ -379,7 +379,9 @@
                   class="i-carbon-commit text-2xl text-blue-500 flex-shrink-0 mt-1"
                 />
                 <div class="flex-1 min-w-0">
-                  <div class="font-medium text-sm mb-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  <div
+                    class="font-medium text-sm mb-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  >
                     {{ commit.title }}
                   </div>
                   <div
@@ -387,7 +389,13 @@
                   >
                     <div class="flex items-center gap-1">
                       <div class="i-carbon-user-avatar" />
-                      <span>{{ commit.author }}</span>
+                      <RouterLink
+                        :to="`/${commit.author}`"
+                        class="text-blue-600 dark:text-blue-400 hover:underline"
+                        @click.stop
+                      >
+                        {{ commit.author }}
+                      </RouterLink>
                     </div>
                     <div class="flex items-center gap-1">
                       <div class="i-carbon-calendar" />

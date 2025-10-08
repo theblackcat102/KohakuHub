@@ -12,7 +12,10 @@
           alt="KohakuHub"
           class="h-8 w-8 md:h-10 md:w-10"
         />
-        <span class="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100">KohakuHub</span>
+        <span
+          class="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100"
+          >KohakuHub</span
+        >
       </RouterLink>
 
       <!-- Desktop Navigation - hidden on mobile -->
