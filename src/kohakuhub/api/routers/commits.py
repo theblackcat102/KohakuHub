@@ -206,12 +206,15 @@ async def process_lfs_file(
             )
             size = actual_size
     except Exception as e:
+        logger.exception(f"Failed to get S3 object metadata", e)
         logger.warning(f"Could not verify S3 object metadata: {e}")
 
     # Link the physical S3 object to LakeFS
     try:
         staging_metadata = {
-            "physical_address": physical_address,
+            "staging": {
+                "physical_address": physical_address,
+            },
             "checksum": f"{algo}:{oid}",
             "size_bytes": size,
         }
@@ -227,6 +230,7 @@ async def process_lfs_file(
         logger.success(f"Successfully linked LFS file in LakeFS: {path}")
 
     except Exception as e:
+        logger.exception(f"Failed to link LFS file in LakeFS: {path}", e)
         raise HTTPException(
             500,
             detail={"error": f"Failed to link LFS file {path} in LakeFS: {str(e)}"},
@@ -428,7 +432,9 @@ async def process_copy_file(
 
         # Use LakeFS staging API to link the physical address
         staging_metadata = {
-            "physical_address": src_obj["physical_address"],
+            "staging": {
+                "physical_address": src_obj["physical_address"],
+            },
             "checksum": src_obj["checksum"],
             "size_bytes": src_obj["size_bytes"],
         }

@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
@@ -407,6 +408,15 @@ async def _get_file_metadata(
     # For non-LFS: use git blob SHA1, for LFS: use SHA256
     etag_value = file_record.sha256 if file_record and file_record.sha256 else ""
 
+    # Extract filename and encode for Content-Disposition header
+    # HTTP headers must be ASCII/latin-1, so we use RFC 5987 encoding for Unicode filenames
+    filename = path.split("/")[-1] if "/" in path else path
+    # Use both filename= (for legacy clients) and filename*= (RFC 5987 for Unicode)
+    # ASCII-safe fallback: percent-encode for filename=
+    encoded_filename_ascii = quote(filename, safe="")
+    # RFC 5987: filename*=UTF-8''encoded_filename
+    encoded_filename_utf8 = quote(filename, safe="")
+
     response_headers = {
         # Critical headers for HuggingFace client
         "X-Repo-Commit": commit_hash or "",
@@ -424,7 +434,7 @@ async def _get_file_metadata(
             if obj_stat.get("mtime")
             else ""
         ),
-        "Content-Disposition": f'attachment; filename="{path}";',
+        "Content-Disposition": f"attachment; filename=\"{encoded_filename_ascii}\"; filename*=UTF-8''{encoded_filename_utf8}",
     }
 
     return presigned_url, response_headers
