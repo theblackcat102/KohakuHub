@@ -114,6 +114,21 @@ class Config(BaseModel):
                 "Admin secret token is using default value - SECURITY RISK!"
             )
 
+        # LFS GC settings validation
+        if self.app.lfs_keep_versions < 2:
+            warnings.append(
+                f"LFS keep_versions={self.app.lfs_keep_versions} is too low! "
+                f"Minimum recommended: 5. Revert/reset operations will likely fail. "
+                f"Set KOHAKU_HUB_LFS_KEEP_VERSIONS=5 or higher."
+            )
+
+        # LFS threshold validation
+        if self.app.lfs_threshold_bytes < 1024 * 1024:  # Less than 1MB
+            warnings.append(
+                f"LFS threshold is very low ({self.app.lfs_threshold_bytes} bytes). "
+                f"Consider setting to at least 5MB (5242880 bytes)."
+            )
+
         return warnings
 
 

@@ -292,7 +292,12 @@ class LakeFSRestClient:
             Dict with results (list of ObjectStats) and pagination
         """
         url = f"{self.base_url}/repositories/{repository}/refs/{ref}/objects/ls"
-        params = {"prefix": prefix, "after": after, "amount": amount}
+
+        params: dict[str, Any] = {
+            "prefix": prefix,
+            "after": after,
+            "amount": amount,
+        }
         if delimiter:
             params["delimiter"] = delimiter
 
@@ -382,9 +387,7 @@ class LakeFSRestClient:
             response.raise_for_status()
             return response.json()
 
-    async def create_branch(
-        self, repository: str, name: str, source: str
-    ) -> dict[str, Any]:
+    async def create_branch(self, repository: str, name: str, source: str) -> None:
         """Create branch.
 
         Args:
@@ -393,7 +396,7 @@ class LakeFSRestClient:
             source: Source reference (branch/commit to branch from)
 
         Returns:
-            Reference dict
+            None (201 response with text/html body)
         """
         url = f"{self.base_url}/repositories/{repository}/branches"
 
@@ -404,7 +407,8 @@ class LakeFSRestClient:
                 url, json=branch_data, auth=self.auth, timeout=30.0
             )
             response.raise_for_status()
-            return response.json()
+            # LakeFS returns 201 with text/html (plain string ref), not JSON
+            # We don't need to return it since we already know the branch name
 
     async def delete_branch(
         self, repository: str, branch: str, force: bool = False
@@ -462,6 +466,137 @@ class LakeFSRestClient:
         async with httpx.AsyncClient() as client:
             response = await client.delete(
                 url, params={"force": force}, auth=self.auth, timeout=30.0
+            )
+            response.raise_for_status()
+
+    async def revert_branch(
+        self,
+        repository: str,
+        branch: str,
+        ref: str,
+        parent_number: int = 1,
+        message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        force: bool = False,
+        allow_empty: bool = False,
+    ) -> None:
+        """Revert a commit on a branch.
+
+        Args:
+            repository: Repository name
+            branch: Branch name to revert on
+            ref: The commit to revert (commit ID or ref)
+            parent_number: When reverting a merge commit, parent number (starting from 1)
+            message: Optional custom commit message
+            metadata: Optional commit metadata
+            force: Force revert
+            allow_empty: Allow empty commit (revert without changes)
+        """
+        url = f"{self.base_url}/repositories/{repository}/branches/{branch}/revert"
+
+        revert_data: dict[str, Any] = {
+            "ref": ref,
+            "parent_number": parent_number,
+            "force": force,
+            "allow_empty": allow_empty,
+        }
+
+        if message or metadata:
+            commit_overrides: dict[str, Any] = {}
+            if message:
+                commit_overrides["message"] = message
+            if metadata:
+                commit_overrides["metadata"] = metadata
+            revert_data["commit_overrides"] = commit_overrides
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url, json=revert_data, auth=self.auth, timeout=60.0
+            )
+            response.raise_for_status()
+
+    async def merge_into_branch(
+        self,
+        repository: str,
+        source_ref: str,
+        destination_branch: str,
+        message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        strategy: str | None = None,
+        force: bool = False,
+        allow_empty: bool = False,
+        squash_merge: bool = False,
+    ) -> dict[str, Any]:
+        """Merge source ref into destination branch.
+
+        Args:
+            repository: Repository name
+            source_ref: Source reference (branch/commit to merge from)
+            destination_branch: Destination branch name
+            message: Merge commit message
+            metadata: Merge commit metadata
+            strategy: Conflict resolution strategy ('dest-wins' or 'source-wins')
+            force: Allow merge into read-only branch or same content
+            allow_empty: Allow merge when branches have same content
+            squash_merge: Squash merge (single commit)
+
+        Returns:
+            MergeResult dict with reference and summary
+        """
+        url = f"{self.base_url}/repositories/{repository}/refs/{source_ref}/merge/{destination_branch}"
+
+        merge_data: dict[str, Any] = {
+            "force": force,
+            "allow_empty": allow_empty,
+            "squash_merge": squash_merge,
+        }
+
+        if message:
+            merge_data["message"] = message
+        if metadata:
+            merge_data["metadata"] = metadata
+        if strategy:
+            merge_data["strategy"] = strategy
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url, json=merge_data, auth=self.auth, timeout=120.0
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def hard_reset_branch(
+        self,
+        repository: str,
+        branch: str,
+        ref: str,
+        force: bool = False,
+    ) -> None:
+        """Hard reset branch to point to a specific commit.
+
+        This is like 'git reset --hard <ref>' - it relocates the branch
+        to point to the specified ref, effectively resetting the branch
+        state to that commit.
+
+        Args:
+            repository: Repository name
+            branch: Branch name to reset
+            ref: Target commit ID or ref to reset to
+            force: Force reset even if branch has uncommitted data
+
+        Raises:
+            httpx.HTTPStatusError: If reset fails
+        """
+        url = f"{self.base_url}/repositories/{repository}/branches/{branch}/hard_reset"
+
+        params = {
+            "ref": ref,
+            "force": force,
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.put(
+                url, params=params, auth=self.auth, timeout=60.0
             )
             response.raise_for_status()
 
