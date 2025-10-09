@@ -1,5 +1,7 @@
 """Repository information and listing endpoints."""
 
+import asyncio
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -16,6 +18,7 @@ from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
 from kohakuhub.db_async import (
     execute_db_query,
+    get_file,
     get_organization,
     get_repository,
     get_user_by_username,
@@ -91,6 +94,7 @@ async def get_repo_info(
     # Get default branch info
     commit_id = None
     last_modified = None
+    siblings = []
 
     try:
         branch = await client.get_branch(repository=lakefs_repo, branch="main")
@@ -103,13 +107,92 @@ async def get_repo_info(
                     repository=lakefs_repo, commit_id=commit_id
                 )
                 if commit_info and commit_info.get("creation_date"):
-                    from datetime import datetime
-
                     last_modified = datetime.fromtimestamp(
                         commit_info["creation_date"]
                     ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             except Exception as ex:
                 logger.debug(f"Could not get commit info: {str(ex)}")
+
+        # Get all files in the repository for siblings field
+        # This is needed for transformers/diffusers with trust_remote_code
+        try:
+            all_results = []
+            after = ""
+            has_more = True
+
+            # Fetch all files recursively from root
+            while has_more:
+                result = await client.list_objects(
+                    repository=lakefs_repo,
+                    ref="main",
+                    prefix="",
+                    delimiter="",  # No delimiter = recursive
+                    amount=1000,
+                    after=after,
+                )
+
+                all_results.extend(result["results"])
+
+                # Check pagination
+                if result.get("pagination") and result["pagination"].get("has_more"):
+                    after = result["pagination"]["next_offset"]
+                    has_more = True
+                else:
+                    has_more = False
+
+            # Filter only file objects
+            file_objects = [obj for obj in all_results if obj["path_type"] == "object"]
+
+            # Fetch all file records in parallel for LFS files
+            lfs_files = [
+                obj
+                for obj in file_objects
+                if obj.get("size_bytes", 0) > cfg.app.lfs_threshold_bytes
+            ]
+
+            file_records = {}
+            if lfs_files:
+                # Fetch all file records in parallel
+                file_record_tasks = [
+                    get_file(repo_id, obj["path"]) for obj in lfs_files
+                ]
+                file_record_results = await asyncio.gather(
+                    *file_record_tasks, return_exceptions=True
+                )
+
+                # Map path to file record
+                for obj, record in zip(lfs_files, file_record_results):
+                    if not isinstance(record, Exception):
+                        file_records[obj["path"]] = record
+
+            # Convert to siblings format
+            for obj in file_objects:
+                sibling = {
+                    "rfilename": obj["path"],
+                    "size": obj.get("size_bytes", 0),
+                }
+
+                # Add LFS info if applicable
+                if obj.get("size_bytes", 0) > cfg.app.lfs_threshold_bytes:
+                    file_record = file_records.get(obj["path"])
+                    checksum = (
+                        file_record.sha256
+                        if file_record and file_record.sha256
+                        else obj.get("checksum", "")
+                    )
+                    sibling["lfs"] = {
+                        "oid": checksum,
+                        "size": obj["size_bytes"],
+                        "pointerSize": 134,
+                    }
+
+                siblings.append(sibling)
+
+        except Exception as ex:
+            logger.exception(f"Could not fetch siblings for {lakefs_repo}: {str(ex)}")
+            logger.debug(f"Could not fetch siblings for {lakefs_repo}: {str(ex)}")
+            # Continue without siblings if fetch fails
+
     except Exception as e:
         # Log warning but continue - repo exists even if LakeFS has issues
         logger.warning(f"Could not get branch info for {lakefs_repo}/main: {str(e)}")
@@ -134,7 +217,7 @@ async def get_repo_info(
         "tags": [],
         "pipeline_tag": None,
         "library_name": None,
-        "siblings": [],
+        "siblings": siblings,
         "spaces": [],
         "models": [],
         "datasets": [],
@@ -252,8 +335,6 @@ async def list_repos(
                     repository=lakefs_repo, commit_id=sha
                 )
                 if commit_info and commit_info.get("creation_date"):
-                    from datetime import datetime
-
                     last_modified = datetime.fromtimestamp(
                         commit_info["creation_date"]
                     ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -357,8 +438,6 @@ async def list_user_repos(
                         repository=lakefs_repo, commit_id=sha
                     )
                     if commit_info and commit_info.get("creation_date"):
-                        from datetime import datetime
-
                         last_modified = datetime.fromtimestamp(
                             commit_info["creation_date"]
                         ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
