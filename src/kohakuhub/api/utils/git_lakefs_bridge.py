@@ -425,7 +425,16 @@ class GitLakeFSBridge:
                     logger.warning(f"Failed to parse .gitattributes: {e}")
                 break
 
-        # Separate files based on: size threshold OR existing LFS patterns
+        # Get LFS status from File table for all files
+        def _get_all_files():
+            return {
+                f.path_in_repo: f
+                for f in File.select().where(File.repo_full_id == self.repo_id)
+            }
+
+        file_records = await execute_db_query(_get_all_files)
+
+        # Separate files based on: File table LFS flag OR size threshold OR existing patterns
         small_files = []
         large_files = []
 
@@ -437,11 +446,16 @@ class GitLakeFSBridge:
             size = obj.get("size_bytes", 0)
 
             # Check if file should be LFS based on:
-            # 1. Size threshold, OR
-            # 2. Existing .gitattributes patterns
+            # 1. File table LFS flag (most reliable!), OR
+            # 2. Size threshold, OR
+            # 3. Existing .gitattributes patterns
+            file_record = file_records.get(path)
             should_be_lfs = (
-                size >= cfg.app.lfs_threshold_bytes
-                or self._matches_lfs_pattern(path, existing_lfs_patterns)
+                (file_record and file_record.lfs)  # Marked as LFS in database
+                or size >= cfg.app.lfs_threshold_bytes  # Large file
+                or self._matches_lfs_pattern(
+                    path, existing_lfs_patterns
+                )  # Pattern match
             )
 
             if should_be_lfs:

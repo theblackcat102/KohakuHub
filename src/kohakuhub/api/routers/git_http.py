@@ -10,7 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from kohakuhub.db import Repository, Token, User
 from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
-from kohakuhub.api.utils.git_lakefs_bridge import GitLakeFSBridge
+from kohakuhub.api.utils.git_lakefs_bridge_pure import GitLakeFSBridgePure
 from kohakuhub.api.utils.git_server import (
     GitReceivePackHandler,
     GitUploadPackHandler,
@@ -130,7 +130,7 @@ async def git_info_refs(
         raise HTTPException(400, detail=f"Unknown service: {service}")
 
     # Get refs from LakeFS using the repository's actual type
-    bridge = GitLakeFSBridge(repo.repo_type, namespace, name)
+    bridge = GitLakeFSBridgePure(repo.repo_type, namespace, name)
     refs = await bridge.get_refs(branch="main")
 
     # Generate service advertisement
@@ -197,7 +197,7 @@ async def git_upload_pack(
     request_body = await request.body()
 
     # Create bridge for LakeFS integration using the repository's actual type
-    bridge = GitLakeFSBridge(repo.repo_type, namespace, name)
+    bridge = GitLakeFSBridgePure(repo.repo_type, namespace, name)
 
     # Handle upload-pack
     handler = GitUploadPackHandler(repo_id, bridge=bridge)
