@@ -16,6 +16,8 @@ from pathlib import Path
 import pygit2
 
 from kohakuhub.config import cfg
+from kohakuhub.db import File
+from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
 from kohakuhub.api.utils.git_server import create_empty_pack
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
@@ -171,6 +173,21 @@ class GitLakeFSBridge:
                     return True
 
         return False
+
+    def _generate_lfsconfig(self) -> bytes:
+        """Generate .lfsconfig to tell Git LFS where to download from.
+
+        Returns:
+            .lfsconfig file content
+        """
+        # Use the repository's Git URL for LFS downloads
+        # Git LFS will automatically append /info/lfs/ to this URL
+        lfs_url = f"{cfg.app.base_url}/{self.namespace}/{self.name}.git/info/lfs"
+
+        config = f"""[lfs]
+\turl = {lfs_url}
+"""
+        return config.encode("utf-8")
 
     async def get_refs(self, branch: str = "main") -> dict[str, str]:
         """Get Git refs from LakeFS branch.
@@ -461,26 +478,44 @@ class GitLakeFSBridge:
         async def process_large_file(obj):
             path = obj["path"]
             try:
-                # Get metadata only (stat instead of get_object)
-                stat = await self.lakefs_client.stat_object(
-                    repository=self.lakefs_repo, ref=branch, path=path
-                )
-
-                size = stat.get("size_bytes", 0)
-                checksum = stat.get("checksum", "")
-
-                # Extract SHA256 from checksum
-                if checksum.startswith("sha256:"):
-                    sha256 = checksum.replace("sha256:", "")
-                else:
-                    # Fallback: download to compute hash (should rarely happen)
-                    logger.warning(
-                        f"No checksum for {path}, downloading to compute hash"
+                # IMPORTANT: Use SHA256 from our File table (LFS object hash)
+                # NOT from LakeFS checksum (they can differ!)
+                def _get_file():
+                    return File.get_or_none(
+                        File.repo_full_id == self.repo_id, File.path_in_repo == path
                     )
-                    content = await self.lakefs_client.get_object(
+
+                file_record = await execute_db_query(_get_file)
+
+                if file_record and file_record.lfs:
+                    # File is in our database and marked as LFS
+                    # Use the SHA256 from our File table (this is the actual LFS object hash)
+                    sha256 = file_record.sha256
+                    size = file_record.size
+                    logger.debug(
+                        f"Using LFS SHA256 from File table for {path}: {sha256[:8]}"
+                    )
+                else:
+                    # File not in our table or not marked as LFS
+                    # Fall back to LakeFS stat
+                    stat = await self.lakefs_client.stat_object(
                         repository=self.lakefs_repo, ref=branch, path=path
                     )
-                    sha256 = hashlib.sha256(content).hexdigest()
+
+                    size = stat.get("size_bytes", 0)
+                    checksum = stat.get("checksum", "")
+
+                    if checksum.startswith("sha256:"):
+                        sha256 = checksum.replace("sha256:", "")
+                    else:
+                        # Last resort: download to compute hash
+                        logger.warning(
+                            f"No checksum for {path}, downloading to compute hash"
+                        )
+                        content = await self.lakefs_client.get_object(
+                            repository=self.lakefs_repo, ref=branch, path=path
+                        )
+                        sha256 = hashlib.sha256(content).hexdigest()
 
                 # Create LFS pointer file
                 pointer_content = create_lfs_pointer(sha256, size)
@@ -488,7 +523,7 @@ class GitLakeFSBridge:
 
                 logger.debug(
                     f"Created LFS pointer for {path}: {size} bytes → "
-                    f"{len(pointer_content)} bytes pointer"
+                    f"{len(pointer_content)} bytes pointer (sha256:{sha256[:8]})"
                 )
 
                 return path, blob_oid, pygit2.GIT_FILEMODE_BLOB, True  # True = is_lfs
@@ -527,6 +562,14 @@ class GitLakeFSBridge:
             new_gitattributes = generate_gitattributes(lfs_paths)
             blob_oid = await asyncio.to_thread(repo.create_blob, new_gitattributes)
             tree_entries[".gitattributes"] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
+
+        # Add .lfsconfig to specify LFS endpoint
+        # This tells Git LFS where to download files from
+        if lfs_paths:
+            logger.info("Adding .lfsconfig for LFS endpoint configuration")
+            lfsconfig_content = self._generate_lfsconfig()
+            blob_oid = await asyncio.to_thread(repo.create_blob, lfsconfig_content)
+            tree_entries[".lfsconfig"] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
 
         if not tree_entries:
             return None
