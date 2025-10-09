@@ -5,6 +5,7 @@ allowing Git clients to interact with repositories stored in LakeFS.
 """
 
 import asyncio
+import fnmatch
 import hashlib
 import os
 import struct
@@ -39,34 +40,22 @@ size {size}
     return pointer.encode("utf-8")
 
 
-def generate_gitattributes(lfs_patterns: list[str]) -> bytes:
+def generate_gitattributes(lfs_paths: list[str]) -> bytes:
     """Generate .gitattributes file for Git LFS.
 
+    Uses ONLY specific file paths (no wildcards) to avoid false positives.
+
     Args:
-        lfs_patterns: List of file patterns that should use LFS
+        lfs_paths: List of specific file paths that are LFS pointers
 
     Returns:
         .gitattributes content
     """
-    # Group by extension for cleaner output
-    extensions = set()
-    specific_files = []
+    lines = ["# Git LFS tracking (auto-generated)\n"]
+    lines.append("# Only files above threshold are tracked\n\n")
 
-    for pattern in lfs_patterns:
-        if "." in pattern:
-            ext = pattern.rsplit(".", 1)[-1]
-            extensions.add(ext)
-        else:
-            specific_files.append(pattern)
-
-    lines = ["# Git LFS tracking\n"]
-
-    # Add extension-based rules
-    for ext in sorted(extensions):
-        lines.append(f"*.{ext} filter=lfs diff=lfs merge=lfs -text\n")
-
-    # Add specific file rules
-    for file_path in sorted(specific_files):
+    # Add each file individually (NO wildcards!)
+    for file_path in sorted(lfs_paths):
         lines.append(f"{file_path} filter=lfs diff=lfs merge=lfs -text\n")
 
     return "".join(lines).encode("utf-8")
@@ -131,6 +120,57 @@ class GitLakeFSBridge:
         self.repo_id = f"{namespace}/{name}"
         self.lakefs_repo = lakefs_repo_name(repo_type, self.repo_id)
         self.lakefs_client = get_lakefs_client()
+
+    def _parse_gitattributes_lfs_patterns(self, content: str) -> set[str]:
+        """Parse LFS patterns from .gitattributes content.
+
+        Args:
+            content: .gitattributes file content
+
+        Returns:
+            Set of file patterns that use LFS (e.g., "*.bin", "model.safetensors")
+        """
+        patterns = set()
+
+        for line in content.splitlines():
+            line = line.strip()
+
+            # Skip comments and empty lines
+            if not line or line.startswith("#"):
+                continue
+
+            # Look for "filter=lfs" attribute
+            if "filter=lfs" in line:
+                # Extract pattern (first token before attributes)
+                parts = line.split()
+                if parts:
+                    pattern = parts[0]
+                    patterns.add(pattern)
+
+        return patterns
+
+    def _matches_lfs_pattern(self, path: str, patterns: set[str]) -> bool:
+        """Check if file path matches any LFS pattern.
+
+        Args:
+            path: File path (e.g., "models/config.json")
+            patterns: Set of patterns (e.g., {"*.json", "models/*.bin"})
+
+        Returns:
+            True if path matches any pattern
+        """
+        for pattern in patterns:
+            # Handle wildcards with fnmatch
+            if fnmatch.fnmatch(path, pattern):
+                return True
+
+            # Also check basename for simple patterns like "*.ext"
+            if pattern.startswith("*."):
+                basename = path.split("/")[-1]
+                if fnmatch.fnmatch(basename, pattern):
+                    return True
+
+        return False
 
     async def get_refs(self, branch: str = "main") -> dict[str, str]:
         """Get Git refs from LakeFS branch.
@@ -344,13 +384,50 @@ class GitLakeFSBridge:
         # Filter to only file objects
         file_objects = [obj for obj in objects if obj.get("path_type") == "object"]
 
-        # Separate small and large files based on LFS threshold
+        # Check if repo has existing .gitattributes and parse LFS patterns
+        existing_lfs_patterns = set()
+        gitattributes_obj = None
+        gitattributes_content = None
+
+        for obj in file_objects:
+            if obj["path"] == ".gitattributes":
+                gitattributes_obj = obj
+                # Download and parse it
+                try:
+                    gitattributes_content = await self.lakefs_client.get_object(
+                        repository=self.lakefs_repo, ref=branch, path=".gitattributes"
+                    )
+                    # Parse LFS patterns
+                    existing_lfs_patterns = self._parse_gitattributes_lfs_patterns(
+                        gitattributes_content.decode("utf-8")
+                    )
+                    logger.info(
+                        f"Found existing .gitattributes with {len(existing_lfs_patterns)} LFS patterns: {existing_lfs_patterns}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to parse .gitattributes: {e}")
+                break
+
+        # Separate files based on: size threshold OR existing LFS patterns
         small_files = []
         large_files = []
 
         for obj in file_objects:
+            if obj["path"] == ".gitattributes":
+                continue  # Handle separately
+
+            path = obj["path"]
             size = obj.get("size_bytes", 0)
-            if size >= cfg.app.lfs_threshold_bytes:
+
+            # Check if file should be LFS based on:
+            # 1. Size threshold, OR
+            # 2. Existing .gitattributes patterns
+            should_be_lfs = (
+                size >= cfg.app.lfs_threshold_bytes
+                or self._matches_lfs_pattern(path, existing_lfs_patterns)
+            )
+
+            if should_be_lfs:
                 large_files.append(obj)
             else:
                 small_files.append(obj)
@@ -364,9 +441,14 @@ class GitLakeFSBridge:
         async def process_small_file(obj):
             path = obj["path"]
             try:
-                content = await self.lakefs_client.get_object(
-                    repository=self.lakefs_repo, ref=branch, path=path
-                )
+                # Reuse .gitattributes content if already downloaded
+                if path == ".gitattributes" and gitattributes_content is not None:
+                    content = gitattributes_content
+                else:
+                    content = await self.lakefs_client.get_object(
+                        repository=self.lakefs_repo, ref=branch, path=path
+                    )
+
                 blob_oid = await asyncio.to_thread(repo.create_blob, content)
                 logger.debug(f"Created blob for {path}: {len(content)} bytes")
                 return path, blob_oid, pygit2.GIT_FILEMODE_BLOB
@@ -435,11 +517,15 @@ class GitLakeFSBridge:
                 tree_entries[path] = (blob_oid, mode)
                 lfs_paths.append(path)
 
-        # Add .gitattributes if we have LFS files
-        if lfs_paths:
+        # Handle .gitattributes
+        # If repo doesn't have .gitattributes but we created LFS pointers, add one
+        gitattributes_in_tree = ".gitattributes" in tree_entries
+
+        if not gitattributes_in_tree and lfs_paths:
+            # No existing .gitattributes, generate one for our LFS files
             logger.info(f"Generating .gitattributes for {len(lfs_paths)} LFS files")
-            gitattributes_content = generate_gitattributes(lfs_paths)
-            blob_oid = await asyncio.to_thread(repo.create_blob, gitattributes_content)
+            new_gitattributes = generate_gitattributes(lfs_paths)
+            blob_oid = await asyncio.to_thread(repo.create_blob, new_gitattributes)
             tree_entries[".gitattributes"] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
 
         if not tree_entries:
