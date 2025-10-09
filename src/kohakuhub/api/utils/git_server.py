@@ -7,8 +7,6 @@ import base64
 import hashlib
 import struct
 
-import pygit2
-
 from kohakuhub.logger import get_logger
 
 logger = get_logger("GIT")

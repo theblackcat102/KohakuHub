@@ -23,7 +23,6 @@ dependencies = [
     "peewee",
     "psycopg2-binary",
     "pydantic[email]",
-    "pygit2>=1.14.0",
     "python-multipart",
     "pyyaml",
     "questionary",

@@ -284,14 +284,8 @@ def build_nested_trees(
         for mode, name, entry_sha1 in dir_contents[dir_path]:
             entries.append((mode, name, entry_sha1))
 
-        # DEBUG: Log what we're adding to this directory
-        print(
-            f"DEBUG: Building tree for '{dir_path}', files: {len(dir_contents[dir_path])}"
-        )
-
         # Add subdirectories that have been processed (bottom-up)
         # Find all direct children of this directory
-        subdirs_added = 0
         for child_dir_path, child_tree_sha1 in dir_sha1s.items():
             # Check if child_dir_path is a direct child of dir_path
             if dir_path == "":
@@ -302,10 +296,6 @@ def build_nested_trees(
                     # Check not already added as file
                     if not any(name == dir_name for _, name, _ in entries):
                         entries.append(("40000", dir_name, child_tree_sha1))
-                        subdirs_added += 1
-                        print(
-                            f"  DEBUG: Added subdir to root: {dir_name} → {child_tree_sha1[:8]}"
-                        )
             else:
                 # Non-root directory - find direct children
                 prefix = dir_path + "/"
@@ -316,27 +306,17 @@ def build_nested_trees(
                         dir_name = remainder
                         if not any(name == dir_name for _, name, _ in entries):
                             entries.append(("40000", dir_name, child_tree_sha1))
-                            subdirs_added += 1
-                            print(
-                                f"  DEBUG: Added subdir to {dir_path}: {dir_name} → {child_tree_sha1[:8]}"
-                            )
-
-        print(
-            f"  DEBUG: Total entries: {len(entries)} ({len(dir_contents[dir_path])} files + {subdirs_added} subdirs)"
-        )
 
         # Create tree object for this directory
         if entries:
             tree_sha1, tree_data = create_tree_object(entries)
             dir_sha1s[dir_path] = tree_sha1
             tree_objects.append((2, tree_data))  # Type 2 = tree
-            print(f"  DEBUG: Created tree {tree_sha1[:8]} with {len(entries)} entries")
         else:
             # Empty directory - create empty tree
             tree_sha1, tree_data = create_tree_object([])
             dir_sha1s[dir_path] = tree_sha1
             tree_objects.append((2, tree_data))
-            print(f"  DEBUG: Created empty tree {tree_sha1[:8]}")
 
     # Return root tree SHA-1
     root_sha1 = dir_sha1s.get("")

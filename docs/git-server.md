@@ -563,52 +563,89 @@ header = b'PACK' + struct.pack('>I', 2) + struct.pack('>I', num_objects)
 | OFS_DELTA | 6 | Offset delta      |
 | REF_DELTA | 7 | Reference delta   |
 
-### Creating Pack Files with pygit2
+### Creating Pack Files (Pure Python)
+
+**KohakuHub uses a pure Python implementation - no native dependencies!**
 
 ```python
-import pygit2
-import tempfile
+import hashlib
+import struct
+import zlib
 
-def create_pack_file(repo: pygit2.Repository, wants: list[str], haves: list[str]) -> bytes:
-    """Build pack file using pygit2."""
+def create_pack_file(objects: list[tuple[int, bytes]]) -> bytes:
+    """Build pack file using pure Python.
 
-    # Get commit OID
-    commit_oid = pygit2.Oid(hex=wants[0])
+    Args:
+        objects: List of (type, object_data_with_header) tuples
+                 Types: 1=commit, 2=tree, 3=blob
 
-    # Walk commit tree
-    walker = repo.walk(commit_oid, pygit2.enums.SortMode.TOPOLOGICAL)
+    Returns:
+        Complete pack file bytes
+    """
+    # Pack header
+    pack_data = b"PACK"
+    pack_data += struct.pack(">I", 2)              # Version 2
+    pack_data += struct.pack(">I", len(objects))   # Object count
 
-    # Collect all OIDs to pack
-    oids_to_pack = set()
+    # Add each object
+    for obj_type, obj_data in objects:
+        # Extract content (remove "type size\0" header)
+        null_pos = obj_data.find(b"\0")
+        content = obj_data[null_pos + 1:] if null_pos > 0 else obj_data
 
-    for commit in walker:
-        # Stop if client already has this commit
-        if str(commit.id) in haves:
-            break
+        # Encode object header (type + size in variable-length encoding)
+        header = encode_pack_object_header(obj_type, len(content))
 
-        # Add commit
-        oids_to_pack.add(commit.id)
+        # Compress with zlib
+        compressed = zlib.compress(content)
 
-        # Add tree and blobs recursively
-        collect_tree_objects(repo, commit.tree_id, oids_to_pack)
+        # Add to pack
+        pack_data += header + compressed
 
-    # Use pygit2 PackBuilder
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pack_builder = pygit2.PackBuilder(repo)
+    # Add pack checksum (SHA-1 of everything)
+    checksum = hashlib.sha1(pack_data).digest()
+    pack_data += checksum
 
-        for oid in oids_to_pack:
-            pack_builder.add(oid)
+    return pack_data
 
-        # Write pack to temp directory
-        pack_builder.write(temp_dir)
 
-        # Read generated pack file
-        pack_files = [f for f in os.listdir(temp_dir) if f.endswith(".pack")]
-        pack_path = os.path.join(temp_dir, pack_files[0])
+# Complete example - no temp files!
+async def build_pack(repo_id, branch):
+    # 1. Build blobs (LFS pointers for large files)
+    blobs = {}  # path -> (sha1, data_with_header, mode)
 
-        with open(pack_path, "rb") as f:
-            return f.read()
+    for file in files:
+        if is_lfs(file):
+            pointer = create_lfs_pointer(file.sha256, file.size)
+            sha1, blob_data = create_blob_object(pointer)
+            blobs[file.path] = (sha1, blob_data, "100644")
+        else:
+            content = await download(file.path)
+            sha1, blob_data = create_blob_object(content)
+            blobs[file.path] = (sha1, blob_data, "100644")
+
+    # 2. Build trees (pure logic)
+    flat = [(mode, path, sha1) for path, (sha1, data, mode) in blobs.items()]
+    root_tree_sha1, tree_objects = build_nested_trees(flat)
+
+    # 3. Build commit
+    commit_sha1, commit_data = create_commit_object(...)
+
+    # 4. Build pack
+    pack_objects = [(1, commit_data)]  # Commit
+    pack_objects.extend(tree_objects)  # Trees
+    for path, (sha1, data, mode) in blobs.items():
+        pack_objects.append((3, data))  # Blobs
+
+    return create_pack_file(pack_objects)
 ```
+
+**Benefits:**
+- No native dependencies (easier deployment)
+- Full control over memory usage
+- No temporary files needed
+- Easier debugging
+- Better performance with LFS
 
 ### Empty Pack File
 
@@ -1381,9 +1418,9 @@ async def list_all_objects(repo, ref):
 
 ### Libraries
 
-- [pygit2](https://www.pygit2.org/) - Python bindings for libgit2
 - [FastAPI](https://fastapi.tiangolo.com/) - Modern web framework
 - [httpx](https://www.python-httpx.org/) - Async HTTP client
+- Pure Python (stdlib only) - No native dependencies for Git operations
 
 ### Tutorials
 
@@ -1399,9 +1436,18 @@ Building a Git-compatible server involves:
 2. **Implementing core handlers**: Parsing requests, generating pack files
 3. **Integrating with storage**: Translating Git operations to your backend (LakeFS)
 4. **Adding authentication**: Token validation and permission checks
-5. **Optimizing performance**: Caching, streaming, pagination
+5. **Optimizing performance**: LFS pointers, concurrent processing, chunking
+6. **Pure Python approach**: No native dependencies, full control, better debugging
 
-This guide provides a foundation for implementing Git Smart HTTP protocol in any FastAPI application. The KohakuHub implementation demonstrates how to bridge Git operations with LakeFS for version control of machine learning models and datasets.
+**KohakuHub Implementation Highlights:**
+- ✅ **Pure Python** - No pygit2, no libgit2, no native dependencies
+- ✅ **In-memory** - No temporary directories or files
+- ✅ **LFS integration** - Automatic LFS pointers for large files (>1MB)
+- ✅ **Concurrent** - Parallel processing with asyncio.gather
+- ✅ **Memory efficient** - Only downloads small files, pointers for large files
+- ✅ **Production ready** - Handles repos of any size without OOM
+
+This demonstrates how to build a complete Git server using only Python stdlib + FastAPI, with full Git LFS support for machine learning models and datasets.
 
 ---
 

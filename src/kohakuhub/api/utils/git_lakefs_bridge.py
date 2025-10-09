@@ -1,24 +1,20 @@
-"""Git-LakeFS bridge for translating Git operations to LakeFS REST API.
-
-This module provides a bridge between Git protocol operations and LakeFS REST API,
-allowing Git clients to interact with repositories stored in LakeFS.
-"""
+"""Git-LakeFS bridge - Pure Python implementation (no pygit2, no file I/O)."""
 
 import asyncio
 import fnmatch
 import hashlib
-import os
-import struct
-import tempfile
 from datetime import datetime
-from pathlib import Path
-
-import pygit2
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File
 from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
+from kohakuhub.api.utils.git_objects import (
+    build_nested_trees,
+    create_blob_object,
+    create_commit_object,
+    create_pack_file,
+)
 from kohakuhub.api.utils.git_server import create_empty_pack
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 
@@ -26,15 +22,7 @@ logger = get_logger("GIT_LAKEFS")
 
 
 def create_lfs_pointer(sha256: str, size: int) -> bytes:
-    """Create Git LFS pointer file content.
-
-    Args:
-        sha256: File SHA256 hash
-        size: File size in bytes
-
-    Returns:
-        LFS pointer file content (text)
-    """
+    """Create Git LFS pointer file content."""
     pointer = f"""version https://git-lfs.github.com/spec/v1
 oid sha256:{sha256}
 size {size}
@@ -42,80 +30,19 @@ size {size}
     return pointer.encode("utf-8")
 
 
-def generate_gitattributes(lfs_paths: list[str]) -> bytes:
-    """Generate .gitattributes file for Git LFS.
-
-    Uses ONLY specific file paths (no wildcards) to avoid false positives.
-
-    Args:
-        lfs_paths: List of specific file paths that are LFS pointers
-
-    Returns:
-        .gitattributes content
-    """
-    lines = ["# Git LFS tracking (auto-generated)\n"]
-    lines.append("# Only files above threshold are tracked\n\n")
-
-    # Add each file individually (NO wildcards!)
-    for file_path in sorted(lfs_paths):
-        lines.append(f"{file_path} filter=lfs diff=lfs merge=lfs -text\n")
-
-    return "".join(lines).encode("utf-8")
-
-
-def compute_git_blob_sha(content: bytes) -> str:
-    """Compute Git blob SHA-1.
-
-    Args:
-        content: File content
-
-    Returns:
-        SHA-1 hash in hex format
-    """
-    size = len(content)
-    header = f"blob {size}\x00".encode()
-    sha = hashlib.sha1()
-    sha.update(header + content)
-    return sha.hexdigest()
-
-
-def compute_git_tree_sha(entries: list[tuple[str, str, str]]) -> str:
-    """Compute Git tree SHA-1.
-
-    Args:
-        entries: List of (mode, name, sha) tuples
-
-    Returns:
-        SHA-1 hash in hex format
-    """
-    # Sort entries
-    sorted_entries = sorted(entries, key=lambda x: x[1])
-
-    # Build tree content
-    tree_content = b""
-    for mode, name, sha_hex in sorted_entries:
-        sha_bytes = bytes.fromhex(sha_hex)
-        tree_content += f"{mode} {name}\x00".encode() + sha_bytes
-
-    # Compute hash
-    size = len(tree_content)
-    header = f"tree {size}\x00".encode()
-    sha = hashlib.sha1()
-    sha.update(header + tree_content)
-    return sha.hexdigest()
+def generate_lfsconfig(base_url: str, namespace: str, name: str) -> bytes:
+    """Generate .lfsconfig."""
+    lfs_url = f"{base_url}/{namespace}/{name}.git/info/lfs"
+    config = f"""[lfs]
+\turl = {lfs_url}
+"""
+    return config.encode("utf-8")
 
 
 class GitLakeFSBridge:
-    """Bridge between Git operations and LakeFS REST API."""
+    """Git-LakeFS bridge - Pure Python, in-memory only (no pygit2, no temp files)."""
 
     def __init__(self, repo_type: str, namespace: str, name: str):
-        """Initialize Git-LakeFS bridge.
-
-        Args:
-            repo_type: Repository type (model/dataset/space)
-            namespace: Repository namespace
-            name: Repository name
-        """
         self.repo_type = repo_type
         self.namespace = namespace
         self.name = name
@@ -123,171 +50,37 @@ class GitLakeFSBridge:
         self.lakefs_repo = lakefs_repo_name(repo_type, self.repo_id)
         self.lakefs_client = get_lakefs_client()
 
-    def _parse_gitattributes_lfs_patterns(self, content: str) -> set[str]:
-        """Parse LFS patterns from .gitattributes content.
-
-        Args:
-            content: .gitattributes file content
-
-        Returns:
-            Set of file patterns that use LFS (e.g., "*.bin", "model.safetensors")
-        """
-        patterns = set()
-
-        for line in content.splitlines():
-            line = line.strip()
-
-            # Skip comments and empty lines
-            if not line or line.startswith("#"):
-                continue
-
-            # Look for "filter=lfs" attribute
-            if "filter=lfs" in line:
-                # Extract pattern (first token before attributes)
-                parts = line.split()
-                if parts:
-                    pattern = parts[0]
-                    patterns.add(pattern)
-
-        return patterns
-
-    def _matches_lfs_pattern(self, path: str, patterns: set[str]) -> bool:
-        """Check if file path matches any LFS pattern.
-
-        Args:
-            path: File path (e.g., "models/config.json")
-            patterns: Set of patterns (e.g., {"*.json", "models/*.bin"})
-
-        Returns:
-            True if path matches any pattern
-        """
-        for pattern in patterns:
-            # Handle wildcards with fnmatch
-            if fnmatch.fnmatch(path, pattern):
-                return True
-
-            # Also check basename for simple patterns like "*.ext"
-            if pattern.startswith("*."):
-                basename = path.split("/")[-1]
-                if fnmatch.fnmatch(basename, pattern):
-                    return True
-
-        return False
-
-    def _generate_lfsconfig(self) -> bytes:
-        """Generate .lfsconfig to tell Git LFS where to download from.
-
-        Returns:
-            .lfsconfig file content
-        """
-        # Use the repository's Git URL for LFS downloads
-        # Git LFS will automatically append /info/lfs/ to this URL
-        lfs_url = f"{cfg.app.base_url}/{self.namespace}/{self.name}.git/info/lfs"
-
-        config = f"""[lfs]
-\turl = {lfs_url}
-"""
-        return config.encode("utf-8")
-
     async def get_refs(self, branch: str = "main") -> dict[str, str]:
-        """Get Git refs from LakeFS branch.
-
-        Args:
-            branch: Branch name to get refs from
-
-        Returns:
-            Dictionary mapping ref names to commit SHAs (Git SHA-1 format)
-        """
-        refs = {}
-
+        """Get Git refs - pure logical, no temp files."""
         try:
-            # Create temporary git repository to build commit
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_repo_path = Path(temp_dir) / "repo"
-                temp_repo_path.mkdir()
-
-                # Initialize bare repository (run in thread pool)
-                repo = await asyncio.to_thread(
-                    pygit2.init_repository, str(temp_repo_path), bare=True
-                )
-
-                # Fetch all objects from LakeFS and build Git tree
-                commit_oid = await self._populate_git_repo(repo, branch)
-
-                if commit_oid:
-                    # Use the Git commit SHA we created
-                    git_commit_sha = str(commit_oid)
-
-                    # Map Git commit to refs
-                    refs[f"refs/heads/{branch}"] = git_commit_sha
-                    refs["HEAD"] = git_commit_sha
-
-        except Exception as e:
-            logger.exception(
-                "Failed to get refs for {}/{}/{}".format(
-                    self.repo_type, self.namespace, self.name
-                ),
-                e,
+            # Get branch info
+            branch_info = await self.lakefs_client.get_branch(
+                repository=self.lakefs_repo, branch=branch
             )
 
-        return refs
+            commit_id = branch_info.get("commit_id")
+            if not commit_id:
+                return {}
 
-    async def build_pack_file(
-        self, wants: list[str], haves: list[str], branch: str = "main"
-    ) -> bytes:
-        """Build Git pack file with requested objects.
+            # Build commit SHA-1 in memory
+            commit_sha1 = await self._build_commit_sha1(branch, commit_id)
 
-        Args:
-            wants: List of commit SHAs client wants
-            haves: List of commit SHAs client already has
-            branch: Branch name
+            if not commit_sha1:
+                return {}
 
-        Returns:
-            Pack file bytes
-        """
-        try:
-            # Create temporary git repository
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_repo_path = Path(temp_dir) / "repo"
-                temp_repo_path.mkdir()
-
-                # Initialize bare repository (run in thread pool)
-                repo = await asyncio.to_thread(
-                    pygit2.init_repository, str(temp_repo_path), bare=True
-                )
-
-                # Fetch all objects from LakeFS and build Git tree
-                commit_oid = await self._populate_git_repo(repo, branch)
-
-                if not commit_oid:
-                    logger.warning("No commit created, returning empty pack")
-                    return create_empty_pack()
-
-                # Create pack file (CPU-intensive, run in thread pool)
-                pack_data = await asyncio.to_thread(
-                    self._create_pack_file, repo, wants, haves
-                )
-
-                return pack_data
+            return {
+                f"refs/heads/{branch}": commit_sha1,
+                "HEAD": commit_sha1,
+            }
 
         except Exception as e:
-            logger.exception("Failed to build pack file", e)
-            return create_empty_pack()
+            logger.exception(f"Failed to get refs for {self.repo_id}", e)
+            return {}
 
-    async def _populate_git_repo(
-        self, repo: pygit2.Repository, branch: str
-    ) -> pygit2.Oid | None:
-        """Populate Git repository with objects from LakeFS.
-
-        Args:
-            repo: pygit2 Repository object
-            branch: Branch name to fetch from
-
-        Returns:
-            Commit OID if successful, None otherwise
-        """
-        # List all objects in LakeFS branch
+    async def _build_commit_sha1(self, branch: str, commit_id: str) -> str | None:
+        """Build Git commit SHA-1 purely in memory - no files created."""
         try:
+            # Step 1: Get all objects from LakeFS
             all_objects = []
             after = ""
             has_more = True
@@ -300,132 +93,85 @@ class GitLakeFSBridge:
                     after=after,
                     amount=1000,
                 )
-
                 all_objects.extend(result.get("results", []))
-
                 pagination = result.get("pagination", {})
                 has_more = pagination.get("has_more", False)
                 if has_more:
                     after = pagination.get("next_offset", "")
 
-            logger.info(f"Found {len(all_objects)} objects in LakeFS")
+            file_objects = [
+                obj for obj in all_objects if obj.get("path_type") == "object"
+            ]
+            logger.info(f"Found {len(file_objects)} files in LakeFS")
 
-            if not all_objects:
-                logger.warning("No objects found in LakeFS repository")
+            if not file_objects:
                 return None
 
-            # Build nested tree structure
-            tree_oid = await self._build_tree_from_objects(repo, all_objects, branch)
+            # Step 2: Build blob objects (in memory, no download for large files!)
+            blob_data = await self._build_blob_sha1s(file_objects, branch)
 
-            if not tree_oid:
+            if not blob_data:
                 return None
 
-            # Get branch commit info
-            branch_info = await self.lakefs_client.get_branch(
-                repository=self.lakefs_repo, branch=branch
+            # Step 3: Build nested tree structure (pure logic, no I/O)
+            flat_entries = [
+                (mode, path, sha1) for path, (sha1, _, mode) in blob_data.items()
+            ]
+            root_tree_sha1, tree_objects = build_nested_trees(flat_entries)
+
+            logger.success(
+                f"Built tree structure: {len(tree_objects)} tree objects, root={root_tree_sha1[:8]}"
             )
 
-            commit_id = branch_info.get("commit_id")
+            # Step 4: Build commit object (in memory)
+            commit_info = await self.lakefs_client.get_commit(
+                repository=self.lakefs_repo, commit_id=commit_id
+            )
 
-            # Get commit details
-            try:
-                if not commit_id:
-                    logger.warning("No commit_id found, using default commit info")
-                    author_name = "KohakuHub"
-                    message = "Initial commit"
+            author_name = commit_info.get("committer", "KohakuHub")
+            message = commit_info.get("message", "Initial commit")
+            timestamp = commit_info.get("creation_date", 0)
+
+            # Parse timestamp
+            if isinstance(timestamp, str):
+                try:
+                    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                    timestamp = int(dt.timestamp())
+                except:
                     timestamp = 0
-                else:
-                    commit_info = await self.lakefs_client.get_commit(
-                        repository=self.lakefs_repo, commit_id=commit_id
-                    )
 
-                    # Create commit
-                    author_name = commit_info.get("committer", "KohakuHub")
-                    message = commit_info.get("message", "Initial commit")
-                    timestamp = commit_info.get("creation_date", 0)
+            # Create commit object
+            commit_sha1, commit_data = create_commit_object(
+                tree_sha1=root_tree_sha1,
+                parent_sha1s=[],  # No parents for now
+                author_name=author_name,
+                author_email="noreply@kohakuhub.local",
+                committer_name=author_name,
+                committer_email="noreply@kohakuhub.local",
+                author_timestamp=timestamp,
+                committer_timestamp=timestamp,
+                timezone="+0000",
+                message=message,
+            )
 
-                # Handle both integer timestamps and ISO date strings
-                if isinstance(timestamp, str):
-                    try:
-                        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                        timestamp = int(dt.timestamp())
-                    except:
-                        timestamp = 0
+            logger.success(f"Created commit: {commit_sha1}")
 
-                author = pygit2.Signature(
-                    author_name, "noreply@kohakuhub.local", int(timestamp)
-                )
-                committer = author
-
-                # Create commit (run in thread pool)
-                commit_oid = await asyncio.to_thread(
-                    repo.create_commit,
-                    f"refs/heads/{branch}",
-                    author,
-                    committer,
-                    message,
-                    tree_oid,
-                    [],  # No parents for now
-                )
-
-                logger.success(f"Created commit: {commit_oid}")
-                return commit_oid
-
-            except Exception as e:
-                logger.exception("Failed to create commit", e)
-                return None
+            return commit_sha1
 
         except Exception as e:
-            logger.exception("Failed to populate git repo", e)
+            logger.exception("Failed to build commit SHA-1", e)
             return None
 
-    async def _build_tree_from_objects(
-        self, repo: pygit2.Repository, objects: list[dict], branch: str
-    ) -> pygit2.Oid | None:
-        """Build nested Git tree from flat list of LakeFS objects.
-
-        Uses LFS pointers for large files to avoid downloading/storing massive files.
-
-        Args:
-            repo: pygit2 Repository
-            objects: List of LakeFS object metadata
-            branch: Branch name
+    async def _build_blob_sha1s(
+        self, file_objects: list[dict], branch: str
+    ) -> dict[str, tuple[str, bytes, str]]:
+        """Build blob SHA-1s AND data for all files (LFS pointers for large files).
 
         Returns:
-            Tree OID if successful, None otherwise
+            Dict of path -> (blob_sha1, blob_data, mode)
         """
-        # Build directory tree structure
-        tree_entries = {}  # path -> (oid, mode)
-        lfs_paths = []  # Track LFS files for .gitattributes
 
-        # Filter to only file objects
-        file_objects = [obj for obj in objects if obj.get("path_type") == "object"]
-
-        # Check if repo has existing .gitattributes and parse LFS patterns
-        existing_lfs_patterns = set()
-        gitattributes_obj = None
-        gitattributes_content = None
-
-        for obj in file_objects:
-            if obj["path"] == ".gitattributes":
-                gitattributes_obj = obj
-                # Download and parse it
-                try:
-                    gitattributes_content = await self.lakefs_client.get_object(
-                        repository=self.lakefs_repo, ref=branch, path=".gitattributes"
-                    )
-                    # Parse LFS patterns
-                    existing_lfs_patterns = self._parse_gitattributes_lfs_patterns(
-                        gitattributes_content.decode("utf-8")
-                    )
-                    logger.info(
-                        f"Found existing .gitattributes with {len(existing_lfs_patterns)} LFS patterns: {existing_lfs_patterns}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to parse .gitattributes: {e}")
-                break
-
-        # Get LFS status from File table for all files
+        # Get File table records for LFS tracking
         def _get_all_files():
             return {
                 f.path_in_repo: f
@@ -434,411 +180,307 @@ class GitLakeFSBridge:
 
         file_records = await execute_db_query(_get_all_files)
 
-        # Separate files based on: File table LFS flag OR size threshold OR existing patterns
+        # Check for .gitattributes and parse LFS patterns
+        existing_lfs_patterns = set()
+        gitattributes_obj = None
+        gitattributes_content = None
+
+        for obj in file_objects:
+            if obj["path"] == ".gitattributes":
+                gitattributes_obj = obj
+                try:
+                    gitattributes_content = await self.lakefs_client.get_object(
+                        repository=self.lakefs_repo, ref=branch, path=".gitattributes"
+                    )
+                    existing_lfs_patterns = self._parse_gitattributes(
+                        gitattributes_content.decode("utf-8")
+                    )
+                    logger.info(
+                        f"Found .gitattributes with {len(existing_lfs_patterns)} LFS patterns"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to parse .gitattributes: {e}")
+                break
+
+        # Classify files
         small_files = []
         large_files = []
 
         for obj in file_objects:
             if obj["path"] == ".gitattributes":
-                continue  # Handle separately
+                continue
 
             path = obj["path"]
             size = obj.get("size_bytes", 0)
-
-            # Check if file should be LFS based on:
-            # 1. File table LFS flag (most reliable!), OR
-            # 2. Size threshold, OR
-            # 3. Existing .gitattributes patterns
             file_record = file_records.get(path)
+
+            # Should be LFS if:
+            # 1. Marked in File table, OR
+            # 2. Size >= threshold, OR
+            # 3. Matches existing LFS pattern
             should_be_lfs = (
-                (file_record and file_record.lfs)  # Marked as LFS in database
-                or size >= cfg.app.lfs_threshold_bytes  # Large file
-                or self._matches_lfs_pattern(
-                    path, existing_lfs_patterns
-                )  # Pattern match
+                (file_record and file_record.lfs)
+                or size >= cfg.app.lfs_threshold_bytes
+                or self._matches_pattern(path, existing_lfs_patterns)
             )
 
             if should_be_lfs:
-                large_files.append(obj)
+                large_files.append((obj, file_record))
             else:
-                small_files.append(obj)
+                small_files.append((obj, file_record))
 
         logger.info(
-            f"Processing {len(small_files)} small files, "
-            f"{len(large_files)} large files (LFS pointers)"
+            f"Classified: {len(small_files)} regular files, {len(large_files)} LFS files"
         )
 
-        # Process small files normally (download content)
-        async def process_small_file(obj):
+        # Process files concurrently - return (path, sha1, data, mode)
+        async def process_small(obj, file_record):
+            """Download and create blob."""
             path = obj["path"]
             try:
-                # Reuse .gitattributes content if already downloaded
-                if path == ".gitattributes" and gitattributes_content is not None:
-                    content = gitattributes_content
-                else:
-                    content = await self.lakefs_client.get_object(
-                        repository=self.lakefs_repo, ref=branch, path=path
-                    )
-
-                blob_oid = await asyncio.to_thread(repo.create_blob, content)
-                logger.debug(f"Created blob for {path}: {len(content)} bytes")
-                return path, blob_oid, pygit2.GIT_FILEMODE_BLOB
-
+                content = await self.lakefs_client.get_object(
+                    repository=self.lakefs_repo, ref=branch, path=path
+                )
+                sha1, blob_with_header = create_blob_object(content)
+                logger.debug(f"Blob {path}: {len(content)} bytes → {sha1[:8]}")
+                return path, sha1, blob_with_header, "100644", False
             except Exception as e:
                 logger.warning(f"Failed to download {path}: {e}")
                 return None
 
-        # Process large files as LFS pointers (NO full content download!)
-        async def process_large_file(obj):
+        async def process_large(obj, file_record):
+            """Create LFS pointer blob."""
             path = obj["path"]
             try:
-                # IMPORTANT: Use SHA256 from our File table (LFS object hash)
-                # NOT from LakeFS checksum (they can differ!)
-                def _get_file():
-                    return File.get_or_none(
-                        File.repo_full_id == self.repo_id, File.path_in_repo == path
-                    )
-
-                file_record = await execute_db_query(_get_file)
-
+                # Use File table SHA256
                 if file_record and file_record.lfs:
-                    # File is in our database and marked as LFS
-                    # Use the SHA256 from our File table (this is the actual LFS object hash)
                     sha256 = file_record.sha256
                     size = file_record.size
-                    logger.debug(
-                        f"Using LFS SHA256 from File table for {path}: {sha256[:8]}"
-                    )
                 else:
-                    # File not in our table or not marked as LFS
-                    # Fall back to LakeFS stat
+                    # Fallback to LakeFS stat
                     stat = await self.lakefs_client.stat_object(
                         repository=self.lakefs_repo, ref=branch, path=path
                     )
-
                     size = stat.get("size_bytes", 0)
                     checksum = stat.get("checksum", "")
+                    sha256 = (
+                        checksum.replace("sha256:", "")
+                        if checksum.startswith("sha256:")
+                        else ""
+                    )
 
-                    if checksum.startswith("sha256:"):
-                        sha256 = checksum.replace("sha256:", "")
-                    else:
-                        # Last resort: download to compute hash
-                        logger.warning(
-                            f"No checksum for {path}, downloading to compute hash"
-                        )
+                    if not sha256:
+                        # Last resort: download
                         content = await self.lakefs_client.get_object(
                             repository=self.lakefs_repo, ref=branch, path=path
                         )
                         sha256 = hashlib.sha256(content).hexdigest()
+                        size = len(content)
 
-                # Create LFS pointer file
-                pointer_content = create_lfs_pointer(sha256, size)
-                blob_oid = await asyncio.to_thread(repo.create_blob, pointer_content)
-
-                logger.debug(
-                    f"Created LFS pointer for {path}: {size} bytes → "
-                    f"{len(pointer_content)} bytes pointer (sha256:{sha256[:8]})"
-                )
-
-                return path, blob_oid, pygit2.GIT_FILEMODE_BLOB, True  # True = is_lfs
-
+                # Create LFS pointer
+                pointer = create_lfs_pointer(sha256, size)
+                sha1, blob_with_header = create_blob_object(pointer)
+                logger.debug(f"LFS {path}: {size} bytes → pointer {sha1[:8]}")
+                return path, sha1, blob_with_header, "100644", True
             except Exception as e:
                 logger.warning(f"Failed to create LFS pointer for {path}: {e}")
                 return None
 
-        # Process files concurrently
+        # Process concurrently
         small_results = await asyncio.gather(
-            *[process_small_file(obj) for obj in small_files]
+            *[process_small(obj, rec) for obj, rec in small_files]
         )
         large_results = await asyncio.gather(
-            *[process_large_file(obj) for obj in large_files]
+            *[process_large(obj, rec) for obj, rec in large_files]
         )
 
-        # Build tree_entries from results
+        # Collect results
+        blob_data = {}  # path -> (sha1, blob_data_with_header, mode)
+        lfs_paths = []
+
         for result in small_results:
-            if result is not None:
-                path, blob_oid, mode = result
-                tree_entries[path] = (blob_oid, mode)
+            if result:
+                path, sha1, data, mode, is_lfs = result
+                blob_data[path] = (sha1, data, mode)
 
         for result in large_results:
-            if result is not None:
-                path, blob_oid, mode, is_lfs = result
-                tree_entries[path] = (blob_oid, mode)
+            if result:
+                path, sha1, data, mode, is_lfs = result
+                blob_data[path] = (sha1, data, mode)
                 lfs_paths.append(path)
 
-        # Handle .gitattributes
-        # If repo doesn't have .gitattributes but we created LFS pointers, add one
-        gitattributes_in_tree = ".gitattributes" in tree_entries
+        # Add .gitattributes
+        if gitattributes_obj and gitattributes_content:
+            sha1, blob_with_header = create_blob_object(gitattributes_content)
+            blob_data[".gitattributes"] = (sha1, blob_with_header, "100644")
+        elif lfs_paths:
+            gitattributes = self._generate_gitattributes(lfs_paths)
+            sha1, blob_with_header = create_blob_object(gitattributes)
+            blob_data[".gitattributes"] = (sha1, blob_with_header, "100644")
 
-        if not gitattributes_in_tree and lfs_paths:
-            # No existing .gitattributes, generate one for our LFS files
-            logger.info(f"Generating .gitattributes for {len(lfs_paths)} LFS files")
-            new_gitattributes = generate_gitattributes(lfs_paths)
-            blob_oid = await asyncio.to_thread(repo.create_blob, new_gitattributes)
-            tree_entries[".gitattributes"] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
-
-        # Add .lfsconfig to specify LFS endpoint
-        # This tells Git LFS where to download files from
+        # Add .lfsconfig
         if lfs_paths:
-            logger.info("Adding .lfsconfig for LFS endpoint configuration")
-            lfsconfig_content = self._generate_lfsconfig()
-            blob_oid = await asyncio.to_thread(repo.create_blob, lfsconfig_content)
-            tree_entries[".lfsconfig"] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
+            lfsconfig = generate_lfsconfig(cfg.app.base_url, self.namespace, self.name)
+            sha1, blob_with_header = create_blob_object(lfsconfig)
+            blob_data[".lfsconfig"] = (sha1, blob_with_header, "100644")
 
-        if not tree_entries:
-            return None
+        return blob_data
 
-        # Build nested tree structure from flat paths (run in thread pool)
-        return await asyncio.to_thread(self._create_nested_tree, repo, tree_entries)
+    def _parse_gitattributes(self, content: str) -> set[str]:
+        """Parse LFS patterns from .gitattributes."""
+        patterns = set()
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "filter=lfs" in line:
+                parts = line.split()
+                if parts:
+                    patterns.add(parts[0])
+        return patterns
 
-    def _create_nested_tree(
-        self, repo: pygit2.Repository, entries: dict[str, tuple[pygit2.Oid, int]]
-    ) -> pygit2.Oid:
-        """Create nested Git tree from flat path entries.
+    def _matches_pattern(self, path: str, patterns: set[str]) -> bool:
+        """Check if path matches any LFS pattern."""
+        for pattern in patterns:
+            if fnmatch.fnmatch(path, pattern):
+                return True
+            # Also check basename for *.ext patterns
+            if pattern.startswith("*."):
+                basename = path.split("/")[-1]
+                if fnmatch.fnmatch(basename, pattern):
+                    return True
+        return False
 
-        Args:
-            repo: pygit2 Repository
-            entries: Dict mapping paths to (oid, mode) tuples
+    def _generate_gitattributes(self, lfs_paths: list[str]) -> bytes:
+        """Generate .gitattributes for specific LFS files."""
+        lines = ["# Git LFS tracking (auto-generated)\n\n"]
+        for path in sorted(lfs_paths):
+            lines.append(f"{path} filter=lfs diff=lfs merge=lfs -text\n")
+        return "".join(lines).encode("utf-8")
 
-        Returns:
-            Root tree OID
-        """
-        # Organize entries by directory
-        dir_contents = {}  # dir_path -> {name: (oid, mode)}
-
-        for path, (oid, mode) in entries.items():
-            parts = path.split("/")
-
-            # Add entry to each parent directory
-            for i in range(len(parts)):
-                if i == len(parts) - 1:
-                    # This is the file itself
-                    dir_path = "/".join(parts[:i]) if i > 0 else ""
-                    name = parts[i]
-                    if dir_path not in dir_contents:
-                        dir_contents[dir_path] = {}
-                    dir_contents[dir_path][name] = (oid, mode)
-
-        # Build trees bottom-up (deepest first)
-        sorted_dirs = sorted(
-            dir_contents.keys(), key=lambda x: x.count("/"), reverse=True
-        )
-
-        dir_oids = {}  # dir_path -> tree_oid
-
-        for dir_path in sorted_dirs:
-            tree_builder = repo.TreeBuilder()
-
-            for name, (entry_oid, entry_mode) in dir_contents[dir_path].items():
-                # Check if this is a subdirectory
-                subdir_path = f"{dir_path}/{name}" if dir_path else name
-                if subdir_path in dir_oids:
-                    # This is a directory - use its tree OID
-                    tree_builder.insert(
-                        name, dir_oids[subdir_path], pygit2.GIT_FILEMODE_TREE
-                    )
-                else:
-                    # This is a file - use the blob OID
-                    tree_builder.insert(name, entry_oid, entry_mode)
-
-            tree_oid = tree_builder.write()
-            dir_oids[dir_path] = tree_oid
-
-        # Return root tree - fallback to last directory if root is empty
-        if "" in dir_oids:
-            return dir_oids[""]
-        elif sorted_dirs:
-            return dir_oids[sorted_dirs[-1]]
-        else:
-            # Create an empty tree if no directories
-            tree_builder = repo.TreeBuilder()
-            return tree_builder.write()
-
-    def _create_pack_file(
-        self, repo: pygit2.Repository, wants: list[str], haves: list[str]
+    async def build_pack_file(
+        self, wants: list[str], haves: list[str], branch: str = "main"
     ) -> bytes:
-        """Create Git pack file.
+        """Build Git pack file - pure in-memory, no temp dirs.
 
         Args:
-            repo: pygit2 Repository
-            wants: List of wanted commit SHAs
-            haves: List of existing commit SHAs
+            wants: Commit SHAs client wants
+            haves: Commit SHAs client has (ignored for now)
+            branch: Branch name
 
         Returns:
             Pack file bytes
         """
         try:
-            # Get the branch ref (we use main)
-            try:
-                ref = repo.references["refs/heads/main"]
-                head_commit_oid = ref.target
-            except KeyError:
-                # Fallback to first want if branch not found
-                if wants:
-                    head_commit_oid = pygit2.Oid(hex=wants[0])
-                else:
-                    logger.warning("No ref or wants found, returning empty pack")
-                    return create_empty_pack()
+            # Get all objects from LakeFS
+            all_objects = []
+            after = ""
+            has_more = True
 
-            # Walk through all objects reachable from wanted commits
-            # Use pygit2.SortMode.TOPOLOGICAL instead of the integer constant
-            walker = repo.walk(head_commit_oid, pygit2.enums.SortMode.TOPOLOGICAL)
+            while has_more:
+                result = await self.lakefs_client.list_objects(
+                    repository=self.lakefs_repo,
+                    ref=branch,
+                    prefix="",
+                    after=after,
+                    amount=1000,
+                )
+                all_objects.extend(result.get("results", []))
+                pagination = result.get("pagination", {})
+                has_more = pagination.get("has_more", False)
+                if has_more:
+                    after = pagination.get("next_offset", "")
 
-            # Collect all objects to pack
-            oids_to_pack = set()
+            file_objects = [
+                obj for obj in all_objects if obj.get("path_type") == "object"
+            ]
 
-            for commit in walker:
-                # Stop if we've reached a commit the client already has
-                if str(commit.id) in haves:
-                    break
+            if not file_objects:
+                logger.warning("No files found, returning empty pack")
+                return create_empty_pack()
 
-                # Add commit
-                oids_to_pack.add(commit.id)
+            # Build blob objects with data (in memory, LFS pointers for large files!)
+            blob_data = await self._build_blob_sha1s(file_objects, branch)
 
-                # Add tree and all blobs
-                self._collect_tree_objects(repo, commit.tree_id, oids_to_pack)
+            if not blob_data:
+                logger.warning("No blobs created, returning empty pack")
+                return create_empty_pack()
 
-            logger.info(f"Packing {len(oids_to_pack)} objects")
+            # Build tree objects (pure logic, no I/O)
+            flat_entries = [
+                (mode, path, sha1) for path, (sha1, _, mode) in blob_data.items()
+            ]
+            root_tree_sha1, tree_objects = build_nested_trees(flat_entries)
 
-            # Use pygit2 PackBuilder to create pack
-            # Write pack to a temporary directory, then read it back
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Create pack builder and add all objects
-                pack_builder = pygit2.PackBuilder(repo)
-
-                for oid in oids_to_pack:
-                    pack_builder.add(oid)
-
-                # Write pack to directory (pygit2 will create pack file inside)
-                pack_builder.write(temp_dir)
-
-                # Find the generated pack file
-                pack_files = [f for f in os.listdir(temp_dir) if f.endswith(".pack")]
-                if not pack_files:
-                    logger.error("No pack file generated")
-                    return create_empty_pack()
-
-                pack_path = os.path.join(temp_dir, pack_files[0])
-
-                # Read pack file
-                with open(pack_path, "rb") as f:
-                    pack_bytes = f.read()
-
-                logger.success(f"Created pack file: {len(pack_bytes)} bytes")
-                return pack_bytes
-
-        except Exception as e:
-            logger.exception("Failed to create pack file", e)
-            return create_empty_pack()
-
-    def _collect_tree_objects(
-        self, repo: pygit2.Repository, tree_oid: pygit2.Oid, oids: set
-    ):
-        """Recursively collect all objects in a tree.
-
-        Args:
-            repo: pygit2 Repository
-            tree_oid: Tree OID to collect from
-            oids: Set to add collected OIDs to
-        """
-        if tree_oid in oids:
-            return
-
-        oids.add(tree_oid)
-        tree = repo[tree_oid]
-
-        # Type assertion to help type checker - tree should be a Tree object
-        if not isinstance(tree, pygit2.Tree):
-            return
-
-        for entry in tree:
-            oids.add(entry.id)
-
-            # Recursively collect subtrees
-            if entry.filemode == pygit2.GIT_FILEMODE_TREE:
-                self._collect_tree_objects(repo, entry.id, oids)
-
-    async def unpack_and_push(
-        self, pack_data: bytes, ref_updates: list[tuple[str, str, str]], branch: str
-    ) -> bool:
-        """Unpack Git pack file and push to LakeFS.
-
-        Args:
-            pack_data: Pack file bytes
-            ref_updates: List of (old_sha, new_sha, ref_name) tuples
-            branch: Target branch name
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Create temporary repository to unpack
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_repo_path = Path(temp_dir) / "repo"
-                temp_repo_path.mkdir()
-
-                repo = pygit2.init_repository(str(temp_repo_path), bare=True)
-
-                # Write pack file
-                pack_path = Path(temp_dir) / "incoming.pack"
-                pack_path.write_bytes(pack_data)
-
-                # Index pack (this extracts objects)
-                # Note: pygit2 doesn't have direct pack indexing API
-                # In production, we'd use git index-pack via subprocess
-                logger.warning("Pack unpacking not fully implemented yet")
-
-                # For each ref update, push objects to LakeFS
-                for old_sha, new_sha, ref_name in ref_updates:
-                    logger.info(
-                        f"Processing ref update: {ref_name} {old_sha} -> {new_sha}"
-                    )
-
-                    # TODO: Extract objects from pack and upload to LakeFS
-                    # 1. Walk commit tree from new_sha
-                    # 2. Upload blobs to S3 or LakeFS
-                    # 3. Update LakeFS branch
-
-                return True
-
-        except Exception as e:
-            logger.exception("Failed to unpack and push", e)
-            return False
-
-    async def create_lakefs_commit(
-        self, branch: str, message: str, author: str, tree_data: dict
-    ) -> str:
-        """Create commit in LakeFS from Git tree data.
-
-        Args:
-            branch: Branch name
-            message: Commit message
-            author: Author name
-            tree_data: Dictionary of path -> content
-
-        Returns:
-            Commit ID
-        """
-
-        # Upload all files concurrently
-        async def upload_file(path, content):
-            if isinstance(content, str):
-                content = content.encode("utf-8")
-
-            await self.lakefs_client.upload_object(
-                repository=self.lakefs_repo, branch=branch, path=path, content=content
+            logger.info(
+                f"Built {len(tree_objects)} tree objects, root={root_tree_sha1[:8]}"
             )
 
-        await asyncio.gather(
-            *[upload_file(path, content) for path, content in tree_data.items()]
-        )
+            # Get branch info for commit
+            branch_info = await self.lakefs_client.get_branch(
+                repository=self.lakefs_repo, branch=branch
+            )
 
-        # Create commit
-        commit_result = await self.lakefs_client.commit(
-            repository=self.lakefs_repo,
-            branch=branch,
-            message=message,
-            metadata={"author": author},
-        )
+            commit_id = branch_info.get("commit_id")
+            if not commit_id:
+                logger.warning("No commit_id in branch, using defaults")
+                author_name = "KohakuHub"
+                message = "Initial commit"
+                timestamp = 0
+            else:
+                # Build commit object
+                commit_info = await self.lakefs_client.get_commit(
+                    repository=self.lakefs_repo, commit_id=commit_id
+                )
 
-        return commit_result["id"]
+                author_name = commit_info.get("committer", "KohakuHub")
+                message = commit_info.get("message", "Initial commit")
+                timestamp = commit_info.get("creation_date", 0)
+
+                if isinstance(timestamp, str):
+                    try:
+                        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                        timestamp = int(dt.timestamp())
+                    except:
+                        timestamp = 0
+
+            commit_sha1, commit_with_header = create_commit_object(
+                tree_sha1=root_tree_sha1,
+                parent_sha1s=[],
+                author_name=author_name,
+                author_email="noreply@kohakuhub.local",
+                committer_name=author_name,
+                committer_email="noreply@kohakuhub.local",
+                author_timestamp=timestamp,
+                committer_timestamp=timestamp,
+                timezone="+0000",
+                message=message,
+            )
+
+            # Build pack file (in memory) - ALL objects
+            pack_objects = []
+
+            # Add commit (type 1)
+            pack_objects.append((1, commit_with_header))
+
+            # Add trees (type 2)
+            pack_objects.extend(tree_objects)
+
+            # Add blobs (type 3) - includes LFS pointers!
+            for path, (sha1, blob_with_header, mode) in blob_data.items():
+                pack_objects.append((3, blob_with_header))
+
+            logger.info(
+                f"Pack contains: {len(pack_objects)} objects (1 commit + {len(tree_objects)} trees + {len(blob_data)} blobs)"
+            )
+
+            # Create pack
+            pack_bytes = create_pack_file(pack_objects)
+
+            logger.success(f"Created pack: {len(pack_bytes)} bytes")
+
+            return pack_bytes
+
+        except Exception as e:
+            logger.exception("Failed to build pack file", e)
+            return create_empty_pack()
