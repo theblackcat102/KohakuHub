@@ -1,5 +1,6 @@
 """Commit history API endpoints."""
 
+import asyncio
 import difflib
 from typing import Optional
 
@@ -294,9 +295,9 @@ async def get_commit_diff(
 
         file_records = await execute_db_query(_get_file_records) if file_paths else {}
 
-        # Process diff results
-        files = []
-        for diff_entry in diff_results:
+        # Process diff entries concurrently
+        async def process_diff_entry(diff_entry):
+            """Process a single diff entry (file change) - runs in parallel."""
             path = diff_entry["path"]
 
             # Check if file is LFS from our database or size threshold
@@ -429,7 +430,8 @@ async def get_commit_diff(
                                 lineterm="",
                             )
                         )
-                        diff_text = "".join(diff_lines)
+                        # Join with newlines (lineterm="" means no automatic newlines)
+                        diff_text = "\n".join(diff_lines)
                         # Keep diff even if empty string (don't convert to None)
                         file_info["diff"] = diff_text
                         logger.info(
@@ -444,7 +446,12 @@ async def get_commit_diff(
                     )
                     file_info["diff"] = None
 
-            files.append(file_info)
+            return file_info
+
+        # Process all diff entries in parallel
+        files = await asyncio.gather(
+            *[process_diff_entry(entry) for entry in diff_results]
+        )
 
         # Get our commit record for user info
         our_commit = await get_commit(commit_id, repo_id)
