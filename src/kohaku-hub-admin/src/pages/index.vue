@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import AdminLayout from "@/components/AdminLayout.vue";
+import StatsCard from "@/components/StatsCard.vue";
 import { useAdminStore } from "@/stores/admin";
 import { getDetailedStats, getTopRepositories } from "@/utils/api";
 import { formatBytes } from "@/utils/api";
@@ -13,6 +14,8 @@ const stats = ref(null);
 const topRepos = ref([]);
 const loading = ref(false);
 
+const hasData = computed(() => stats.value !== null);
+
 async function loadStats() {
   if (!adminStore.token) {
     router.push("/login");
@@ -22,7 +25,11 @@ async function loadStats() {
   loading.value = true;
   try {
     stats.value = await getDetailedStats(adminStore.token);
-    const topReposData = await getTopRepositories(adminStore.token, 5, "commits");
+    const topReposData = await getTopRepositories(
+      adminStore.token,
+      5,
+      "commits",
+    );
     topRepos.value = topReposData.top_repositories;
   } catch (error) {
     console.error("Failed to load stats:", error);
@@ -66,84 +73,51 @@ onMounted(() => {
       </h1>
 
       <div v-loading="loading" class="stats-grid">
-        <!-- Users Card -->
-        <el-card shadow="hover" class="stat-card-wrapper">
-          <div class="stat-card from-blue-500 to-blue-600">
-            <div class="i-carbon-user-multiple text-5xl mb-3 opacity-80" />
-            <div class="text-5xl font-bold mb-2">{{ stats?.users?.total || 0 }}</div>
-            <div class="text-lg opacity-90 mb-2">Total Users</div>
-            <div class="text-sm opacity-75">
-              Active: {{ stats?.users?.active || 0 }} |
-              Verified: {{ stats?.users?.verified || 0 }}
-            </div>
-          </div>
-        </el-card>
+        <StatsCard
+          title="Total Users"
+          :value="stats?.users?.total || 0"
+          :subtitle="`Active: ${stats?.users?.active || 0} | Verified: ${stats?.users?.verified || 0}`"
+          icon="i-carbon-user-multiple"
+          color="blue"
+        />
 
-        <!-- Organizations Card -->
-        <el-card shadow="hover" class="stat-card-wrapper">
-          <div class="stat-card from-purple-500 to-purple-600">
-            <div class="i-carbon-enterprise text-5xl mb-3 opacity-80" />
-            <div class="text-5xl font-bold mb-2">
-              {{ stats?.organizations?.total || 0 }}
-            </div>
-            <div class="text-lg opacity-90">Organizations</div>
-          </div>
-        </el-card>
+        <StatsCard
+          title="Organizations"
+          :value="stats?.organizations?.total || 0"
+          icon="i-carbon-enterprise"
+          color="purple"
+        />
 
-        <!-- Total Repositories Card -->
-        <el-card shadow="hover" class="stat-card-wrapper">
-          <div class="stat-card from-green-500 to-green-600">
-            <div class="i-carbon-data-base text-5xl mb-3 opacity-80" />
-            <div class="text-5xl font-bold mb-2">
-              {{ stats?.repositories?.total || 0 }}
-            </div>
-            <div class="text-lg opacity-90 mb-2">Total Repositories</div>
-            <div class="text-sm opacity-75">
-              Models: {{ stats?.repositories?.by_type?.model || 0 }} |
-              Datasets: {{ stats?.repositories?.by_type?.dataset || 0 }}
-            </div>
-          </div>
-        </el-card>
+        <StatsCard
+          title="Total Repositories"
+          :value="stats?.repositories?.total || 0"
+          :subtitle="`Models: ${stats?.repositories?.by_type?.model || 0} | Datasets: ${stats?.repositories?.by_type?.dataset || 0}`"
+          icon="i-carbon-data-base"
+          color="green"
+        />
 
-        <!-- Commits Card -->
-        <el-card shadow="hover" class="stat-card-wrapper">
-          <div class="stat-card from-orange-500 to-orange-600">
-            <div class="i-carbon-git-commit text-5xl mb-3 opacity-80" />
-            <div class="text-5xl font-bold mb-2">
-              {{ stats?.commits?.total || 0 }}
-            </div>
-            <div class="text-lg opacity-90">Total Commits</div>
-          </div>
-        </el-card>
+        <StatsCard
+          title="Total Commits"
+          :value="stats?.commits?.total || 0"
+          icon="i-carbon-version"
+          color="orange"
+        />
 
-        <!-- Storage Card -->
-        <el-card shadow="hover" class="stat-card-wrapper">
-          <div class="stat-card from-cyan-500 to-cyan-600">
-            <div class="i-carbon-data-volume text-5xl mb-3 opacity-80" />
-            <div class="text-5xl font-bold mb-2">
-              {{ formatBytes(stats?.storage?.total_used || 0) }}
-            </div>
-            <div class="text-lg opacity-90 mb-2">Total Storage</div>
-            <div class="text-sm opacity-75">
-              Private: {{ formatBytes(stats?.storage?.private_used || 0) }} |
-              Public: {{ formatBytes(stats?.storage?.public_used || 0) }}
-            </div>
-          </div>
-        </el-card>
+        <StatsCard
+          title="Total Storage"
+          :value="formatBytes(stats?.storage?.total_used || 0)"
+          :subtitle="`Private: ${formatBytes(stats?.storage?.private_used || 0)} | Public: ${formatBytes(stats?.storage?.public_used || 0)}`"
+          icon="i-carbon-data-volume"
+          color="cyan"
+        />
 
-        <!-- LFS Objects Card -->
-        <el-card shadow="hover" class="stat-card-wrapper">
-          <div class="stat-card from-pink-500 to-pink-600">
-            <div class="i-carbon-document text-5xl mb-3 opacity-80" />
-            <div class="text-5xl font-bold mb-2">
-              {{ stats?.lfs?.total_objects || 0 }}
-            </div>
-            <div class="text-lg opacity-90 mb-2">LFS Objects</div>
-            <div class="text-sm opacity-75">
-              {{ formatBytes(stats?.lfs?.total_size || 0) }}
-            </div>
-          </div>
-        </el-card>
+        <StatsCard
+          title="LFS Objects"
+          :value="stats?.lfs?.total_objects || 0"
+          :subtitle="formatBytes(stats?.lfs?.total_size || 0)"
+          icon="i-carbon-document"
+          color="pink"
+        />
       </div>
 
       <!-- Top Contributors -->
@@ -174,7 +148,12 @@ onMounted(() => {
                   {{ row.repo_type }}
                 </el-tag>
                 <span class="font-mono">{{ row.repo_full_id }}</span>
-                <el-tag v-if="row.private" type="warning" size="small" effect="plain">
+                <el-tag
+                  v-if="row.private"
+                  type="warning"
+                  size="small"
+                  effect="plain"
+                >
                   Private
                 </el-tag>
               </div>
@@ -208,22 +187,13 @@ onMounted(() => {
           >
             View Repositories
           </el-button>
-          <el-button
-            @click="$router.push('/commits')"
-            :icon="'GitCommit'"
-          >
+          <el-button @click="$router.push('/commits')" :icon="'GitCommit'">
             View Commits
           </el-button>
-          <el-button
-            @click="$router.push('/storage')"
-            :icon="'Storage'"
-          >
+          <el-button @click="$router.push('/storage')" :icon="'Storage'">
             Browse Storage
           </el-button>
-          <el-button
-            @click="$router.push('/quotas')"
-            :icon="'DataVolume'"
-          >
+          <el-button @click="$router.push('/quotas')" :icon="'DataVolume'">
             Manage Quotas
           </el-button>
           <el-button @click="loadStats" :icon="'Renew'">
@@ -236,72 +206,14 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.page-container {
+  padding: 24px;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
-}
-
-.stat-card-wrapper {
-  transition: transform 0.2s;
-}
-
-.stat-card-wrapper:hover {
-  transform: translateY(-4px);
-}
-
-.stat-card {
-  text-align: center;
-  padding: 32px;
-  border-radius: 8px;
-  color: white;
-  background: linear-gradient(
-    135deg,
-    var(--tw-gradient-from),
-    var(--tw-gradient-to)
-  );
-}
-
-.from-blue-500 {
-  --tw-gradient-from: #3b82f6;
-}
-.to-blue-600 {
-  --tw-gradient-to: #2563eb;
-}
-
-.from-purple-500 {
-  --tw-gradient-from: #a855f7;
-}
-.to-purple-600 {
-  --tw-gradient-to: #9333ea;
-}
-
-.from-green-500 {
-  --tw-gradient-from: #22c55e;
-}
-.to-green-600 {
-  --tw-gradient-to: #16a34a;
-}
-
-.from-orange-500 {
-  --tw-gradient-from: #f97316;
-}
-.to-orange-600 {
-  --tw-gradient-to: #ea580c;
-}
-
-.from-cyan-500 {
-  --tw-gradient-from: #06b6d4;
-}
-.to-cyan-600 {
-  --tw-gradient-to: #0891b2;
-}
-
-.from-pink-500 {
-  --tw-gradient-from: #ec4899;
-}
-.to-pink-600 {
-  --tw-gradient-to: #db2777;
 }
 </style>

@@ -185,7 +185,9 @@ onMounted(() => {
             />
           </el-form-item>
 
-          <el-button type="primary" @click="applyFilters">Apply Filters</el-button>
+          <el-button type="primary" @click="applyFilters"
+            >Apply Filters</el-button
+          >
           <el-button @click="resetFilters">Reset</el-button>
         </div>
       </el-card>
@@ -207,9 +209,10 @@ onMounted(() => {
           <el-table-column prop="id" label="ID" width="80" sortable="custom" />
           <el-table-column label="Commit SHA" width="120">
             <template #default="{ row }">
-              <code class="text-xs font-mono text-gray-600 dark:text-gray-400">{{
-                truncateCommitId(row.commit_id)
-              }}</code>
+              <code
+                class="text-xs font-mono text-gray-600 dark:text-gray-400"
+                >{{ truncateCommitId(row.commit_id) }}</code
+              >
             </template>
           </el-table-column>
           <el-table-column
@@ -227,11 +230,7 @@ onMounted(() => {
               </div>
             </template>
           </el-table-column>
-          <el-table-column
-            prop="branch"
-            label="Branch"
-            width="120"
-          />
+          <el-table-column prop="branch" label="Branch" width="120" />
           <el-table-column
             prop="username"
             label="Author"

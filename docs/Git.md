@@ -1,35 +1,239 @@
-# Building a Git-Compatible Server: Complete Guide
+# Git Support in KohakuHub
 
-*A comprehensive guide for implementing a Git Smart HTTP server from scratch using FastAPI*
+*Complete guide covering Git clone operations, LFS integration, and server implementation*
 
-**Last Updated:** January 2025
-**Target Audience:** Junior to Mid-Level Backend Developers
-**Prerequisites:** Basic understanding of Git, HTTP, and Python async/await
+**Last Updated:** October 2025
+**Status:** ✅ Clone/Pull Production Ready | ⚠️ Push In Development
 
 ---
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Git Protocol Fundamentals](#git-protocol-fundamentals)
-3. [Packet-Line Format](#packet-line-format)
-4. [Git Smart HTTP Protocol](#git-smart-http-protocol)
-5. [Service Advertisement](#service-advertisement)
-6. [Upload-Pack (Clone/Fetch/Pull)](#upload-pack-clonefetchpull)
-7. [Receive-Pack (Push)](#receive-pack-push)
-8. [Pack File Format](#pack-file-format)
-9. [Authentication](#authentication)
-10. [Implementation with FastAPI](#implementation-with-fastapi)
-11. [Integration with LakeFS](#integration-with-lakefs)
-12. [Complete Code Examples](#complete-code-examples)
-13. [Testing Your Implementation](#testing-your-implementation)
-14. [Troubleshooting](#troubleshooting)
-15. [Performance Optimization](#performance-optimization)
-16. [References](#references)
+### Part 1: User Guide
+1. [Quick Start](#quick-start)
+2. [Authentication](#authentication-guide)
+3. [LFS Integration](#lfs-integration-guide)
+4. [Cloudflare Setup](#cloudflare-setup)
+5. [Troubleshooting](#troubleshooting-guide)
+
+### Part 2: Developer Guide
+6. [Implementation Overview](#implementation-overview)
+7. [Git Protocol Fundamentals](#git-protocol-fundamentals)
+8. [Packet-Line Format](#packet-line-format)
+9. [Git Smart HTTP Protocol](#git-smart-http-protocol)
+10. [Pack File Generation](#pack-file-generation)
+11. [Pure Python Implementation](#pure-python-implementation)
+12. [LFS Pointer System](#lfs-pointer-system)
+13. [Tree Building Algorithm](#tree-building-algorithm)
+14. [Testing & Debugging](#testing-and-debugging)
+15. [References](#references)
 
 ---
 
-## Introduction
+# Part 1: User Guide
+
+## Quick Start
+
+### Clone a Repository
+
+```bash
+# Public repository
+git clone http://hub.example.com/namespace/repo-name.git
+
+# Private repository (requires token)
+git clone http://username:your-token@hub.example.com/namespace/private-repo.git
+
+# Clone and download large files
+cd repo-name
+git lfs install
+git lfs pull
+```
+
+### How LFS Works
+
+KohakuHub automatically handles large files using Git LFS:
+
+| File Size | In Clone | Download Method |
+|-----------|----------|-----------------|
+| < 1 MB | ✅ Full content | Included in pack |
+| >= 1 MB | ✅ LFS pointer (~100 bytes) | `git lfs pull` |
+
+**Example:**
+```bash
+$ git clone http://hub.example.com/org/large-model.git
+Cloning... done. (Downloaded: 2 MB - only metadata!)
+
+$ cd large-model
+$ ls -lh model.safetensors
+-rw-r--r-- 1 user user 132 Oct 9 14:30 model.safetensors  # Pointer file
+
+$ cat model.safetensors
+version https://git-lfs.github.com/spec/v1
+oid sha256:abc123...
+size 10737418240
+
+$ git lfs pull
+Downloading model.safetensors (10 GB)... done.
+
+$ ls -lh model.safetensors
+-rw-r--r-- 1 user user 10G Oct 9 14:32 model.safetensors  # Actual file
+```
+
+## Authentication Guide
+
+### Using Access Tokens
+
+**Generate Token:**
+1. Login to KohakuHub web UI
+2. Go to Settings → Access Tokens
+3. Click "Create New Token"
+4. Copy the token (you won't see it again!)
+
+**Method 1: Credential Helper (Recommended)**
+```bash
+git clone http://hub.example.com/org/repo.git
+# Git prompts for credentials:
+# Username: your-username
+# Password: paste-your-token-here
+
+# Cache credentials for 1 hour
+git config --global credential.helper 'cache --timeout=3600'
+```
+
+**Method 2: URL (Not Recommended - visible in history)**
+```bash
+git clone http://username:your-token@hub.example.com/org/repo.git
+```
+
+**Method 3: Environment Variable**
+```bash
+export GIT_USER=username
+export GIT_TOKEN=your-token
+git clone http://$GIT_USER:$GIT_TOKEN@hub.example.com/org/repo.git
+```
+
+## LFS Integration Guide
+
+### Installation
+
+```bash
+# Install Git LFS (one-time)
+git lfs install
+```
+
+### Download Large Files
+
+```bash
+# After cloning
+git lfs pull
+
+# Download specific files only
+git lfs pull --include="models/*.safetensors"
+
+# Skip LFS during clone (faster)
+GIT_LFS_SKIP_SMUDGE=1 git clone http://hub.example.com/org/repo.git
+cd repo
+git lfs pull  # Download later
+```
+
+### Check LFS Status
+
+```bash
+# List LFS-tracked files
+git lfs ls-files
+
+# Check LFS configuration
+cat .lfsconfig
+# Should show:
+# [lfs]
+# 	url = http://hub.example.com/namespace/repo.git/info/lfs
+```
+
+## Cloudflare Setup
+
+If deploying behind Cloudflare, Git requests may be cached/modified. Fix:
+
+### Create Page Rule
+
+**Cloudflare Dashboard → Rules → Page Rules**
+
+**URL Pattern:**
+```
+*yourdomain.com/*/*.git/*
+```
+
+**Settings:**
+- ✅ Cache Level: **Bypass**
+- ✅ Disable Performance
+- ✅ Disable Apps
+
+**Why:** Git protocol responses must not be cached or compressed.
+
+### Alternative: Subdomain
+
+Use a separate subdomain that bypasses Cloudflare:
+
+```
+git.hub.example.com → Direct to origin (DNS only)
+hub.example.com → Through Cloudflare (for web UI)
+```
+
+```bash
+git clone https://git.hub.example.com/org/repo.git
+```
+
+## Troubleshooting Guide
+
+### Clone Hangs or Fails
+
+**Problem:** `fatal: protocol error: bad pack header`
+**Cause:** Old version with pkt-line chunking bug
+**Solution:** Update to latest KohakuHub version
+
+---
+
+**Problem:** `fatal: repository not found`
+**Cause:** Repository doesn't exist or no access
+**Solution:** Check spelling, verify repo exists in web UI
+
+---
+
+**Problem:** Clone works but folders are missing
+**Cause:** Old version with tree building bug
+**Solution:** Update to latest KohakuHub version
+
+### LFS Issues
+
+**Problem:** `git lfs pull` does nothing
+**Cause:** `.lfsconfig` missing or incorrect
+**Solution:** Check/create `.lfsconfig`:
+```bash
+[lfs]
+	url = http://hub.example.com/namespace/repo.git/info/lfs
+```
+
+---
+
+**Problem:** LFS files show as pointers after `git lfs pull`
+**Cause:** LFS endpoint unreachable
+**Solution:** Test LFS endpoint:
+```bash
+curl -v "http://hub.example.com/namespace/repo.git/info/lfs/objects/batch" \
+  -X POST -H "Content-Type: application/json" \
+  -d '{"operation":"download","objects":[{"oid":"abc","size":100}]}'
+```
+
+### Cloudflare Issues
+
+**Problem:** `fatal: not a git repository`
+**Cause:** Cloudflare caching Git responses
+**Solution:** Create Cloudflare Page Rule (see above)
+
+---
+
+# Part 2: Developer Guide
+
+## Implementation Overview
 
 ### What is a Git Server?
 
@@ -859,213 +1063,169 @@ app.include_router(git_http.router, tags=["git"])
 
 ---
 
-## Integration with LakeFS
+## Pure Python Implementation
 
-### Git-LakeFS Bridge
+**KohakuHub uses pure Python for Git operations - NO pygit2, NO native dependencies!**
 
-The bridge translates Git operations to LakeFS REST API calls:
+### Architecture
 
 ```python
+# Pure Python - all in-memory, no temp files
 class GitLakeFSBridge:
-    """Bridge between Git operations and LakeFS REST API."""
+    """Git-LakeFS bridge using pure Python."""
 
-    def __init__(self, repo_type: str, namespace: str, name: str):
-        self.repo_type = repo_type
-        self.namespace = namespace
-        self.name = name
-        self.repo_id = f"{namespace}/{name}"
-        self.lakefs_repo = lakefs_repo_name(repo_type, self.repo_id)
-        self.lakefs_client = get_lakefs_client()
+    async def get_refs(self, branch: str) -> dict[str, str]:
+        """Get Git refs - pure in-memory."""
+        # 1. List files from LakeFS (metadata only)
+        # 2. Build blob SHA-1s (LFS pointers for large files)
+        # 3. Build tree SHA-1s (pure logic)
+        # 4. Build commit SHA-1
+        # 5. Return refs dict
 
-    async def get_refs(self, branch: str = "main") -> dict[str, str]:
-        """Get Git refs from LakeFS branch.
-
-        Returns:
-            Dict mapping ref names to commit SHAs (Git format)
-        """
-        refs = {}
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_repo_path = Path(temp_dir) / "repo"
-            temp_repo_path.mkdir()
-
-            # Initialize temporary Git repository
-            repo = pygit2.init_repository(str(temp_repo_path), bare=True)
-
-            # Populate repo from LakeFS
-            commit_oid = await self._populate_git_repo(repo, branch)
-
-            if commit_oid:
-                git_sha = str(commit_oid)
-                refs[f"refs/heads/{branch}"] = git_sha
-                refs["HEAD"] = git_sha
-
-        return refs
-
-    async def build_pack_file(
-        self, wants: list[str], haves: list[str], branch: str = "main"
-    ) -> bytes:
-        """Build Git pack file with requested objects."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_repo_path = Path(temp_dir) / "repo"
-            temp_repo_path.mkdir()
-
-            repo = pygit2.init_repository(str(temp_repo_path), bare=True)
-
-            # Populate from LakeFS
-            commit_oid = await self._populate_git_repo(repo, branch)
-
-            if not commit_oid:
-                return self._create_empty_pack()
-
-            # Create pack file
-            return self._create_pack_file(repo, wants, haves)
+    async def build_pack_file(self, wants, haves, branch) -> bytes:
+        """Build pack file - pure in-memory."""
+        # 1. Build blob objects (with LFS pointers)
+        # 2. Build tree objects using build_nested_trees()
+        # 3. Build commit object
+        # 4. Create pack file with create_pack_file()
+        # 5. Return pack bytes
 ```
 
-### Populating Git Repo from LakeFS
+### Key Components
 
+**1. Git Object Construction** (`git_objects.py`):
 ```python
-async def _populate_git_repo(self, repo: pygit2.Repository, branch: str) -> pygit2.Oid | None:
-    """Populate Git repository with objects from LakeFS."""
+def create_blob_object(content: bytes) -> tuple[str, bytes]:
+    """Create blob object and compute SHA-1."""
+    header = f"blob {len(content)}\0".encode()
+    obj_data = header + content
+    sha1 = hashlib.sha1(obj_data).hexdigest()
+    return sha1, obj_data
 
-    # List all objects in LakeFS
-    all_objects = []
-    after = ""
-    has_more = True
+def create_tree_object(entries: list[tuple[str, str, str]]) -> tuple[str, bytes]:
+    """Create tree object from entries.
 
-    while has_more:
-        result = await self.lakefs_client.list_objects(
-            repository=self.lakefs_repo,
-            ref=branch,
-            after=after,
-            amount=1000,
-        )
+    Args:
+        entries: List of (mode, name, sha1_hex)
+                 mode: "100644" (file), "40000" (dir)
+    """
+    # Sort with directories treated as having "/" suffix
+    def sort_key(entry):
+        mode, name, sha1 = entry
+        return name + "/" if mode in ("40000", "040000") else name
 
-        all_objects.extend(result.get("results", []))
+    sorted_entries = sorted(entries, key=sort_key)
 
-        pagination = result.get("pagination", {})
-        has_more = pagination.get("has_more", False)
-        if has_more:
-            after = pagination.get("next_offset", "")
+    # Build tree content
+    tree_content = b""
+    for mode, name, sha1_hex in sorted_entries:
+        sha1_bytes = bytes.fromhex(sha1_hex)
+        tree_content += f"{mode} {name}\0".encode() + sha1_bytes
 
-    if not all_objects:
-        return None
+    header = f"tree {len(tree_content)}\0".encode()
+    obj_data = header + tree_content
+    sha1 = hashlib.sha1(obj_data).hexdigest()
 
-    # Download objects and create Git blobs
-    tree_entries = {}  # path -> (oid, mode)
+    return sha1, obj_data
 
-    for obj in all_objects:
-        if obj.get("path_type") != "object":
-            continue
+def build_nested_trees(flat_entries: list[tuple[str, str, str]]) -> tuple[str, list]:
+    """Build nested tree structure from flat file list.
 
-        path = obj["path"]
-
-        # Download content
-        content = await self.lakefs_client.get_object(
-            repository=self.lakefs_repo, ref=branch, path=path
-        )
-
-        # Create blob
-        blob_oid = repo.create_blob(content)
-        tree_entries[path] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
-
-    # Build nested tree structure
-    tree_oid = self._create_nested_tree(repo, tree_entries)
-
-    # Get commit metadata from LakeFS
-    branch_info = await self.lakefs_client.get_branch(
-        repository=self.lakefs_repo, branch=branch
-    )
-
-    commit_id = branch_info.get("commit_id")
-
-    if commit_id:
-        commit_info = await self.lakefs_client.get_commit(
-            repository=self.lakefs_repo, commit_id=commit_id
-        )
-        author_name = commit_info.get("committer", "KohakuHub")
-        message = commit_info.get("message", "Initial commit")
-        timestamp = commit_info.get("creation_date", 0)
-    else:
-        author_name = "KohakuHub"
-        message = "Initial commit"
-        timestamp = 0
-
-    # Handle ISO timestamp
-    if isinstance(timestamp, str):
-        from datetime import datetime
-        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-        timestamp = int(dt.timestamp())
-
-    # Create commit
-    author = pygit2.Signature(author_name, "noreply@kohakuhub.local", int(timestamp))
-
-    commit_oid = repo.create_commit(
-        f"refs/heads/{branch}",
-        author,
-        author,
-        message,
-        tree_oid,
-        [],  # No parents
-    )
-
-    return commit_oid
-```
-
-### Building Nested Trees
-
-```python
-def _create_nested_tree(
-    self, repo: pygit2.Repository, entries: dict[str, tuple[pygit2.Oid, int]]
-) -> pygit2.Oid:
-    """Create nested Git tree from flat path entries."""
-
-    # Organize by directory
-    dir_contents = {}  # dir_path -> {name: (oid, mode)}
-
-    for path, (oid, mode) in entries.items():
+    Critical: Root directory MUST be built LAST!
+    """
+    # Organize files by directory
+    dir_contents = {}
+    for mode, path, blob_sha1 in flat_entries:
+        # Add file to parent directory
         parts = path.split("/")
+        if len(parts) == 1:
+            dir_path = ""
+        else:
+            dir_path = "/".join(parts[:-1])
 
-        for i in range(len(parts)):
-            if i == len(parts) - 1:
-                # File itself
-                dir_path = "/".join(parts[:i]) if i > 0 else ""
-                name = parts[i]
-                if dir_path not in dir_contents:
-                    dir_contents[dir_path] = {}
-                dir_contents[dir_path][name] = (oid, mode)
+        dir_contents.setdefault(dir_path, []).append((mode, parts[-1], blob_sha1))
 
-    # Build trees bottom-up (deepest first)
-    sorted_dirs = sorted(dir_contents.keys(), key=lambda x: x.count("/"), reverse=True)
+    # Sort directories: deepest first, ROOT LAST
+    def sort_dirs(dir_path):
+        return (-999, "") if dir_path == "" else (dir_path.count("/"), dir_path)
 
-    dir_oids = {}  # dir_path -> tree_oid
+    sorted_dirs = sorted(dir_contents.keys(), key=sort_dirs, reverse=True)
+
+    # Build trees bottom-up
+    dir_sha1s = {}
+    tree_objects = []
 
     for dir_path in sorted_dirs:
-        tree_builder = repo.TreeBuilder()
+        entries = list(dir_contents[dir_path])
 
-        for name, (entry_oid, entry_mode) in dir_contents[dir_path].items():
-            # Check if this is a subdirectory
-            subdir_path = f"{dir_path}/{name}" if dir_path else name
-            if subdir_path in dir_oids:
-                # Directory - use its tree OID
-                tree_builder.insert(name, dir_oids[subdir_path], pygit2.GIT_FILEMODE_TREE)
-            else:
-                # File - use blob OID
-                tree_builder.insert(name, entry_oid, entry_mode)
+        # Add subdirectories
+        for child_dir, child_sha1 in dir_sha1s.items():
+            if is_direct_child(dir_path, child_dir):
+                entries.append(("40000", get_dirname(dir_path, child_dir), child_sha1))
 
-        tree_oid = tree_builder.write()
-        dir_oids[dir_path] = tree_oid
+        tree_sha1, tree_data = create_tree_object(entries)
+        dir_sha1s[dir_path] = tree_sha1
+        tree_objects.append((2, tree_data))
 
-    # Return root tree
-    if "" in dir_oids:
-        return dir_oids[""]
-    elif sorted_dirs:
-        return dir_oids[sorted_dirs[-1]]
-    else:
-        # Empty tree
-        tree_builder = repo.TreeBuilder()
-        return tree_builder.write()
+    return dir_sha1s[""], tree_objects
 ```
+
+**2. LFS Pointer Creation**:
+```python
+def create_lfs_pointer(sha256: str, size: int) -> bytes:
+    """Create LFS pointer file (100 bytes instead of gigabytes!)."""
+    pointer = f"""version https://git-lfs.github.com/spec/v1
+oid sha256:{sha256}
+size {size}
+"""
+    return pointer.encode("utf-8")
+
+# Usage
+if file_size >= 1_000_000:  # 1MB threshold
+    pointer = create_lfs_pointer(file.sha256, file.size)
+    sha1, blob_data = create_blob_object(pointer)
+    # blob_data is only ~100 bytes, not gigabytes!
+```
+
+**3. Pack File Generation**:
+```python
+def create_pack_file(objects: list[tuple[int, bytes]]) -> bytes:
+    """Build pack file using pure Python."""
+    pack_data = b"PACK"
+    pack_data += struct.pack(">I", 2)              # Version
+    pack_data += struct.pack(">I", len(objects))   # Count
+
+    for obj_type, obj_data in objects:
+        # Extract content (remove header)
+        null_pos = obj_data.find(b"\0")
+        content = obj_data[null_pos + 1:]
+
+        # Encode object header
+        header = encode_pack_object_header(obj_type, len(content))
+
+        # Compress
+        compressed = zlib.compress(content)
+
+        pack_data += header + compressed
+
+    # Checksum
+    checksum = hashlib.sha1(pack_data).digest()
+    pack_data += checksum
+
+    return pack_data
+```
+
+### Benefits of Pure Python
+
+| Aspect | pygit2 (Old) | Pure Python (Current) |
+|--------|--------------|----------------------|
+| Dependencies | pygit2 + libgit2 (C) | stdlib only |
+| Installation | Can fail | Always works |
+| Temp files | Creates temp git repo | None |
+| Memory (10GB file) | 20GB | 100 bytes (LFS pointer) |
+| Debugging | Black box | Full visibility |
+| Deployment | Complex | Simple |
+| Performance | Good | Better (with LFS) |
 
 ---
 
@@ -1224,8 +1384,8 @@ async def test_git_info_refs():
 
 **3. "Empty pack file"**
 - Check LakeFS has objects in the branch
-- Verify bridge is populating Git repo correctly
-- Ensure pygit2 is installed and working
+- Verify bridge is building blobs and trees correctly
+- Check File table has LFS flags set properly
 
 **4. Clone hangs**
 - Check for pack file generation errors

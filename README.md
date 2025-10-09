@@ -19,13 +19,15 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 ## Features
 
 - **HuggingFace Compatible** - Drop-in replacement for `huggingface_hub`, `hfutils`, `transformers`, `diffusers`
+- **Native Git Clone** - Standard Git operations (clone, pull, push) with Git LFS support
 - **Git-Like Versioning** - Branches, commits, tags via LakeFS
 - **S3 Storage** - Works with MinIO, AWS S3, Cloudflare R2, etc.
-- **Large File Support** - Git LFS protocol for files >10MB
+- **Large File Support** - Git LFS protocol with automatic LFS pointers (>1MB files)
 - **Organizations** - Multi-user namespaces with role-based access
 - **Web UI** - Vue 3 interface with file browser, editor, commit history
 - **CLI Tool** - Full-featured command-line interface
 - **File Deduplication** - Content-addressed storage by SHA256
+- **Pure Python Git Server** - No native dependencies, memory-efficient
 
 ## Quick Start
 
@@ -112,6 +114,35 @@ kohub-cli org member add my-org alice --role admin
 ```
 
 See [docs/CLI.md](./docs/CLI.md) for complete CLI documentation.
+
+### Git Clone (Native Git Support)
+
+```bash
+# Clone repository (fast - only metadata and small files)
+git clone http://localhost:28080/namespace/repo-name.git
+
+# For private repositories, use token authentication
+git clone http://username:your-token@localhost:28080/namespace/private-repo.git
+
+# Install Git LFS for large files
+cd repo-name
+git lfs install
+git lfs pull  # Download large files (>1MB)
+
+# All standard Git operations work
+git pull
+git checkout -b feature-branch
+# (push operations coming soon)
+```
+
+**How it works:**
+- Files **<1MB**: Included directly in Git pack (fast clone)
+- Files **>=1MB**: Stored as LFS pointers (download via `git lfs pull`)
+- Pure Python implementation (no pygit2/libgit2 dependencies)
+- Automatic `.gitattributes` and `.lfsconfig` generation
+- Memory-efficient (handles repos of any size)
+
+See [docs/Git.md](./docs/Git.md) for complete Git clone documentation and implementation details.
 
 ## Architecture
 

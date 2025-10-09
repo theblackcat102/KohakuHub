@@ -116,7 +116,8 @@ async function handleViewRepo(row) {
     repoDialogVisible.value = true;
   } catch (error) {
     ElMessage.error(
-      error.response?.data?.detail?.error || "Failed to load repository details",
+      error.response?.data?.detail?.error ||
+        "Failed to load repository details",
     );
   }
 }
@@ -199,7 +200,9 @@ onMounted(() => {
             />
           </el-form-item>
 
-          <el-button type="primary" @click="applyFilters">Apply Filters</el-button>
+          <el-button type="primary" @click="applyFilters"
+            >Apply Filters</el-button
+          >
           <el-button @click="resetFilters">Reset</el-button>
         </div>
       </el-card>

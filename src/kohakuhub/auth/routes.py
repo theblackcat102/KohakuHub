@@ -1,8 +1,10 @@
 """Authentication API routes."""
 
+import asyncio
 from datetime import datetime, timezone
-from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 from ..config import cfg
@@ -90,7 +92,10 @@ async def register(req: RegisterRequest):
             user_id=user.id, token=token, expires_at=get_expiry_time(24)
         )
 
-        if not send_verification_email(req.email, req.username, token):
+        verification_email = await asyncio.to_thread(
+            send_verification_email, req.email, req.username, token
+        )
+        if not verification_email:
             return {
                 "success": True,
                 "message": "User created but failed to send verification email",
@@ -113,8 +118,6 @@ async def register(req: RegisterRequest):
 @router.get("/verify-email")
 async def verify_email(token: str, response: Response):
     """Verify email with token and automatically log in user."""
-    from fastapi.responses import RedirectResponse
-
     logger.info(f"Email verification attempt with token: {token[:8]}...")
 
     verification = await get_email_verification(token)

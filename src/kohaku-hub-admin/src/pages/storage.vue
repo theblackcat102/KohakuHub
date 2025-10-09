@@ -165,11 +165,15 @@ onMounted(() => {
             <div class="mt-3">
               <div class="flex justify-between text-sm mb-1">
                 <span class="text-gray-600 dark:text-gray-400">Size:</span>
-                <span class="font-semibold">{{ formatBytes(bucket.total_size) }}</span>
+                <span class="font-semibold">{{
+                  formatBytes(bucket.total_size)
+                }}</span>
               </div>
               <div class="flex justify-between text-sm">
                 <span class="text-gray-600 dark:text-gray-400">Objects:</span>
-                <span class="font-semibold">{{ bucket.object_count.toLocaleString() }}</span>
+                <span class="font-semibold">{{
+                  bucket.object_count.toLocaleString()
+                }}</span>
               </div>
             </div>
 
@@ -232,9 +236,10 @@ onMounted(() => {
         >
           <el-table-column label="Key" min-width="400">
             <template #default="{ row }">
-              <code class="text-xs font-mono text-gray-700 dark:text-gray-300">{{
-                row.key
-              }}</code>
+              <code
+                class="text-xs font-mono text-gray-700 dark:text-gray-300"
+                >{{ row.key }}</code
+              >
             </template>
           </el-table-column>
           <el-table-column label="Size" width="120" align="right">

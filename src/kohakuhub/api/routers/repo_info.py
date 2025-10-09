@@ -279,6 +279,12 @@ async def list_repos(
             }
         )
 
+    # Sort by lastModified descending (newest first)
+    result.sort(
+        key=lambda x: x["lastModified"] or "",
+        reverse=True,
+    )
+
     return result
 
 
@@ -377,6 +383,13 @@ async def list_user_repos(
                     "tags": [],
                 }
             )
+
+        # Sort by lastModified descending (newest first)
+        # Repos without lastModified go to the end
+        repos_list.sort(
+            key=lambda x: x["lastModified"] or "",
+            reverse=True,
+        )
 
         result[key] = repos_list
 

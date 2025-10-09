@@ -20,6 +20,22 @@ const docs = [
     icon: "i-carbon-cloud",
   },
   {
+    title: "Admin Portal",
+    description:
+      "Administration interface for managing users, repositories, commits, and storage. Includes quota management, statistics dashboard, and S3 browser.",
+    path: "/docs/admin",
+    icon: "i-carbon-security",
+    featured: true,
+  },
+  {
+    title: "Git Clone Support",
+    description:
+      "Native Git clone/pull support with automatic LFS integration. Includes user guide, Cloudflare setup, troubleshooting, and pure Python implementation details.",
+    path: "/docs/git",
+    icon: "i-carbon-code",
+    featured: true,
+  },
+  {
     title: "Port Reference",
     description:
       "Quick reference guide for all ports used by KohakuHub services. Know which port to use for what.",
@@ -65,7 +81,10 @@ const docs = [
           v-for="doc in docs"
           :key="doc.path"
           :to="doc.path"
-          class="card hover:shadow-lg transition-shadow duration-200 p-6 cursor-pointer"
+          :class="[
+            'card hover:shadow-lg transition-shadow duration-200 p-6 cursor-pointer',
+            doc.featured ? 'ring-2 ring-primary-500 dark:ring-primary-400' : '',
+          ]"
         >
           <div class="flex items-start gap-4">
             <div
@@ -73,7 +92,17 @@ const docs = [
               class="text-3xl text-primary-600 dark:text-primary-400 flex-shrink-0"
             />
             <div class="flex-1 min-w-0">
-              <h2 class="text-xl font-semibold mb-2">{{ doc.title }}</h2>
+              <div class="flex items-center gap-2 mb-2">
+                <h2 class="text-xl font-semibold">{{ doc.title }}</h2>
+                <el-tag
+                  v-if="doc.featured"
+                  type="success"
+                  size="small"
+                  effect="dark"
+                >
+                  NEW
+                </el-tag>
+              </div>
               <p class="text-gray-600 dark:text-gray-400">
                 {{ doc.description }}
               </p>

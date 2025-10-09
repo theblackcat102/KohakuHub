@@ -76,6 +76,57 @@ s3://hub-storage/
               └── abcd1234...   ← Full SHA256 hash
 ```
 
+## Git Clone Support
+
+### Overview
+
+KohakuHub supports native Git clone operations using **pure Python implementation** (no pygit2/libgit2).
+
+**Git URL Format:**
+```
+http://hub.example.com/{namespace}/{repo-name}.git
+```
+
+**Git Endpoints:**
+- `GET /{namespace}/{name}.git/info/refs?service=git-upload-pack` - Service advertisement
+- `POST /{namespace}/{name}.git/git-upload-pack` - Clone/fetch/pull
+- `GET /{namespace}/{name}.git/HEAD` - Get HEAD reference
+- `POST /{namespace}/{name}.git/git-receive-pack` - Push (in progress)
+
+### LFS Integration
+
+**Automatic LFS Pointers:**
+- Files **<1MB**: Included in Git pack as regular blobs
+- Files **>=1MB**: Converted to LFS pointers (100-byte text files)
+
+**LFS Pointer Format:**
+```
+version https://git-lfs.github.com/spec/v1
+oid sha256:abc123...
+size 10737418240
+```
+
+**Client Workflow:**
+```bash
+# 1. Clone (gets pointers for large files)
+git clone http://hub.example.com/org/repo.git
+
+# 2. Download large files via LFS
+cd repo
+git lfs install
+git lfs pull  # Uses existing /info/lfs/ endpoints
+```
+
+**Benefits:**
+- Fast clones (only metadata + small files)
+- No memory issues (LFS pointers are tiny)
+- Leverages existing HuggingFace LFS infrastructure
+- Pure Python (no native dependencies)
+
+See [Git.md](./Git.md) for complete Git clone documentation and implementation details.
+
+---
+
 ## Upload Workflow
 
 ### Overview

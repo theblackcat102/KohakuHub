@@ -188,7 +188,9 @@ export async function getTimeseriesStats(token, days = 30) {
  */
 export async function getTopRepositories(token, limit = 10, by = "commits") {
   const client = createAdminClient(token);
-  const response = await client.get("/stats/top-repos", { params: { limit, by } });
+  const response = await client.get("/stats/top-repos", {
+    params: { limit, by },
+  });
   return response.data;
 }
 
@@ -218,7 +220,10 @@ export async function verifyAdminToken(token) {
  * @param {Object} params - Query parameters
  * @returns {Promise<Object>} Repository list
  */
-export async function listRepositories(token, { repo_type, namespace, limit = 100, offset = 0 } = {}) {
+export async function listRepositories(
+  token,
+  { repo_type, namespace, limit = 100, offset = 0 } = {},
+) {
   const client = createAdminClient(token);
   const response = await client.get("/repositories", {
     params: { repo_type, namespace, limit, offset },
@@ -236,7 +241,9 @@ export async function listRepositories(token, { repo_type, namespace, limit = 10
  */
 export async function getRepositoryDetails(token, repo_type, namespace, name) {
   const client = createAdminClient(token);
-  const response = await client.get(`/repositories/${repo_type}/${namespace}/${name}`);
+  const response = await client.get(
+    `/repositories/${repo_type}/${namespace}/${name}`,
+  );
   return response.data;
 }
 
@@ -248,7 +255,10 @@ export async function getRepositoryDetails(token, repo_type, namespace, name) {
  * @param {Object} params - Query parameters
  * @returns {Promise<Object>} Commit list
  */
-export async function listCommits(token, { repo_full_id, username, limit = 100, offset = 0 } = {}) {
+export async function listCommits(
+  token,
+  { repo_full_id, username, limit = 100, offset = 0 } = {},
+) {
   const client = createAdminClient(token);
   const response = await client.get("/commits", {
     params: { repo_full_id, username, limit, offset },
@@ -276,7 +286,11 @@ export async function listS3Buckets(token) {
  * @param {Object} params - Query parameters
  * @returns {Promise<Object>} Object list
  */
-export async function listS3Objects(token, bucket, { prefix = "", limit = 100 } = {}) {
+export async function listS3Objects(
+  token,
+  bucket,
+  { prefix = "", limit = 100 } = {},
+) {
   const client = createAdminClient(token);
   const response = await client.get(`/storage/objects/${bucket}`, {
     params: { prefix, limit },

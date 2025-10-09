@@ -48,6 +48,7 @@ Nginx on port 28080:
 2. Proxies API requests to backend:48888:
    - `/api/*` → `http://hub-api:48888/api/*`
    - `/org/*` → `http://hub-api:48888/org/*`
+   - `/{namespace}/{name}.git/*` → `http://hub-api:48888/{namespace}/{name}.git/*` (Git Smart HTTP)
    - `/{type}s/{namespace}/{name}/resolve/*` → `http://hub-api:48888/{type}s/{namespace}/{name}/resolve/*`
 
 ### Client Configuration
@@ -63,6 +64,20 @@ os.environ["HF_TOKEN"] = "your_token"
 ```bash
 export HF_ENDPOINT=http://localhost:28080
 kohub-cli auth login
+```
+
+**For Git Clone:**
+```bash
+# Clone repository
+git clone http://localhost:28080/namespace/repo.git
+
+# With authentication (private repos)
+git clone http://username:token@localhost:28080/namespace/repo.git
+
+# Download large files
+cd repo
+git lfs install
+git lfs pull
 ```
 
 **❌ WRONG:**

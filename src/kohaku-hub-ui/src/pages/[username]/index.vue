@@ -269,9 +269,9 @@
             </div>
 
             <!-- Show More button -->
-            <RouterLink :to="`/${username}/models`">
+            <RouterLink :to="`/${username}/models`" class="block mt-4">
               <el-button v-if="hasMoreRepos('model')" class="w-full">
-                Show all {{ getCount("model") }} models ->
+                Show all {{ getCount("model") }} models →
               </el-button>
             </RouterLink>
           </div>
@@ -320,7 +320,7 @@
                     >
                       {{ repo.id }}
                     </h3>
-                    <div class="text-xs text-gray-600 mt-1">
+                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                       Updated {{ formatDate(repo.lastModified) }}
                     </div>
                   </div>
@@ -356,9 +356,9 @@
             </div>
 
             <!-- Show More button -->
-            <RouterLink :to="`/${username}/datasets`">
+            <RouterLink :to="`/${username}/datasets`" class="block mt-4">
               <el-button v-if="hasMoreRepos('dataset')" class="w-full">
-                Show all {{ getCount("dataset") }} datasets ->
+                Show all {{ getCount("dataset") }} datasets →
               </el-button>
             </RouterLink>
           </div>
@@ -405,7 +405,7 @@
                     >
                       {{ repo.id }}
                     </h3>
-                    <div class="text-xs text-gray-600 mt-1">
+                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                       Updated {{ formatDate(repo.lastModified) }}
                     </div>
                   </div>
@@ -441,9 +441,9 @@
             </div>
 
             <!-- Show More button -->
-            <RouterLink :to="`/${username}/spaces`">
+            <RouterLink :to="`/${username}/spaces`" class="block mt-4">
               <el-button v-if="hasMoreRepos('space')" class="w-full">
-                Show all {{ getCount("space") }} spaces ->
+                Show all {{ getCount("space") }} spaces →
               </el-button>
             </RouterLink>
           </div>

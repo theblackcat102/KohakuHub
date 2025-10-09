@@ -19,7 +19,7 @@ const menuItems = [
   { path: "/", label: "Dashboard", icon: "i-carbon-dashboard" },
   { path: "/users", label: "Users", icon: "i-carbon-user-multiple" },
   { path: "/repositories", label: "Repositories", icon: "i-carbon-data-base" },
-  { path: "/commits", label: "Commits", icon: "i-carbon-git-commit" },
+  { path: "/commits", label: "Commits", icon: "i-carbon-version" },
   { path: "/storage", label: "Storage", icon: "i-carbon-data-volume" },
   { path: "/quotas", label: "Quotas", icon: "i-carbon-meter" },
 ];

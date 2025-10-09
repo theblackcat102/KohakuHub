@@ -5,7 +5,7 @@
     class="min-h-screen w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors flex flex-col"
   >
     <TheHeader />
-    <main class="flex-1 min-h-screen-content">
+    <main class="flex-1">
       <RouterView v-slot="{ Component, route }">
         <keep-alive :include="['RepoViewer']">
           <component :is="Component" :key="getRouteKey(route)" />
@@ -40,10 +40,3 @@ function getRouteKey(route) {
   return route.path;
 }
 </script>
-
-<style scoped>
-/* Prevent layout shift by ensuring main always has minimum height */
-.min-h-screen-content {
-  min-height: calc(100vh - 64px - 80px); /* viewport - header - footer approx */
-}
-</style>
