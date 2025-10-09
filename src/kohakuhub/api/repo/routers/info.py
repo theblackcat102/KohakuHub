@@ -181,7 +181,7 @@ async def get_repo_info(
                         else obj.get("checksum", "")
                     )
                     sibling["lfs"] = {
-                        "oid": checksum,
+                        "sha256": checksum,
                         "size": obj["size_bytes"],
                         "pointerSize": 134,
                     }
@@ -189,7 +189,7 @@ async def get_repo_info(
                 siblings.append(sibling)
 
         except Exception as ex:
-            logger.exception(f"Could not fetch siblings for {lakefs_repo}: {str(ex)}")
+            logger.exception(f"Could not fetch siblings for {lakefs_repo}: {str(ex)}", ex)
             logger.debug(f"Could not fetch siblings for {lakefs_repo}: {str(ex)}")
             # Continue without siblings if fetch fails
 
