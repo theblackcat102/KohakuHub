@@ -25,6 +25,14 @@ const filesToCopy = [
     dest: path.join(docsPublicDir, 'CLI.md'),
   },
   {
+    source: path.join(rootDir, 'docs', 'Git.md'),
+    dest: path.join(docsPublicDir, 'Git.md'),
+  },
+  {
+    source: path.join(rootDir, 'docs', 'Admin.md'),
+    dest: path.join(docsPublicDir, 'Admin.md'),
+  },
+  {
     source: path.join(rootDir, 'docs', 'setup.md'),
     dest: path.join(docsPublicDir, 'setup.md'),
   },
