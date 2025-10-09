@@ -9,14 +9,14 @@ from kohakuhub.config import cfg
 from kohakuhub.db import File
 from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
-from kohakuhub.api.utils.git_objects import (
+from kohakuhub.api.git.utils.objects import (
     build_nested_trees,
     create_blob_object,
     create_commit_object,
     create_pack_file,
 )
-from kohakuhub.api.utils.git_server import create_empty_pack
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.git.utils.server import create_empty_pack
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 
 logger = get_logger("GIT_LAKEFS")
 

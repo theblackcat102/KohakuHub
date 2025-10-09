@@ -5,30 +5,36 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from kohakuhub.api.routers import (
-    admin,
-    branches,
-    commit_history,
-    commits,
-    files,
-    git_http,
-    lfs,
-    misc,
-    quota,
-    repo_crud,
-    repo_info,
-    repo_tree,
-    settings,
-    ssh_keys,
-)
-from kohakuhub.api.routers.files import resolve_file_get, resolve_file_head
-from kohakuhub.api.utils.s3 import init_storage
-from kohakuhub.auth import router as auth_router
-from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.config import cfg
 from kohakuhub.db import Repository, User
 from kohakuhub.logger import get_logger
-from kohakuhub.org import router as org_router
+from kohakuhub.utils.s3 import init_storage
+from kohakuhub.api import (
+    admin,
+    branches,
+    files,
+    misc,
+    settings,
+)
+from kohakuhub.api.files import resolve_file_get, resolve_file_head
+from kohakuhub.api.org import router as org
+from kohakuhub.api.quota import router as quota
+from kohakuhub.api.commit import (
+    history as commit_history,
+    router as commits,
+)
+from kohakuhub.api.git.routers import (
+    http as git_http,
+    lfs,
+    ssh_keys,
+)
+from kohakuhub.api.repo.routers import (
+    crud as repo_crud,
+    info as repo_info,
+    tree as repo_tree,
+)
+from kohakuhub.auth import router as auth_router
+from kohakuhub.auth.dependencies import get_optional_user
 
 logger = get_logger("MAIN")
 
@@ -74,15 +80,15 @@ app.include_router(repo_crud.router, prefix=cfg.app.api_base, tags=["repositorie
 app.include_router(repo_info.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(repo_tree.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(files.router, prefix=cfg.app.api_base, tags=["files"])
-app.include_router(commits.router, prefix=cfg.app.api_base, tags=["commits"])
+app.include_router(commits, prefix=cfg.app.api_base, tags=["commits"])
 app.include_router(commit_history.router, prefix=cfg.app.api_base, tags=["commits"])
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(branches.router, prefix=cfg.app.api_base, tags=["branches"])
 app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
-app.include_router(quota.router, tags=["quota"])
+app.include_router(quota, tags=["quota"])
 app.include_router(admin.router, prefix="/admin/api", tags=["admin"])
 app.include_router(misc.router, prefix=cfg.app.api_base, tags=["utils"])
-app.include_router(org_router, prefix="/org", tags=["organizations"])
+app.include_router(org, prefix="/org", tags=["organizations"])
 app.include_router(git_http.router, tags=["git"])
 app.include_router(ssh_keys.router, tags=["ssh-keys"])
 

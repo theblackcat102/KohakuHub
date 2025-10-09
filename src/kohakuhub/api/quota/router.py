@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from kohakuhub.api.utils.quota import (
+from kohakuhub.api.quota.util import (
     get_storage_info,
     set_quota,
     update_namespace_storage,

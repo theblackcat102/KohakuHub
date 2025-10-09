@@ -10,8 +10,8 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from kohakuhub.db import Repository, Token, User
 from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
-from kohakuhub.api.utils.git_lakefs_bridge import GitLakeFSBridge
-from kohakuhub.api.utils.git_server import (
+from kohakuhub.api.git.utils.lakefs_bridge import GitLakeFSBridge
+from kohakuhub.api.git.utils.server import (
     GitReceivePackHandler,
     GitUploadPackHandler,
     parse_git_credentials,

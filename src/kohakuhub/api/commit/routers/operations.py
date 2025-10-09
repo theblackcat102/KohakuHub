@@ -9,10 +9,10 @@ from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from kohakuhub.api.utils.gc import run_gc_for_file, track_lfs_object
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.api.utils.quota import update_namespace_storage
-from kohakuhub.api.utils.s3 import get_object_metadata, object_exists
+from kohakuhub.api.repo.utils.gc import run_gc_for_file, track_lfs_object
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.quota.util import update_namespace_storage
+from kohakuhub.utils.s3 import get_object_metadata, object_exists
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_write_permission
 from kohakuhub.config import cfg

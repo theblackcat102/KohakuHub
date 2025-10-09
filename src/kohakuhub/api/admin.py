@@ -19,12 +19,12 @@ from kohakuhub.db_async import (
     execute_db_query,
 )
 from kohakuhub.logger import get_logger
-from kohakuhub.api.utils.quota import (
+from kohakuhub.api.quota.util import (
     get_storage_info,
     set_quota,
     update_namespace_storage,
 )
-from kohakuhub.api.utils.s3 import get_s3_client
+from kohakuhub.utils.s3 import get_s3_client
 from kohakuhub.async_utils import run_in_s3_executor
 
 logger = get_logger("ADMIN")

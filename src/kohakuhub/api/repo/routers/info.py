@@ -4,13 +4,13 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from kohakuhub.api.utils.hf import (
+from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     format_hf_datetime,
     hf_error_response,
     hf_repo_not_found,
 )
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg

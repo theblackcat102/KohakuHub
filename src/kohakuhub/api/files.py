@@ -12,15 +12,15 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from kohakuhub.api.utils.hf import (
+from kohakuhub.api.repo.utils.hf import (
     hf_repo_not_found,
     hf_revision_not_found,
     hf_server_error,
     is_lakefs_not_found_error,
 )
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.api.utils.quota import check_quota
-from kohakuhub.api.utils.s3 import generate_download_presigned_url, parse_s3_uri
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.quota.util import check_quota
+from kohakuhub.utils.s3 import generate_download_presigned_url, parse_s3_uri
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.auth.permissions import (
     check_repo_read_permission,

@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException
 
-from kohakuhub.db import User, Organization, UserOrganization
+from kohakuhub.db import Organization, User, UserOrganization
 
 # Error messages
 _ERR_USER_NOT_FOUND = "User not found"

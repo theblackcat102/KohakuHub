@@ -6,7 +6,7 @@ for users and organizations with separate tracking for private and public reposi
 
 import asyncio
 
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.config import cfg
 from kohakuhub.db import LFSObjectHistory, Organization, Repository, User
 from kohakuhub.db_async import execute_db_query

@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from kohakuhub.api.utils.quota import check_quota
-from kohakuhub.api.utils.s3 import (
+from kohakuhub.api.quota.util import check_quota
+from kohakuhub.utils.s3 import (
     generate_download_presigned_url,
     generate_upload_presigned_url,
     get_object_metadata,

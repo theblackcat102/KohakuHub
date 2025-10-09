@@ -1,0 +1,1 @@
+"""Git support module."""

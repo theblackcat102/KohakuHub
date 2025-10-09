@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from kohakuhub.api.utils.hf import hf_repo_not_found
+from kohakuhub.api.repo.utils.hf import hf_repo_not_found
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
 from kohakuhub.db_async import (

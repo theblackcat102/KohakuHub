@@ -5,14 +5,14 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from kohakuhub.api.utils.hf import (
+from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     hf_error_response,
     hf_repo_not_found,
     hf_server_error,
     is_lakefs_not_found_error,
 )
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import (
     check_namespace_permission,

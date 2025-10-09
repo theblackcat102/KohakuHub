@@ -8,8 +8,8 @@ from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory
 from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
-from kohakuhub.api.utils.lakefs import get_lakefs_client
-from kohakuhub.api.utils.s3 import get_s3_client, object_exists
+from kohakuhub.utils.lakefs import get_lakefs_client
+from kohakuhub.utils.s3 import get_s3_client, object_exists
 
 logger = get_logger("GC")
 

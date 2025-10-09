@@ -50,9 +50,106 @@ Follow [CLAUDE.md](./CLAUDE.md) principles:
   - `import os` before `from datetime import`
   - `from kohakuhub.db import` before `from kohakuhub.auth.dependencies import`
 - **ALWAYS** use `db_async` wrappers for all DB operations (never direct Peewee in async code)
+- **NO imports in functions** (except to avoid circular imports)
+- Use `asyncio.gather()` for parallel async operations (NOT sequential await in loops)
 - Split large functions into smaller ones (especially match-case with >3 branches)
 - Use `black` for code formatting
 - Type hints recommended but not required (no static type checking)
+
+#### File Structure Rules
+
+**Global Infrastructure** (used by multiple features):
+```
+kohakuhub/
+├── utils/                  # Global infrastructure
+│   ├── s3.py              # S3 client wrapper
+│   └── lakefs.py          # LakeFS client wrapper
+├── auth/                   # Cross-cutting concern (stays at root)
+│   ├── routes.py          # Auth endpoints
+│   ├── dependencies.py    # Used by ALL routers
+│   └── permissions.py     # Used by ALL routers
+├── config.py              # Configuration
+├── db.py                  # Database models
+├── db_async.py            # Async DB wrappers
+├── logger.py              # Logging utilities
+└── lakefs_rest_client.py  # LakeFS REST client
+```
+
+**API Endpoints** (FastAPI routers):
+
+**Rule 1:** Simple, standalone endpoint → Single file in `api/`
+```
+api/
+├── admin.py               # Admin portal endpoints
+├── branches.py            # Branch operations
+├── files.py               # File operations (large but no specific utils)
+├── misc.py                # Misc utilities
+└── settings.py            # Settings endpoints
+```
+
+**Rule 2:** Feature with utils → `api/<feature>/`
+```
+api/org/
+├── router.py              # Organization endpoints
+└── util.py                # Organization utilities
+
+api/quota/
+├── router.py              # Quota endpoints
+└── util.py                # Quota calculations
+```
+
+**Rule 3:** Complex feature (multiple routers) → `api/<feature>/routers/`
+```
+api/repo/
+├── routers/
+│   ├── crud.py            # Create/delete/move repositories
+│   ├── info.py            # Repository info/listing
+│   └── tree.py            # File tree operations
+└── utils/
+    ├── hf.py              # HuggingFace compatibility (used by multiple routers)
+    └── gc.py              # Garbage collection
+
+api/commit/
+└── routers/
+    ├── operations.py      # Commit operations
+    └── history.py         # Commit history/diff
+
+api/git/
+├── routers/
+│   ├── http.py            # Git Smart HTTP
+│   ├── lfs.py             # Git LFS protocol
+│   └── ssh_keys.py        # SSH key management
+└── utils/
+    ├── objects.py         # Pure Python Git objects
+    ├── server.py          # Git protocol (pkt-line)
+    └── lakefs_bridge.py   # Git-LakeFS translation
+```
+
+**Decision Tree:**
+1. **No utils needed?** → Use Rule 1 (single file `api/xxx.py`)
+2. **Needs utils?** → Use Rule 2 (folder `api/xxx/` with `router.py` + `util.py`)
+3. **Multiple routers?** → Use Rule 3 (folder `api/xxx/routers/` + optional `utils/`)
+4. **Utils used by EVERYONE?** → Put in root `utils/` (s3, lakefs)
+5. **Utils used by multiple routers in same feature?** → Put in `api/xxx/utils/`
+
+**Router Import Pattern in `main.py`:**
+```python
+# Rule 1 (single file exports router)
+from kohakuhub.api import admin, branches, files
+
+# Rule 2 (folder exports router)
+from kohakuhub.api.org import router as org
+from kohakuhub.api.quota import router as quota
+
+# Rule 3 (multiple routers)
+from kohakuhub.api.commit import router as commits, history as commit_history
+from kohakuhub.api.repo.routers import crud, info, tree
+
+# Usage in app.include_router():
+app.include_router(admin.router, ...)      # admin IS a module with .router
+app.include_router(commits, ...)           # commits IS the router (imported as router)
+app.include_router(commit_history.router, ...)  # commit_history is a module
+```
 
 ### Frontend (Vue 3)
 

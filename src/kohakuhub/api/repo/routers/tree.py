@@ -6,14 +6,14 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Form
 
-from kohakuhub.api.utils.hf import (
+from kohakuhub.api.repo.utils.hf import (
     hf_repo_not_found,
     hf_revision_not_found,
     hf_server_error,
     is_lakefs_not_found_error,
     is_lakefs_revision_error,
 )
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg

@@ -3,9 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-# Error messages
-_ERR_ORG_NOT_FOUND = "Organization not found"
-
+from kohakuhub.db import Organization, User, UserOrganization
 from kohakuhub.db_async import (
     create_organization as create_org_async,
     create_user_organization,
@@ -15,16 +13,18 @@ from kohakuhub.db_async import (
     get_user_organization,
     list_organization_members as list_org_members_async,
 )
-from kohakuhub.db import Organization, User, UserOrganization
-from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.logger import get_logger
-from kohakuhub.org.utils import (
-    get_organization_details as get_org_details_util,
+from kohakuhub.api.org.util import (
     add_member_to_organization as add_member_util,
-    remove_member_from_organization,
+    get_organization_details as get_org_details_util,
     get_user_organizations,
+    remove_member_from_organization,
     update_member_role as update_member_role_util,
 )
+from kohakuhub.auth.dependencies import get_current_user
+
+# Error messages
+_ERR_ORG_NOT_FOUND = "Organization not found"
 
 logger = get_logger("ORG")
 

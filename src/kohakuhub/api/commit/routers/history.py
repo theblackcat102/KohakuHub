@@ -7,8 +7,8 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, Query
 
-from kohakuhub.api.utils.hf import hf_repo_not_found, hf_server_error
-from kohakuhub.api.utils.lakefs import lakefs_repo_name
+from kohakuhub.api.repo.utils.hf import hf_repo_not_found, hf_server_error
+from kohakuhub.utils.lakefs import lakefs_repo_name
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
@@ -427,11 +427,11 @@ async def get_commit_diff(
                                 current_lines,
                                 fromfile=f"a/{path}",
                                 tofile=f"b/{path}",
-                                lineterm="",
+                                lineterm="\n",
                             )
                         )
                         # Join with newlines (lineterm="" means no automatic newlines)
-                        diff_text = "\n".join(diff_lines)
+                        diff_text = "".join(diff_lines)
                         # Keep diff even if empty string (don't convert to None)
                         file_info["diff"] = diff_text
                         logger.info(

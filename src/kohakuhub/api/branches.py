@@ -8,19 +8,19 @@ from pydantic import BaseModel
 from kohakuhub.db import Repository, User
 from kohakuhub.logger import get_logger
 from kohakuhub.db_async import create_commit, get_repository
-from kohakuhub.api.utils.gc import (
+from kohakuhub.api.repo.utils.gc import (
     check_commit_range_recoverability,
     check_lfs_recoverability,
     sync_file_table_with_commit,
     track_commit_lfs_objects,
 )
-from kohakuhub.api.utils.hf import (
+from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     hf_error_response,
     hf_repo_not_found,
     hf_server_error,
 )
-from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import (
     check_repo_delete_permission,
