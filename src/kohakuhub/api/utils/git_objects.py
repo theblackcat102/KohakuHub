@@ -42,13 +42,22 @@ def create_tree_object(entries: list[tuple[str, str, str]]) -> tuple[str, bytes]
 
     Args:
         entries: List of (mode, name, sha1_hex)
-                 mode: "100644" (file), "100755" (executable), "040000" (dir)
+                 mode: "100644" (file), "100755" (executable), "40000" (dir)
 
     Returns:
         (sha1_hex, object_data_with_header)
     """
-    # Git requires entries sorted by name
-    sorted_entries = sorted(entries, key=lambda x: x[1])
+
+    # Git requires special sorting: directories are sorted as if they have trailing "/"
+    # This is critical for correct tree SHA-1!
+    def sort_key(entry):
+        mode, name, sha1 = entry
+        # Directories (mode 40000 or 040000) get trailing "/" for sorting
+        if mode in ("40000", "040000"):
+            return name + "/"
+        return name
+
+    sorted_entries = sorted(entries, key=sort_key)
 
     # Build tree content
     tree_content = b""
@@ -226,27 +235,44 @@ def build_nested_trees(
     """
     # Organize entries by directory
     dir_contents = {}  # dir_path -> [(mode, name, sha1)]
+    all_dirs = set()  # Track all directories we need to create
 
     for mode, path, blob_sha1 in flat_entries:
         parts = path.split("/")
 
+        # Add file to its parent directory
         if len(parts) == 1:
             # Root-level file
-            if "" not in dir_contents:
-                dir_contents[""] = []
-            dir_contents[""].append((mode, parts[0], blob_sha1))
+            dir_path = ""
         else:
-            # Nested file - add to appropriate directory
-            for i in range(len(parts)):
-                if i == len(parts) - 1:
-                    # File itself
-                    dir_path = "/".join(parts[:i]) if i > 0 else ""
-                    if dir_path not in dir_contents:
-                        dir_contents[dir_path] = []
-                    dir_contents[dir_path].append((mode, parts[i], blob_sha1))
+            # Nested file
+            dir_path = "/".join(parts[:-1])
 
-    # Build trees bottom-up (deepest directories first)
-    sorted_dirs = sorted(dir_contents.keys(), key=lambda x: x.count("/"), reverse=True)
+        if dir_path not in dir_contents:
+            dir_contents[dir_path] = []
+
+        file_name = parts[-1]
+        dir_contents[dir_path].append((mode, file_name, blob_sha1))
+
+        # Track all parent directories
+        for i in range(1, len(parts)):
+            parent_dir = "/".join(parts[:i])
+            all_dirs.add(parent_dir)
+
+    # Ensure all directories exist in dir_contents (even if empty)
+    for dir_path in all_dirs:
+        if dir_path not in dir_contents:
+            dir_contents[dir_path] = []
+
+    # Build trees bottom-up (deepest directories first, ROOT LAST!)
+    def sort_dirs(dir_path):
+        # Root ("") must be last, so give it LOWEST value (reverse=True → descending)
+        if dir_path == "":
+            return (-999, "")  # Lowest value, processed last
+        else:
+            return (dir_path.count("/"), dir_path)
+
+    sorted_dirs = sorted(dir_contents.keys(), key=sort_dirs, reverse=True)
 
     dir_sha1s = {}  # dir_path -> tree_sha1
     tree_objects = []  # List of (type, tree_data)
@@ -254,21 +280,63 @@ def build_nested_trees(
     for dir_path in sorted_dirs:
         entries = []
 
+        # Add files in this directory
         for mode, name, entry_sha1 in dir_contents[dir_path]:
-            # Check if this name is a subdirectory
-            subdir_path = f"{dir_path}/{name}" if dir_path else name
+            entries.append((mode, name, entry_sha1))
 
-            if subdir_path in dir_sha1s:
-                # It's a directory - use tree mode and its tree SHA-1
-                entries.append(("040000", name, dir_sha1s[subdir_path]))
+        # DEBUG: Log what we're adding to this directory
+        print(
+            f"DEBUG: Building tree for '{dir_path}', files: {len(dir_contents[dir_path])}"
+        )
+
+        # Add subdirectories that have been processed (bottom-up)
+        # Find all direct children of this directory
+        subdirs_added = 0
+        for child_dir_path, child_tree_sha1 in dir_sha1s.items():
+            # Check if child_dir_path is a direct child of dir_path
+            if dir_path == "":
+                # Root directory - find top-level dirs
+                if "/" not in child_dir_path and child_dir_path:
+                    # Top-level directory like "images"
+                    dir_name = child_dir_path
+                    # Check not already added as file
+                    if not any(name == dir_name for _, name, _ in entries):
+                        entries.append(("40000", dir_name, child_tree_sha1))
+                        subdirs_added += 1
+                        print(
+                            f"  DEBUG: Added subdir to root: {dir_name} → {child_tree_sha1[:8]}"
+                        )
             else:
-                # It's a file - use provided mode and blob SHA-1
-                entries.append((mode, name, entry_sha1))
+                # Non-root directory - find direct children
+                prefix = dir_path + "/"
+                if child_dir_path.startswith(prefix):
+                    remainder = child_dir_path[len(prefix) :]
+                    if "/" not in remainder:
+                        # Direct child (e.g., "images/samples" is child of "images")
+                        dir_name = remainder
+                        if not any(name == dir_name for _, name, _ in entries):
+                            entries.append(("40000", dir_name, child_tree_sha1))
+                            subdirs_added += 1
+                            print(
+                                f"  DEBUG: Added subdir to {dir_path}: {dir_name} → {child_tree_sha1[:8]}"
+                            )
+
+        print(
+            f"  DEBUG: Total entries: {len(entries)} ({len(dir_contents[dir_path])} files + {subdirs_added} subdirs)"
+        )
 
         # Create tree object for this directory
-        tree_sha1, tree_data = create_tree_object(entries)
-        dir_sha1s[dir_path] = tree_sha1
-        tree_objects.append((2, tree_data))  # Type 2 = tree
+        if entries:
+            tree_sha1, tree_data = create_tree_object(entries)
+            dir_sha1s[dir_path] = tree_sha1
+            tree_objects.append((2, tree_data))  # Type 2 = tree
+            print(f"  DEBUG: Created tree {tree_sha1[:8]} with {len(entries)} entries")
+        else:
+            # Empty directory - create empty tree
+            tree_sha1, tree_data = create_tree_object([])
+            dir_sha1s[dir_path] = tree_sha1
+            tree_objects.append((2, tree_data))
+            print(f"  DEBUG: Created empty tree {tree_sha1[:8]}")
 
     # Return root tree SHA-1
     root_sha1 = dir_sha1s.get("")
