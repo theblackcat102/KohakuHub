@@ -258,14 +258,32 @@ class GitUploadPackHandler:
             # Fallback to empty pack
             pack_data = create_empty_pack()
 
-        # Side-band protocol: prefix each chunk with band number
+        # Side-band protocol: prefix chunks with band number
         # Band 1 = pack data, Band 2 = progress, Band 3 = error
-        # Format: <band><data>
+        # IMPORTANT: pkt-line max length is 65520 bytes (0xFFFF)
+        # Must chunk large packs into multiple pkt-lines!
 
-        # Send pack data on band 1
-        pack_line = b"\x01" + pack_data
+        MAX_CHUNK_SIZE = 65500  # Leave room for band byte and pkt-line header
 
-        response = nak_response + pkt_line(pack_line) + pkt_line(None)
+        response_parts = [nak_response]
+
+        # Chunk pack data if needed
+        offset = 0
+        while offset < len(pack_data):
+            chunk = pack_data[offset : offset + MAX_CHUNK_SIZE]
+            # Prefix with band 1 indicator
+            band_chunk = b"\x01" + chunk
+            response_parts.append(pkt_line(band_chunk))
+            offset += MAX_CHUNK_SIZE
+
+        # Final flush packet
+        response_parts.append(pkt_line(None))
+
+        response = b"".join(response_parts)
+
+        logger.info(
+            f"Sending pack in {len(response_parts) - 2} chunk(s), total {len(response)} bytes"
+        )
 
         return response
 
