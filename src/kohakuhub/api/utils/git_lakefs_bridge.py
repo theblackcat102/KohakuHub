@@ -14,11 +14,62 @@ from pathlib import Path
 
 import pygit2
 
+from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
 from kohakuhub.api.utils.git_server import create_empty_pack
 from kohakuhub.api.utils.lakefs import get_lakefs_client, lakefs_repo_name
 
 logger = get_logger("GIT_LAKEFS")
+
+
+def create_lfs_pointer(sha256: str, size: int) -> bytes:
+    """Create Git LFS pointer file content.
+
+    Args:
+        sha256: File SHA256 hash
+        size: File size in bytes
+
+    Returns:
+        LFS pointer file content (text)
+    """
+    pointer = f"""version https://git-lfs.github.com/spec/v1
+oid sha256:{sha256}
+size {size}
+"""
+    return pointer.encode("utf-8")
+
+
+def generate_gitattributes(lfs_patterns: list[str]) -> bytes:
+    """Generate .gitattributes file for Git LFS.
+
+    Args:
+        lfs_patterns: List of file patterns that should use LFS
+
+    Returns:
+        .gitattributes content
+    """
+    # Group by extension for cleaner output
+    extensions = set()
+    specific_files = []
+
+    for pattern in lfs_patterns:
+        if "." in pattern:
+            ext = pattern.rsplit(".", 1)[-1]
+            extensions.add(ext)
+        else:
+            specific_files.append(pattern)
+
+    lines = ["# Git LFS tracking\n"]
+
+    # Add extension-based rules
+    for ext in sorted(extensions):
+        lines.append(f"*.{ext} filter=lfs diff=lfs merge=lfs -text\n")
+
+    # Add specific file rules
+    for file_path in sorted(specific_files):
+        lines.append(f"{file_path} filter=lfs diff=lfs merge=lfs -text\n")
+
+    return "".join(lines).encode("utf-8")
 
 
 def compute_git_blob_sha(content: bytes) -> str:
@@ -276,6 +327,8 @@ class GitLakeFSBridge:
     ) -> pygit2.Oid | None:
         """Build nested Git tree from flat list of LakeFS objects.
 
+        Uses LFS pointers for large files to avoid downloading/storing massive files.
+
         Args:
             repo: pygit2 Repository
             objects: List of LakeFS object metadata
@@ -286,38 +339,108 @@ class GitLakeFSBridge:
         """
         # Build directory tree structure
         tree_entries = {}  # path -> (oid, mode)
+        lfs_paths = []  # Track LFS files for .gitattributes
 
         # Filter to only file objects
         file_objects = [obj for obj in objects if obj.get("path_type") == "object"]
 
-        # Process all objects concurrently
-        async def process_object(obj):
+        # Separate small and large files based on LFS threshold
+        small_files = []
+        large_files = []
+
+        for obj in file_objects:
+            size = obj.get("size_bytes", 0)
+            if size >= cfg.app.lfs_threshold_bytes:
+                large_files.append(obj)
+            else:
+                small_files.append(obj)
+
+        logger.info(
+            f"Processing {len(small_files)} small files, "
+            f"{len(large_files)} large files (LFS pointers)"
+        )
+
+        # Process small files normally (download content)
+        async def process_small_file(obj):
             path = obj["path"]
             try:
-                # Download object content
                 content = await self.lakefs_client.get_object(
                     repository=self.lakefs_repo, ref=branch, path=path
                 )
-
-                # Create blob (run in thread pool)
                 blob_oid = await asyncio.to_thread(repo.create_blob, content)
-
-                logger.debug(f"Created blob for {path}: {blob_oid}")
-
+                logger.debug(f"Created blob for {path}: {len(content)} bytes")
                 return path, blob_oid, pygit2.GIT_FILEMODE_BLOB
 
             except Exception as e:
                 logger.warning(f"Failed to download {path}: {e}")
                 return None
 
-        # Download and create blobs concurrently
-        results = await asyncio.gather(*[process_object(obj) for obj in file_objects])
+        # Process large files as LFS pointers (NO full content download!)
+        async def process_large_file(obj):
+            path = obj["path"]
+            try:
+                # Get metadata only (stat instead of get_object)
+                stat = await self.lakefs_client.stat_object(
+                    repository=self.lakefs_repo, ref=branch, path=path
+                )
+
+                size = stat.get("size_bytes", 0)
+                checksum = stat.get("checksum", "")
+
+                # Extract SHA256 from checksum
+                if checksum.startswith("sha256:"):
+                    sha256 = checksum.replace("sha256:", "")
+                else:
+                    # Fallback: download to compute hash (should rarely happen)
+                    logger.warning(
+                        f"No checksum for {path}, downloading to compute hash"
+                    )
+                    content = await self.lakefs_client.get_object(
+                        repository=self.lakefs_repo, ref=branch, path=path
+                    )
+                    sha256 = hashlib.sha256(content).hexdigest()
+
+                # Create LFS pointer file
+                pointer_content = create_lfs_pointer(sha256, size)
+                blob_oid = await asyncio.to_thread(repo.create_blob, pointer_content)
+
+                logger.debug(
+                    f"Created LFS pointer for {path}: {size} bytes → "
+                    f"{len(pointer_content)} bytes pointer"
+                )
+
+                return path, blob_oid, pygit2.GIT_FILEMODE_BLOB, True  # True = is_lfs
+
+            except Exception as e:
+                logger.warning(f"Failed to create LFS pointer for {path}: {e}")
+                return None
+
+        # Process files concurrently
+        small_results = await asyncio.gather(
+            *[process_small_file(obj) for obj in small_files]
+        )
+        large_results = await asyncio.gather(
+            *[process_large_file(obj) for obj in large_files]
+        )
 
         # Build tree_entries from results
-        for result in results:
+        for result in small_results:
             if result is not None:
                 path, blob_oid, mode = result
                 tree_entries[path] = (blob_oid, mode)
+
+        for result in large_results:
+            if result is not None:
+                path, blob_oid, mode, is_lfs = result
+                tree_entries[path] = (blob_oid, mode)
+                lfs_paths.append(path)
+
+        # Add .gitattributes if we have LFS files
+        if lfs_paths:
+            logger.info(f"Generating .gitattributes for {len(lfs_paths)} LFS files")
+            gitattributes_content = generate_gitattributes(lfs_paths)
+            blob_oid = await asyncio.to_thread(repo.create_blob, gitattributes_content)
+            tree_entries[".gitattributes"] = (blob_oid, pygit2.GIT_FILEMODE_BLOB)
 
         if not tree_entries:
             return None
