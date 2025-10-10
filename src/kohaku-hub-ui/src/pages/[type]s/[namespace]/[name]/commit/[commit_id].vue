@@ -65,19 +65,19 @@
         <!-- Action Buttons -->
         <div class="flex gap-3 mb-4">
           <el-button
-            type="warning"
             size="small"
             @click="showRevertDialog"
-            :icon="'RefreshLeft'"
+            class="bg-orange-500 hover:bg-orange-600 text-white border-orange-500 dark:bg-orange-600 dark:hover:bg-orange-700"
           >
+            <div class="i-carbon-undo inline-block mr-1" />
             Revert Commit
           </el-button>
           <el-button
             type="primary"
             size="small"
             @click="showResetDialog"
-            :icon="'ArrowLeft'"
           >
+            <div class="i-carbon-reset inline-block mr-1" />
             Reset to This State
           </el-button>
         </div>
