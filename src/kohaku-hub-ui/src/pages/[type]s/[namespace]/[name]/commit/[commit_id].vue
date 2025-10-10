@@ -67,16 +67,12 @@
           <el-button
             size="small"
             @click="showRevertDialog"
-            class="bg-orange-500 hover:bg-orange-600 text-white border-orange-500 dark:bg-orange-600 dark:hover:bg-orange-700"
+            class="btn-revert"
           >
             <div class="i-carbon-undo inline-block mr-1" />
             Revert Commit
           </el-button>
-          <el-button
-            type="primary"
-            size="small"
-            @click="showResetDialog"
-          >
+          <el-button type="primary" size="small" @click="showResetDialog">
             <div class="i-carbon-reset inline-block mr-1" />
             Reset to This State
           </el-button>
@@ -871,6 +867,34 @@ onMounted(() => {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Custom button styling for revert button */
+.btn-revert {
+  background-color: #f97316 !important;
+  border-color: #f97316 !important;
+  color: white !important;
+}
+
+.btn-revert:hover {
+  background-color: #ea580c !important;
+  border-color: #ea580c !important;
+}
+
+.btn-revert:active {
+  background-color: #c2410c !important;
+  border-color: #c2410c !important;
+}
+
+/* Dark mode */
+:deep(.dark) .btn-revert {
+  background-color: #ea580c !important;
+  border-color: #ea580c !important;
+}
+
+:deep(.dark) .btn-revert:hover {
+  background-color: #c2410c !important;
+  border-color: #c2410c !important;
 }
 
 /* Diff viewer styling */
