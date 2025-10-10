@@ -99,7 +99,7 @@ services:
       - LAKEFS_DATABASE_LOCAL_PATH=/var/lakefs/data/metadata.db
       - LAKEFS_BLOCKSTORE_TYPE=s3
       - LAKEFS_BLOCKSTORE_S3_ENDPOINT=http://minio:9000
-      - LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE=true
+      - LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE=true  # Use path-style for non-AWS S3
       - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID=minioadmin
       - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY=minioadmin
       - LAKEFS_AUTH_ENCRYPT_SECRET_KEY=a_very_secret_key_change_me # IMPORTANT: Change this key
