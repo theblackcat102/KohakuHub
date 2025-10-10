@@ -37,16 +37,14 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 git clone https://github.com/KohakuBlueleaf/KohakuHub.git
 cd KohakuHub
 
-# 1. Copy and customize configuration
-cp docker-compose.example.yml docker-compose.yml
+# Option 1: Use interactive generator (recommended)
+python scripts/generate_docker_compose.py
 
-# 2. IMPORTANT: Edit docker-compose.yml
-#    - Change MINIO_ROOT_USER and MINIO_ROOT_PASSWORD
-#    - Change POSTGRES_PASSWORD
-#    - Change LAKEFS_AUTH_ENCRYPT_SECRET_KEY
-#    - Change KOHAKU_HUB_SESSION_SECRET
+# Option 2: Manual configuration
+# cp docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml to change credentials and secrets
 
-# 3. Build frontend and start services
+# Build frontend and start services
 npm install --prefix ./src/kohaku-hub-ui
 npm run build --prefix ./src/kohaku-hub-ui
 docker-compose up -d --build

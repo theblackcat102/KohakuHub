@@ -2,6 +2,230 @@
 
 This directory contains utility scripts for KohakuHub administration and maintenance.
 
+## Deployment Setup
+
+### Docker Compose Generator
+
+Interactive tool to generate a customized `docker-compose.yml` based on your deployment preferences.
+
+**Features:**
+- ✅ Choose between built-in or external PostgreSQL
+- ✅ Configure LakeFS to use PostgreSQL or SQLite
+- ✅ Choose between built-in MinIO or external S3 storage
+- ✅ Auto-generate secure secret keys
+- ✅ Comprehensive configuration validation
+
+**Usage:**
+
+```bash
+# Interactive mode (asks questions)
+python scripts/generate_docker_compose.py
+
+# Generate a configuration template
+python scripts/generate_docker_compose.py --generate-config
+
+# Use configuration file (non-interactive)
+python scripts/generate_docker_compose.py --config kohakuhub.conf
+```
+
+**Configuration Options:**
+
+1. **PostgreSQL:**
+   - Built-in container (managed by docker-compose)
+   - External PostgreSQL (specify host, port, credentials)
+   - Default database name for hub-api: `kohakuhub`
+
+2. **LakeFS Database:**
+   - Use PostgreSQL (recommended for production)
+   - Use local SQLite (simpler for development)
+   - Default database name: `lakefs` (separate from hub-api database)
+   - **Automatic database creation**: Both databases are created automatically when LakeFS starts
+   - Works with both built-in and external PostgreSQL
+
+3. **S3 Storage:**
+   - Built-in MinIO container (self-hosted)
+   - External S3-compatible storage (AWS S3, CloudFlare R2, etc.)
+
+4. **Security:**
+   - Auto-generated session secret key
+   - Auto-generated admin secret token
+   - Option to use custom secrets
+
+**Example: Interactive Mode**
+
+```
+$ python scripts/generate_docker_compose.py
+
+=============================================================
+KohakuHub Docker Compose Generator
+=============================================================
+
+--- PostgreSQL Configuration ---
+Use built-in PostgreSQL container? [Y/n]: y
+PostgreSQL username [hub]:
+PostgreSQL password [hubpass]:
+PostgreSQL database name for hub-api [kohakuhub]:
+
+--- LakeFS Database Configuration ---
+Use PostgreSQL for LakeFS? (No = use local SQLite) [Y/n]: y
+PostgreSQL database name for LakeFS [lakefs]:
+
+--- S3 Storage Configuration ---
+Use built-in MinIO container? [Y/n]: n
+S3 endpoint URL: https://my-account.r2.cloudflarestorage.com
+S3 access key: xxxxxxxxxxxx
+S3 secret key: yyyyyyyyyyyy
+S3 region [us-east-1]: auto
+
+--- Security Configuration ---
+Generated session secret: AbCdEf123456...
+Use generated session secret? [Y/n]: y
+
+Use same secret for admin token? [y/N]: n
+Generated admin secret: XyZ789...
+Use generated admin secret? [Y/n]: y
+
+=============================================================
+Generating docker-compose.yml...
+=============================================================
+
+✓ Successfully generated: docker-compose.yml
+✓ Database initialization scripts will run automatically when LakeFS starts
+  - scripts/init-databases.sh
+  - scripts/lakefs-entrypoint.sh
+
+Configuration Summary:
+------------------------------------------------------------
+PostgreSQL: Built-in
+  Hub-API Database: kohakuhub
+  LakeFS Database: lakefs
+LakeFS Database Backend: PostgreSQL
+S3 Storage: Custom S3
+  Endpoint: https://my-account.r2.cloudflarestorage.com
+Session Secret: AbCdEf123456...
+Admin Secret: XyZ789...
+------------------------------------------------------------
+
+Next steps:
+1. Review the generated docker-compose.yml
+2. Build frontend: npm run build --prefix ./src/kohaku-hub-ui
+3. Start services: docker-compose up -d
+
+   Note: Databases will be created automatically on first startup:
+   - kohakuhub (hub-api)
+   - lakefs (LakeFS)
+
+4. Access at: http://localhost:28080
+```
+
+**Example: Using Configuration File**
+
+```bash
+# Step 1: Generate template
+$ python scripts/generate_docker_compose.py --generate-config
+[OK] Generated configuration template: kohakuhub.conf
+
+Edit this file with your settings, then run:
+  python scripts/generate_docker_compose.py --config kohakuhub.conf
+
+# Step 2: Edit kohakuhub.conf with your settings
+$ nano kohakuhub.conf  # or use any text editor
+
+# Step 3: Generate docker-compose.yml from config
+$ python scripts/generate_docker_compose.py --config kohakuhub.conf
+
+============================================================
+KohakuHub Docker Compose Generator
+============================================================
+
+Loading configuration from: kohakuhub.conf
+
+Loaded configuration:
+  PostgreSQL: External
+    Host: db.example.com:5432
+    Database: kohakuhub
+  LakeFS: PostgreSQL
+    Database: lakefs
+  S3: External S3
+    Endpoint: https://s3.example.com
+
+============================================================
+Generating docker-compose.yml...
+============================================================
+
+[OK] Successfully generated: docker-compose.yml
+[OK] Database initialization scripts will run automatically when LakeFS starts
+
+Configuration Summary:
+------------------------------------------------------------
+PostgreSQL: Custom
+  Host: db.example.com:5432
+  Hub-API Database: kohakuhub
+  LakeFS Database: lakefs
+LakeFS Database Backend: PostgreSQL
+S3 Storage: Custom S3
+  Endpoint: https://s3.example.com
+Session Secret: AbCdEf123456...
+Admin Secret: XyZ789...
+------------------------------------------------------------
+```
+
+**Requirements:**
+- Python 3.10+
+- No additional dependencies required
+
+**Configuration File Format:**
+
+The configuration file (`kohakuhub.conf`) uses INI format:
+
+```ini
+[postgresql]
+builtin = true
+user = hub
+password = hubpass
+database = kohakuhub
+
+[lakefs]
+use_postgres = true
+database = lakefs
+
+[s3]
+builtin = true
+access_key = minioadmin
+secret_key = minioadmin
+
+[security]
+session_secret = your-secret-here
+admin_secret = your-admin-secret
+```
+
+For external PostgreSQL or S3:
+```ini
+[postgresql]
+builtin = false
+host = your-postgres-host.com
+port = 5432
+user = hub
+password = your-password
+database = kohakuhub
+
+[s3]
+builtin = false
+endpoint = https://your-s3-endpoint.com
+access_key = your-access-key
+secret_key = your-secret-key
+region = us-east-1
+```
+
+**Important Notes:**
+- Shell scripts automatically use LF line endings (configured in `.gitattributes`)
+- Database initialization runs automatically on LakeFS startup
+- Works on both Windows and Linux development environments
+- Configuration file (`kohakuhub.conf`) is ignored by git (contains sensitive data)
+- Use `--generate-config` to create a template configuration file
+
+---
+
 ## Storage Management
 
 ### Clear S3 Storage

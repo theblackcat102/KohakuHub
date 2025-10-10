@@ -1,4 +1,5 @@
 # docker-compose.yml
+version: "3.9"
 
 services:
   hub-ui:
@@ -41,7 +42,7 @@ services:
       ## Application Configuration
       - KOHAKU_HUB_BASE_URL=http://127.0.0.1:28080 # Web UI will proxy requests to hub-api, we use hub-ui url here
       - KOHAKU_HUB_DB_BACKEND=postgres
-      - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/kohakuhub # Linking to the 'postgres' service
+      - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/hubdb # Linking to the 'postgres' service
       - KOHAKU_HUB_LFS_THRESHOLD_BYTES=1000000
       - KOHAKU_HUB_LFS_KEEP_VERSIONS=5
       - KOHAKU_HUB_LFS_AUTO_GC=true
@@ -50,9 +51,9 @@ services:
       - KOHAKU_HUB_SMTP_ENABLED=false
       - KOHAKU_HUB_SMTP_HOST=smtp.gmail.com
       - KOHAKU_HUB_SMTP_PORT=587
-      - KOHAKU_HUB_SMTP_USERNAME=
-      - KOHAKU_HUB_SMTP_PASSWORD=
-      - KOHAKU_HUB_SMTP_FROM=noreply@kohakuhub.local
+      - KOHAKU_HUB_SMTP_USERNAME=apolloyeh0123@gmail.com
+      - KOHAKU_HUB_SMTP_PASSWORD=mqrwpqjdizuneyuz
+      - KOHAKU_HUB_SMTP_FROM=kohakuhub@kohaku-lab.org
       - KOHAKU_HUB_SMTP_TLS=true
       ## Auth Configuration
       - KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
@@ -62,18 +63,18 @@ services:
       ## Admin API Configuration
       - KOHAKU_HUB_ADMIN_ENABLED=true
       - KOHAKU_HUB_ADMIN_SECRET_TOKEN=change-this-to-random-admin-token-in-production
-      # ## Storage Quota Configuration (NULL/unlimited = no limit)
-      # # Default quotas for new users
-      # - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=unlimited  # Unlimited private storage for users
-      # - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=unlimited   # Unlimited public storage for users
-      # # Default quotas for new organizations
-      # - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=unlimited   # Unlimited private storage for orgs
-      # - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=unlimited    # Unlimited public storage for orgs
-      # # Examples (uncomment and modify as needed):
-      - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=10_000_000     # 10MB for user private repos
-      - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=100_000_000      # 20MB for user public repos
-      - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=10_000_000      # 10MB for org private repos
-      - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=100_000_000      # 100MB for org public repos
+      ## Storage Quota Configuration (NULL/unlimited = no limit)
+      # Default quotas for new users
+      - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=unlimited  # Unlimited private storage for users
+      - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=unlimited   # Unlimited public storage for users
+      # Default quotas for new organizations
+      - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=unlimited   # Unlimited private storage for orgs
+      - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=unlimited    # Unlimited public storage for orgs
+      # Examples (uncomment and modify as needed):
+      # - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=10737418240   # 10GB for user private repos
+      # - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=53687091200    # 50GB for user public repos
+      # - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=107374182400   # 100GB for org private repos
+      # - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=214748364800    # 200GB for org public repos
     volumes:
       - ./hub-meta/hub-api:/hub-api-creds
 
@@ -121,7 +122,7 @@ services:
     environment:
       - POSTGRES_USER=hub
       - POSTGRES_PASSWORD=hubpass
-      - POSTGRES_DB=kohakuhub
+      - POSTGRES_DB=hubdb
     ports:
       - "25432:5432"
     volumes:

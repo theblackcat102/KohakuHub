@@ -4,6 +4,25 @@
 
 ### First Time Setup
 
+#### Option 1: Interactive Generator (Recommended)
+
+Use the interactive generator to create a customized `docker-compose.yml`:
+
+```bash
+# Run the generator
+python scripts/generate_docker_compose.py
+```
+
+The generator will ask you to configure:
+- PostgreSQL (built-in container or external database)
+- LakeFS database backend (PostgreSQL or SQLite)
+- S3 storage (built-in MinIO or external S3/R2)
+- Security keys (auto-generated or custom)
+
+See [scripts/README.md](../scripts/README.md#docker-compose-generator) for detailed usage.
+
+#### Option 2: Manual Configuration
+
 1. **Copy configuration file:**
    ```bash
    cp docker-compose.example.yml docker-compose.yml
@@ -16,12 +35,15 @@
    - Change session secret (KOHAKU_HUB_SESSION_SECRET)
    - Update BASE_URL if deploying to a domain
 
-3. **Build and start:**
-   ```bash
-   npm install --prefix ./src/kohaku-hub-ui
-   npm run build --prefix ./src/kohaku-hub-ui
-   docker-compose up -d --build
-   ```
+#### Build and Start
+
+After configuration (either option):
+
+```bash
+npm install --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-ui
+docker-compose up -d --build
+```
 
 **Note:** The repository only includes `docker-compose.example.yml` as a template. Your customized `docker-compose.yml` is excluded from git to prevent committing sensitive credentials.
 

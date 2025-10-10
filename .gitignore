@@ -10,6 +10,7 @@ hub-storage/
 test_*/
 config.toml
 docker-compose.yml
+kohakuhub.conf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
