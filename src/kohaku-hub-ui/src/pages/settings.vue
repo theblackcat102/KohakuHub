@@ -141,6 +141,7 @@
 import { useAuthStore } from "@/stores/auth";
 import { useRouter } from "vue-router";
 import { authAPI, settingsAPI } from "@/utils/api";
+import { copyToClipboard } from "@/utils/clipboard";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 
@@ -237,9 +238,13 @@ async function handleRevokeToken(id) {
   }
 }
 
-function copyToken() {
-  navigator.clipboard.writeText(newToken.value);
-  ElMessage.success("Token copied to clipboard");
+async function copyToken() {
+  const success = await copyToClipboard(newToken.value);
+  if (success) {
+    ElMessage.success("Token copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy token");
+  }
 }
 
 onMounted(() => {

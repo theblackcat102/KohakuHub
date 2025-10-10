@@ -51,6 +51,11 @@ python scripts/generate_docker_compose.py --config kohakuhub.conf
    - Auto-generated admin secret token
    - Option to use custom secrets
 
+5. **Network:**
+   - External Docker bridge network support
+   - Allows cross-compose communication with external PostgreSQL/S3 services
+   - Automatically added to hub-api and lakefs when using external services
+
 **Example: Interactive Mode**
 
 ```
@@ -197,6 +202,10 @@ secret_key = minioadmin
 [security]
 session_secret = your-secret-here
 admin_secret = your-admin-secret
+
+[network]
+# Optional: for cross-compose communication
+external_network = shared-network
 ```
 
 For external PostgreSQL or S3:
@@ -215,7 +224,39 @@ endpoint = https://your-s3-endpoint.com
 access_key = your-access-key
 secret_key = your-secret-key
 region = us-east-1
+
+[network]
+# Required if external services are in different Docker Compose
+external_network = shared-network
 ```
+
+**Using External Docker Network:**
+
+If PostgreSQL or S3 are in separate Docker Compose setups, you need a shared network:
+
+```bash
+# Create the shared network first
+docker network create shared-network
+
+# Your PostgreSQL docker-compose.yml
+services:
+  postgres:
+    # ... your config
+    networks:
+      - shared-network
+
+networks:
+  shared-network:
+    external: true
+
+# Generate KohakuHub with external network
+python scripts/generate_docker_compose.py --config kohakuhub.conf
+```
+
+The generator will automatically:
+- Add the external network to `hub-api` and `lakefs` services
+- Configure them to use both `default` (hub-net) and the external network
+- Allow container name resolution across compose files
 
 **Important Notes:**
 - Shell scripts automatically use LF line endings (configured in `.gitattributes`)

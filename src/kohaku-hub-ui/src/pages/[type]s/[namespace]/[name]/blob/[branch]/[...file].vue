@@ -243,6 +243,7 @@
 <script setup>
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
 import CodeViewer from "@/components/common/CodeViewer.vue";
+import { copyToClipboard } from "@/utils/clipboard";
 import { ElMessage } from "element-plus";
 import { useAuthStore } from "@/stores/auth";
 
@@ -515,15 +516,23 @@ function downloadFile() {
   window.open(fileUrl.value, "_blank");
 }
 
-function copyFileUrl() {
+async function copyFileUrl() {
   const fullUrl = window.location.origin + fileUrl.value;
-  navigator.clipboard.writeText(fullUrl);
-  ElMessage.success("File URL copied to clipboard");
+  const success = await copyToClipboard(fullUrl);
+  if (success) {
+    ElMessage.success("File URL copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy");
+  }
 }
 
-function copyContent() {
-  navigator.clipboard.writeText(fileContent.value);
-  ElMessage.success("Content copied to clipboard");
+async function copyContent() {
+  const success = await copyToClipboard(fileContent.value);
+  if (success) {
+    ElMessage.success("Content copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy");
+  }
 }
 
 function navigateToFolder(folderPath) {

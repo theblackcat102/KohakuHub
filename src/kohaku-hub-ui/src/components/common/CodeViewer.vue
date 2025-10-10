@@ -39,6 +39,7 @@
 
 <script setup>
 import hljs from "highlight.js/lib/core";
+import { copyToClipboard } from "@/utils/clipboard";
 import { ElMessage } from "element-plus";
 import { ref, computed, watch, onMounted } from "vue";
 
@@ -143,9 +144,13 @@ function escapeHtml(unsafe) {
     .replace(/'/g, "&#039;");
 }
 
-function copyCode() {
-  navigator.clipboard.writeText(props.code);
-  ElMessage.success("Code copied to clipboard");
+async function copyCode() {
+  const success = await copyToClipboard(props.code);
+  if (success) {
+    ElMessage.success("Code copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy");
+  }
 }
 
 // Watch for code or language changes

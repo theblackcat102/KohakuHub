@@ -601,6 +601,7 @@ huggingface-cli download {{ repoInfo?.id }}</pre
 <script setup>
 import { repoAPI } from "@/utils/api";
 import { useAuthStore } from "@/stores/auth";
+import { copyToClipboard } from "@/utils/clipboard";
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
 import { ElMessage } from "element-plus";
 import dayjs from "dayjs";
@@ -932,20 +933,32 @@ async function createReadme() {
   }
 }
 
-function copyCloneUrl() {
-  navigator.clipboard.writeText(cloneUrl.value);
-  ElMessage.success("Clone URL copied to clipboard");
+async function copyCloneUrl() {
+  const success = await copyToClipboard(cloneUrl.value);
+  if (success) {
+    ElMessage.success("Clone URL copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy");
+  }
 }
 
-function copyGitCloneUrl() {
-  navigator.clipboard.writeText(gitCloneUrl.value);
-  ElMessage.success("Git clone URL copied to clipboard");
+async function copyGitCloneUrl() {
+  const success = await copyToClipboard(gitCloneUrl.value);
+  if (success) {
+    ElMessage.success("Git clone URL copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy");
+  }
 }
 
-function copyRepoId() {
+async function copyRepoId() {
   const repoId = `${props.namespace}/${props.name}`;
-  navigator.clipboard.writeText(repoId);
-  ElMessage.success("Repository ID copied to clipboard");
+  const success = await copyToClipboard(repoId);
+  if (success) {
+    ElMessage.success("Repository ID copied to clipboard");
+  } else {
+    ElMessage.error("Failed to copy");
+  }
 }
 
 // Watchers
