@@ -148,10 +148,12 @@ See [docs/Git.md](./docs/Git.md) for complete Git clone documentation and implem
 - **FastAPI** - HuggingFace-compatible API
 - **LakeFS** - Git-like versioning (branches, commits, diffs) via REST API
 - **MinIO/S3** - Object storage with deduplication
-- **PostgreSQL/SQLite** - Metadata database
+- **PostgreSQL/SQLite** - Metadata database (synchronous with db.atomic() transactions)
 - **Vue 3** - Modern web interface
 
-**Implementation Note:** KohakuHub uses LakeFS REST API directly (not the deprecated lakefs-client Python library), providing pure async operations without thread pool overhead.
+**Implementation Notes:**
+- **LakeFS:** Uses REST API directly (not the deprecated lakefs-client Python library), providing pure async operations without thread pool overhead
+- **Database:** Synchronous operations with Peewee ORM and `db.atomic()` for transaction safety. Supports multi-worker deployment (4-8 workers) for horizontal scaling. Future migration to peewee-async planned.
 
 **Data Flow:**
 1. Small files (<10MB) → Base64 in commit payload
@@ -190,7 +192,14 @@ See [config-example.toml](./config-example.toml) for all options.
 **Backend:**
 ```bash
 pip install -e .
-uvicorn kohakuhub.main:app --reload --port 48888  # Development only
+
+# Single worker (development)
+uvicorn kohakuhub.main:app --reload --port 48888
+
+# Multi-worker (production-like testing)
+uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
+
+# Note: Database uses db.atomic() for transaction safety in multi-worker setups
 # Note: In production, access via nginx on port 28080
 ```
 

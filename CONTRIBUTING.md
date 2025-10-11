@@ -48,7 +48,7 @@ Follow following principles:
 - Import order: **builtin → 3rd party → ours**, then **shorter paths first**, then **alphabetical**
   - `import os` before `from datetime import`
   - `from kohakuhub.db import` before `from kohakuhub.auth.dependencies import`
-- **ALWAYS** use `db_async` wrappers for all DB operations (never direct Peewee in async code)
+- **Database operations:** Use synchronous Peewee ORM with `db.atomic()` for transactions (safe for multi-worker deployments)
 - **NO imports in functions** (except to avoid circular imports)
 - Use `asyncio.gather()` for parallel async operations (NOT sequential await in loops)
 - Split large functions into smaller ones (especially match-case with >3 branches)
@@ -68,8 +68,7 @@ kohakuhub/
 │   ├── dependencies.py    # Used by ALL routers
 │   └── permissions.py     # Used by ALL routers
 ├── config.py              # Configuration
-├── db.py                  # Database models
-├── db_async.py            # Async DB wrappers
+├── db.py                  # Database models (Peewee ORM - synchronous)
 ├── logger.py              # Logging utilities
 └── lakefs_rest_client.py  # LakeFS REST client
 ```
@@ -313,7 +312,9 @@ We're especially looking for help in:
 
 ## Development Workflow
 
-**Implementation Note:** KohakuHub uses LakeFS REST API directly (httpx AsyncClient) instead of the deprecated lakefs-client library. All LakeFS operations are pure async without thread pool overhead.
+**Implementation Notes:**
+- **LakeFS:** Uses REST API directly (httpx AsyncClient) instead of deprecated lakefs-client library. All LakeFS operations are pure async without thread pool overhead.
+- **Database:** Synchronous operations with Peewee ORM and `db.atomic()` transactions. Safe for multi-worker deployments (4-8 workers recommended).
 
 ### Backend Development
 
@@ -321,8 +322,11 @@ We're especially looking for help in:
 # Start infrastructure
 docker-compose up -d lakefs minio postgres
 
-# Run backend with hot reload
+# Single worker (development with hot reload)
 uvicorn kohakuhub.main:app --reload --port 48888
+
+# Multi-worker (production-like testing)
+uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
 
 # API documentation available at:
 # http://localhost:48888/docs
@@ -353,20 +357,53 @@ docker-compose logs -f hub-ui
 
 ### Database Operations
 
-❌ **NEVER do this:**
+KohakuHub uses **synchronous database operations** with Peewee ORM for simplicity and multi-worker compatibility.
+
+✅ **Use db.atomic() for transactions:**
 ```python
-async def bad_example():
-    # Direct Peewee usage in async code blocks event loop!
-    repo = Repository.get_or_none(name="test")
+from kohakuhub.db import Repository, db
+
+async def create_repository(repo_type: str, namespace: str, name: str):
+    """Create repository with transaction safety."""
+    with db.atomic():
+        # Check if exists
+        existing = Repository.get_or_none(
+            Repository.repo_type == repo_type,
+            Repository.namespace == namespace,
+            Repository.name == name,
+        )
+        if existing:
+            raise ValueError("Repository already exists")
+
+        # Create repository
+        repo = Repository.create(
+            repo_type=repo_type,
+            namespace=namespace,
+            name=name,
+            full_id=f"{namespace}/{name}",
+        )
+        return repo
 ```
 
-✅ **ALWAYS do this:**
+✅ **Simple queries don't need transactions:**
 ```python
-from kohakuhub.db_async import get_repository
+from kohakuhub.db import Repository
 
-async def good_example():
-    repo = await get_repository("model", "myorg", "mymodel")
+async def get_repository(repo_type: str, namespace: str, name: str):
+    """Get repository - no transaction needed for simple reads."""
+    return Repository.get_or_none(
+        Repository.repo_type == repo_type,
+        Repository.namespace == namespace,
+        Repository.name == name,
+    )
 ```
+
+**Why Synchronous?**
+- PostgreSQL and SQLite handle concurrent connections internally
+- `db.atomic()` ensures ACID compliance across workers
+- Simpler code without async/await complexity
+- Better compatibility with multi-worker setups
+- **Future:** Migration to peewee-async planned for improved concurrency
 
 ### Permission Checks
 
