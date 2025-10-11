@@ -181,7 +181,11 @@ npm run dev --prefix ./src/kohaku-hub-ui
 
 **Backend** (port 48888):
 ```bash
+# Single worker (development with hot reload)
 uvicorn kohakuhub.main:app --reload --port 48888
+
+# Multi-worker (production-like testing)
+uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
 ```
 
 **Client Access:**
@@ -199,6 +203,69 @@ uvicorn kohakuhub.main:app --reload --port 48888
 **Client Access:**
 - **Everything:** http://localhost:28080 (Web UI + API)
 - Swagger Docs (dev): http://localhost:48888/docs (if port exposed)
+
+## Multi-Worker Deployment
+
+KohakuHub supports horizontal scaling with multiple worker processes.
+
+### Database Architecture
+
+**Synchronous Database Operations:**
+- Uses Peewee ORM with synchronous operations
+- `db.atomic()` transactions ensure consistency across workers
+- No async database wrappers needed
+- Safe for multi-worker deployments
+
+**Why Synchronous?**
+- PostgreSQL and SQLite handle concurrent connections internally
+- Atomic transactions prevent race conditions
+- Simpler code without async/await complexity
+- Better compatibility with multi-worker setups
+
+**Future:** Migration to peewee-async is planned for improved concurrency.
+
+### Running Multi-Worker
+
+**Development/Testing:**
+```bash
+# 4 workers (recommended for testing)
+uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
+
+# 8 workers (production-like load)
+uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 8
+```
+
+**Docker Deployment:**
+```yaml
+# docker-compose.yml
+services:
+  hub-api:
+    command: uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
+```
+
+### Worker Recommendations
+
+| Deployment | Workers | CPU | Memory | Notes |
+|------------|---------|-----|--------|-------|
+| Development | 1 | 2 cores | 2GB | Hot reload enabled |
+| Small | 2-4 | 4 cores | 4GB | For <100 users |
+| Medium | 4-8 | 8 cores | 8GB | For <1000 users |
+| Large | 8-16 | 16+ cores | 16GB+ | For >1000 users |
+
+**Formula:** Workers = (2 × CPU cores) + 1
+
+### Benefits of Multi-Worker
+
+1. **Horizontal Scaling:** Handle more concurrent requests
+2. **High Availability:** Worker crashes don't affect others
+3. **Better Resource Utilization:** Leverage multiple CPU cores
+4. **Load Distribution:** Requests distributed across workers
+
+### Limitations
+
+- Cannot use `--reload` with multiple workers
+- Shared state must use database or external cache
+- Log aggregation recommended for debugging
 
 ## Security Best Practices
 

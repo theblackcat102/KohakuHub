@@ -911,9 +911,10 @@ def parse_git_credentials(authorization: str | None) -> tuple[str | None, str | 
 ### Token Validation
 
 ```python
+from datetime import datetime, timezone
+
 from kohakuhub.auth.utils import hash_token
-from kohakuhub.db import Token, User
-from kohakuhub.db_async import execute_db_query
+from kohakuhub.db import Token, User, db
 
 async def get_user_from_git_auth(authorization: str | None) -> User | None:
     """Authenticate user from Git Basic Auth."""
@@ -924,30 +925,21 @@ async def get_user_from_git_auth(authorization: str | None) -> User | None:
     # Hash and lookup token
     token_hash = hash_token(token_str)
 
-    def _get_token():
-        return Token.get_or_none(Token.token_hash == token_hash)
+    # Database operations are synchronous with transactions
+    with db.atomic():
+        token = Token.get_or_none(Token.token_hash == token_hash)
+        if not token:
+            return None
 
-    token = await execute_db_query(_get_token)
-    if not token:
-        return None
+        # Get user
+        user = User.get_or_none(User.id == token.user_id)
+        if not user or not user.is_active:
+            return None
 
-    # Get user
-    def _get_user():
-        return User.get_or_none(User.id == token.user_id)
-
-    user = await execute_db_query(_get_user)
-    if not user or not user.is_active:
-        return None
-
-    # Update last used
-    from datetime import datetime, timezone
-
-    def _update_token():
+        # Update last used
         Token.update(last_used=datetime.now(timezone.utc)).where(
             Token.id == token.id
         ).execute()
-
-    await execute_db_query(_update_token)
 
     return user
 ```
@@ -1032,12 +1024,12 @@ async def git_head(
 Since we don't know if a repo is a model/dataset/space from the URL alone:
 
 ```python
-from kohakuhub.db import Repository
-from kohakuhub.db_async import execute_db_query
+from kohakuhub.db import Repository, db
 
 async def find_repository(namespace: str, name: str) -> Repository | None:
     """Find repository by trying all types."""
-    def _get_repo():
+    # Database operations are synchronous
+    with db.atomic():
         for repo_type in ["model", "dataset", "space"]:
             repo = Repository.get_or_none(
                 Repository.namespace == namespace,
@@ -1047,8 +1039,6 @@ async def find_repository(namespace: str, name: str) -> Repository | None:
             if repo:
                 return repo
         return None
-
-    return await execute_db_query(_get_repo)
 ```
 
 ### Registering the Router

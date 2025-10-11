@@ -305,6 +305,68 @@ docker-compose up -d --build
 
 **Note:** Check CHANGELOG for breaking changes before updating.
 
+## Multi-Worker Deployment
+
+For production deployments, running multiple workers improves performance and availability.
+
+### Database Architecture
+
+KohakuHub uses **synchronous database operations** with Peewee ORM:
+- `db.atomic()` transactions ensure data consistency
+- Safe for concurrent access from multiple workers
+- PostgreSQL and SQLite handle connection pooling internally
+- No async database wrappers needed
+
+**Future:** Migration to peewee-async planned for better concurrency.
+
+### Running with Multiple Workers
+
+**Development Testing:**
+```bash
+# 4 workers (recommended for testing)
+uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
+
+# Test with load
+ab -n 1000 -c 10 http://localhost:48888/health
+```
+
+**Docker Deployment:**
+
+Edit your `docker-compose.yml`:
+```yaml
+services:
+  hub-api:
+    image: kohakuhub-api
+    command: uvicorn kohakuhub.main:app --host 0.0.0.0 --port 48888 --workers 4
+    environment:
+      - KOHAKU_HUB_BASE_URL=http://localhost:28080
+      # ... other env vars
+```
+
+### Worker Scaling Guide
+
+| Deployment Size | Workers | CPU Cores | Memory | Concurrent Users |
+|----------------|---------|-----------|--------|------------------|
+| Development | 1 | 2 | 2GB | <10 |
+| Small | 2-4 | 4 | 4GB | <100 |
+| Medium | 4-8 | 8 | 8GB | <1000 |
+| Large | 8-16 | 16+ | 16GB+ | >1000 |
+
+**Recommended Formula:** Workers = (2 × CPU cores) + 1
+
+### Benefits
+
+- **Horizontal Scaling:** Handle more concurrent requests
+- **High Availability:** One worker crash doesn't affect others
+- **CPU Utilization:** Leverage multiple cores efficiently
+- **Load Balancing:** Uvicorn distributes requests automatically
+
+### Limitations
+
+- Cannot use `--reload` flag with multiple workers
+- In-memory caches are per-worker (use Redis for shared cache)
+- Log output from all workers (use log aggregation)
+
 ## Uninstall
 
 ```bash

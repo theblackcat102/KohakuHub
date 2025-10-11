@@ -22,15 +22,15 @@ graph TB
 
     subgraph "Storage Backend"
         LakeFS["LakeFS<br/>- Git-like versioning<br/>- Branch management<br/>- Commit history"]
-        DB["PostgreSQL/SQLite<br/>- User data<br/>- Metadata<br/>- Deduplication"]
+        DB["PostgreSQL/SQLite<br/>- User data<br/>- Metadata<br/>- Deduplication<br/>- Synchronous with db.atomic()"]
         S3["MinIO/S3<br/>- Object storage<br/>- LFS files<br/>- Presigned URLs"]
     end
 
     Client -->|HTTP/Git/LFS| Nginx
     Nginx -->|Static files| Client
     Nginx -->|/api, /org, resolve| FastAPI
-    FastAPI -->|REST API| LakeFS
-    FastAPI -->|Queries| DB
+    FastAPI -->|REST API (async)| LakeFS
+    FastAPI -->|Sync queries with db.atomic()| DB
     FastAPI -->|Async wrappers| S3
     LakeFS -->|Stores objects| S3
 
@@ -770,6 +770,18 @@ Examples:
   HuggingFace repo: "johndoe/dataset"
   LakeFS repo:      "hf-dataset-johndoe-dataset"
 ```
+
+### Implementation Notes
+
+**Database Operations:**
+- **Synchronous:** Uses Peewee ORM with synchronous operations
+- **Transactions:** `db.atomic()` ensures ACID compliance across concurrent workers
+- **Multi-Worker Safe:** Designed for horizontal scaling (4-8 workers recommended)
+- **Future:** Migration to peewee-async planned for improved concurrency
+
+**LakeFS Operations:**
+- **Pure Async:** All operations use REST API via httpx (no thread pools!)
+- **No Deprecated Library:** Uses direct REST API instead of lakefs-client
 
 ### Key Operations
 
