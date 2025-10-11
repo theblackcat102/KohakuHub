@@ -64,11 +64,7 @@
 
         <!-- Action Buttons -->
         <div class="flex gap-3 mb-4">
-          <el-button
-            size="small"
-            @click="showRevertDialog"
-            class="btn-revert"
-          >
+          <el-button size="small" @click="showRevertDialog" class="btn-revert">
             <div class="i-carbon-undo inline-block mr-1" />
             Revert Commit
           </el-button>

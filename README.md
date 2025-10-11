@@ -24,7 +24,7 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 - **S3 Storage** - Works with MinIO, AWS S3, Cloudflare R2, etc.
 - **Large File Support** - Git LFS protocol with automatic LFS pointers (>1MB files)
 - **Organizations** - Multi-user namespaces with role-based access
-- **Web UI** - Vue 3 interface with file browser, editor, commit history
+- **Web UI** - Vue 3 interface with file browser, editor, commit history, Mermaid chart support
 - **CLI Tool** - Full-featured command-line interface
 - **File Deduplication** - Content-addressed storage by SHA256
 - **Pure Python Git Server** - No native dependencies, memory-efficient
