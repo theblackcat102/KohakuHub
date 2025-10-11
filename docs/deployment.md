@@ -65,13 +65,35 @@ docker-compose up -d --build
 
 **Configuration:** `docker/nginx/default.conf`
 
-Nginx on port 28080:
+```mermaid
+graph LR
+    subgraph "Nginx (Port 28080)"
+        direction TB
+        Router[Request Router]
+        Static[Static Files Handler]
+        Proxy[API Proxy]
+    end
+
+    Client[Client] -->|Request| Router
+    Router -->|"/", "/*.html", "/*.js"| Static
+    Router -->|"/api/*"| Proxy
+    Router -->|"/org/*"| Proxy
+    Router -->|"/{ns}/{repo}.git/*"| Proxy
+    Router -->|"/resolve/*"| Proxy
+
+    Static -->|Serve| Vue[Vue 3 Frontend]
+    Proxy -->|Forward| FastAPI["FastAPI:48888"]
+
+```
+
+**Nginx routing rules:**
 1. Serves frontend static files from `/usr/share/nginx/html`
-2. Proxies API requests to backend:48888:
-   - `/api/*` → `http://hub-api:48888/api/*`
-   - `/org/*` → `http://hub-api:48888/org/*`
-   - `/{namespace}/{name}.git/*` → `http://hub-api:48888/{namespace}/{name}.git/*` (Git Smart HTTP)
-   - `/{type}s/{namespace}/{name}/resolve/*` → `http://hub-api:48888/{type}s/{namespace}/{name}/resolve/*`
+2. Proxies API requests to `hub-api:48888`:
+   - `/api/*` → API endpoints
+   - `/org/*` → Organization endpoints
+   - `/{namespace}/{name}.git/*` → Git Smart HTTP protocol
+   - `/{type}s/{namespace}/{name}/resolve/*` → File download endpoints
+   - `/admin/*` → Admin portal (if enabled)
 
 ### Client Configuration
 
@@ -109,36 +131,43 @@ os.environ["HF_ENDPOINT"] = "http://localhost:48888"  # Don't use backend port d
 
 ## Architecture Diagram
 
+```mermaid
+graph TB
+    subgraph "External Access"
+        Client["Client<br/>(Browser, Git, Python SDK, CLI)"]
+    end
+
+    subgraph "Nginx Container (hub-ui)<br/>Port 28080"
+        Nginx["Nginx Reverse Proxy<br/>- Static files: Vue 3 frontend<br/>- Proxy: /api, /org, resolve"]
+    end
+
+    subgraph "FastAPI Container (hub-api)<br/>Port 48888 (internal)"
+        FastAPI["FastAPI Application<br/>- HF-compatible REST API<br/>- Git Smart HTTP<br/>- LFS protocol<br/>- Authentication"]
+    end
+
+    subgraph "Storage Layer"
+        LakeFS["LakeFS Container<br/>Port 28000 (admin)<br/>- Git-like versioning<br/>- Branch management<br/>- Commit history"]
+        MinIO["MinIO Container<br/>Port 29000 (console)<br/>Port 29001 (S3 API)<br/>- S3-compatible storage<br/>- Object storage"]
+        Postgres["PostgreSQL Container<br/>Port 25432 (optional)<br/>- User data<br/>- Metadata<br/>- Quotas"]
+    end
+
+    Client -->|HTTPS/HTTP| Nginx
+    Nginx -->|Static| Client
+    Nginx -->|Proxy API| FastAPI
+    FastAPI -->|REST API| LakeFS
+    FastAPI -->|SQL| Postgres
+    FastAPI -->|S3 API| MinIO
+    LakeFS -->|Store objects| MinIO
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Client Access                       │
-│            (HuggingFace Hub, kohub-cli, Web)            │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     │ Port 28080
-                     ▼
-         ┌───────────────────────┐
-         │   Nginx (hub-ui)      │
-         │  - Serves frontend    │
-         │  - Reverse proxy API  │
-         └───────┬───────────────┘
-                 │
-         ┌───────┴───────────────┐
-         │                       │
-   Static Files            /api, /org, resolve
-   (Vue 3 app)                   │
-                                 │ Internal: hub-api:48888
-                                 ▼
-                    ┌────────────────────────┐
-                    │  FastAPI (hub-api)     │
-                    │  - HF-compatible API   │
-                    └──┬─────────────┬───────┘
-                       │             │
-              ┌────────┴────┐   ┌────┴────────┐
-              │   LakeFS    │   │   MinIO     │
-              │  (version)  │   │  (storage)  │
-              └─────────────┘   └─────────────┘
-```
+
+**Port Mapping:**
+- **28080** - Public entry point (Nginx)
+- **48888** - Internal FastAPI (not exposed)
+- **28000** - LakeFS admin UI (optional, for admins)
+- **29000** - MinIO console (optional, for admins)
+- **29001** - MinIO S3 API (internal + public for downloads)
+- **25432** - PostgreSQL (optional, for external access)
 
 ## Development vs Production
 
@@ -223,6 +252,57 @@ os.environ["HF_ENDPOINT"] = "http://localhost:48888"
 os.environ["HF_ENDPOINT"] = "http://localhost:28080"
 ```
 
+## Data Flow Examples
+
+### Upload Flow (with LFS)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Nginx
+    participant FastAPI
+    participant LakeFS
+    participant MinIO
+
+    User->>Nginx: POST /api/models/org/model/commit/main
+    Nginx->>FastAPI: Forward request
+    FastAPI->>FastAPI: Parse NDJSON (header + files + lfsFiles)
+
+    alt Small File (<5MB)
+        FastAPI->>LakeFS: Upload object (base64 decoded)
+        LakeFS->>MinIO: Store object
+    else Large File (>5MB)
+        Note over FastAPI,MinIO: File already uploaded via presigned URL
+        FastAPI->>LakeFS: Link physical address
+    end
+
+    FastAPI->>LakeFS: Commit with message
+    LakeFS-->>FastAPI: Commit ID
+    FastAPI-->>Nginx: 200 OK + commit URL
+    Nginx-->>User: Commit successful
+```
+
+### Download Flow (Direct S3)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Nginx
+    participant FastAPI
+    participant LakeFS
+    participant MinIO
+
+    User->>Nginx: GET /org/model/resolve/main/model.safetensors
+    Nginx->>FastAPI: Forward request
+    FastAPI->>LakeFS: Stat object (get metadata)
+    LakeFS-->>FastAPI: Physical address + SHA256
+    FastAPI->>MinIO: Generate presigned URL (1 hour)
+    FastAPI-->>Nginx: 302 Redirect
+    Nginx-->>User: Redirect to presigned URL
+    User->>MinIO: Direct download
+    MinIO-->>User: File content
+```
+
 ## Why This Architecture?
 
 1. **Single Entry Point:** Users only need to know one port (28080)
@@ -231,6 +311,8 @@ os.environ["HF_ENDPOINT"] = "http://localhost:28080"
 4. **Static File Serving:** Nginx serves frontend efficiently
 5. **Load Balancing:** Can add multiple backend instances behind nginx
 6. **Caching:** Nginx can cache static assets
+7. **Direct Downloads:** Files downloaded directly from S3, not proxied
+8. **Scalability:** Each component can scale independently
 
 ## Troubleshooting
 

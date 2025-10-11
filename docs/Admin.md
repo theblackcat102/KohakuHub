@@ -2,8 +2,29 @@
 
 *Complete guide to KohakuHub's administration interface*
 
-**Last Updated:** October 2025
+**Last Updated:** January 2025
 **Access:** http://your-hub.com/admin
+
+---
+
+## Admin Portal Architecture
+
+```mermaid
+graph LR
+    subgraph "Admin Access"
+        Browser[Browser] -->|X-Admin-Token| Portal[Admin Portal UI]
+    end
+
+    subgraph "Admin API"
+        Portal -->|REST API| AdminAPI[Admin Endpoints]
+    end
+
+    subgraph "Data Sources"
+        AdminAPI -->|Queries| DB[PostgreSQL/SQLite]
+        AdminAPI -->|List Objects| S3[MinIO/S3]
+        AdminAPI -->|Repository Info| LakeFS[LakeFS]
+    end
+```
 
 ---
 
@@ -860,6 +881,6 @@ A: Yes, all admin operations are logged with `[ADMIN]` prefix.
 
 ---
 
-**Last Updated:** October 2025
+**Last Updated:** January 2025
 **Version:** 1.0
 **Status:** ✅ Production Ready

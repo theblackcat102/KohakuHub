@@ -1,62 +1,61 @@
 # Kohaku Hub API Documentation
 
-*Last Updated: October 2025*
+*Last Updated: January 2025*
 
 This document explains how Kohaku Hub's API works, the data flow, and key endpoints.
 
 ## System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client Request                          │
-│                    (huggingface_hub Python)                     │
-└────────────────────────────────┬────────────────────────────────┘
-                                 |
-                                 v
-┌─────────────────────────────────────────────────────────────────┐
-│                         FastAPI Layer                           │
-│                      (kohakuhub/api/*)                          │
-│                                                                 │
-│     ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-│     │  basic   │  │   file   │  │   lfs    │  │  utils   │      │
-│     │  .py     │  │   .py    │  │   .py    │  │   .py    │      │
-│     └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
-└────────────────────────────────┬────────────────────────────────┘
-                                 |
-                    ┌────────────┼────────────┐
-                    |            |            |
-                    v            v            v
-         ┌─────────────┐  ┌──────────┐  ┌─────────────┐
-         │   LakeFS    │  │ SQLite/  │  │    MinIO    │
-         │             │  │ Postgres │  │     (S3)    │
-         │ Versioning  │  │ Metadata │  │   Storage   │
-         │  Branches   │  │   Dedup  │  │   Objects   │
-         └─────────────┘  └──────────┘  └─────────────┘
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Client["Client<br/>(huggingface_hub, git, browser)"]
+    end
+
+    subgraph "Entry Point"
+        Nginx["Nginx (Port 28080)<br/>- Serves static files<br/>- Reverse proxy"]
+    end
+
+    subgraph "Application Layer"
+        FastAPI["FastAPI (Port 48888)<br/>- Auth & Permissions<br/>- HF-compatible API<br/>- Git Smart HTTP"]
+    end
+
+    subgraph "Storage Backend"
+        LakeFS["LakeFS<br/>- Git-like versioning<br/>- Branch management<br/>- Commit history"]
+        DB["PostgreSQL/SQLite<br/>- User data<br/>- Metadata<br/>- Deduplication"]
+        S3["MinIO/S3<br/>- Object storage<br/>- LFS files<br/>- Presigned URLs"]
+    end
+
+    Client -->|HTTP/Git/LFS| Nginx
+    Nginx -->|Static files| Client
+    Nginx -->|/api, /org, resolve| FastAPI
+    FastAPI -->|REST API| LakeFS
+    FastAPI -->|Queries| DB
+    FastAPI -->|Async wrappers| S3
+    LakeFS -->|Stores objects| S3
+
 ```
 
 ## Core Concepts
 
 ### File Size Thresholds
 
-```
-File Size Decision Tree:
+```mermaid
+graph TD
+    Start[File Upload] --> Check{File size > 5MB?}
+    Check -->|No| Regular[Regular Mode]
+    Check -->|Yes| LFS[LFS Mode]
+    Regular --> Base64[Base64 in commit payload]
+    LFS --> Presigned[S3 presigned URL]
+    Base64 --> FastAPI[FastAPI processes]
+    Presigned --> Direct[Direct S3 upload]
+    FastAPI --> LakeFS1[LakeFS stores object]
+    Direct --> Link[FastAPI links S3 object]
+    Link --> LakeFS2[LakeFS commit with physical address]
 
-         Is file > 10MB?
-              |
-      ┌───────┴───────┐
-      |               |
-     NO              YES
-      |               |
-      v               v
-  ┌─────────┐    ┌─────────┐
-  │ Regular │    │   LFS   │
-  │  Mode   │    │  Mode   │
-  └─────────┘    └─────────┘
-      |               |
-      v               v
-  Base64 in      S3 Direct
-   Commit         Upload
 ```
+
+**Note:** The LFS threshold is configurable via `KOHAKU_HUB_LFS_THRESHOLD_BYTES` (default: 5MB = 5,242,880 bytes).
 
 ### Storage Layout
 
@@ -131,13 +130,37 @@ See [Git.md](./Git.md) for complete Git clone documentation and implementation d
 
 ### Overview
 
-```
-┌────────┐     ┌──────────┐     ┌─────────┐     ┌────────┐
-│ Client │---->│ Preupload│---->│ Upload  │---->│ Commit │
-└────────┘     └──────────┘     └─────────┘     └────────┘
-   User          Check if         Upload          Atomic
-  Request       file exists       file(s)         commit
-                (dedup)         (S3/inline)      (LakeFS)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant LakeFS
+    participant S3
+
+    Note over Client,S3: Phase 1: Preupload Check
+    Client->>API: POST /preupload (file hashes & sizes)
+    API->>API: Check DB for existing SHA256
+    API-->>Client: Upload mode (regular/lfs) & dedup info
+
+    alt Small Files (<5MB)
+        Note over Client,S3: Phase 2a: Regular Upload
+        Client->>API: POST /commit (base64 content)
+        API->>LakeFS: Upload object
+        LakeFS->>S3: Store object
+    else Large Files (>=5MB)
+        Note over Client,S3: Phase 2b: LFS Upload
+        Client->>API: POST /info/lfs/objects/batch
+        API->>S3: Generate presigned URL
+        API-->>Client: Presigned URL
+        Client->>S3: PUT file (direct upload)
+        Client->>API: POST /commit (lfsFile entry)
+        API->>LakeFS: Link physical address
+    end
+
+    Note over Client,S3: Phase 3: Commit
+    API->>LakeFS: Commit with message
+    LakeFS-->>API: Commit ID
+    API-->>Client: Commit URL & OID
 ```
 
 ### Step 1: Preupload Check
@@ -186,16 +209,16 @@ See [Git.md](./Git.md) for complete Git clone documentation and implementation d
 ```
 For each file:
   1. Check size:
-     - ≤ 10MB → "regular"
-     - > 10MB → "lfs"
-  
+     - ≤ 5MB → "regular"
+     - > 5MB → "lfs"
+
   2. Check if exists (deduplication):
      - Query DB for matching SHA256 + size
      - If match found → shouldIgnore: true
      - If no match → shouldIgnore: false
 ```
 
-### Step 2a: Regular Upload (≤10MB)
+### Step 2a: Regular Upload (≤5MB)
 
 Files are sent inline in the commit payload as base64.
 
@@ -207,7 +230,7 @@ Files are sent inline in the commit payload as base64.
 
 **No separate upload step needed** - proceed directly to Step 3.
 
-### Step 2b: LFS Upload (>10MB)
+### Step 2b: LFS Upload (>5MB)
 
 #### Phase 1: Request Upload URLs
 
@@ -293,8 +316,8 @@ Files are sent inline in the commit payload as base64.
 | Key | Description | Usage |
 |-----|-------------|-------|
 | `header` | Commit metadata | Required, must be first line |
-| `file` | Small file (inline base64) | For files ≤ 10MB |
-| `lfsFile` | Large file (LFS reference) | For files > 10MB, already uploaded to S3 |
+| `file` | Small file (inline base64) | For files ≤ 5MB |
+| `lfsFile` | Large file (LFS reference) | For files > 5MB, already uploaded to S3 |
 | `deletedFile` | Delete a single file | Remove file from repo |
 | `deletedFolder` | Delete folder recursively | Remove all files in folder |
 | `copyFile` | Copy file within repo | Duplicate file (deduplication-aware) |
@@ -343,12 +366,28 @@ Files are sent inline in the commit payload as base64.
 
 ## Download Workflow
 
-```
-┌────────┐     ┌──────────┐     ┌─────────┐
-│ Client │────>│   HEAD   │────>│   GET   │
-└────────┘     └──────────┘     └─────────┘
-  Request      Get metadata      Download
-               (size, hash)      (redirect)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant LakeFS
+    participant S3
+
+    Note over Client,S3: Optional: HEAD request for metadata
+    Client->>API: HEAD /resolve/{revision}/{filename}
+    API->>LakeFS: Stat object
+    LakeFS-->>API: Object metadata (SHA256, size)
+    API-->>Client: Headers (ETag, Content-Length, X-Repo-Commit)
+
+    Note over Client,S3: Download: GET request
+    Client->>API: GET /resolve/{revision}/{filename}
+    API->>LakeFS: Get object metadata
+    API->>S3: Generate presigned URL
+    API-->>Client: 302 Redirect (presigned URL)
+    Client->>S3: Direct download
+    S3-->>Client: File content
+
+    Note over Client: No proxy - direct S3 download
 ```
 
 ### Step 1: Get Metadata (HEAD)
@@ -563,72 +602,159 @@ Returns all repositories for a user/organization, grouped by type.
 
 ## Database Schema
 
-### Repository Table
-```
-┌──────────────┬──────────────┬─────────────┐
-│    Column    │     Type     │   Index?    │
-├──────────────┼──────────────┼─────────────┤
-│ id           │ INTEGER PK   │ Primary     │
-│ repo_type    │ VARCHAR      │ Yes         │
-│ namespace    │ VARCHAR      │ Yes         │
-│ name         │ VARCHAR      │ Yes         │
-│ full_id      │ VARCHAR      │ Unique      │
-│ private      │ BOOLEAN      │ No          │
-│ created_at   │ TIMESTAMP    │ No          │
-└──────────────┴──────────────┴─────────────┘
+```mermaid
+erDiagram
+    USER ||--o{ REPOSITORY : owns
+    USER ||--o{ SESSION : has
+    USER ||--o{ TOKEN : has
+    USER ||--o{ SSHKEY : has
+    USER }o--o{ ORGANIZATION : member_of
+    ORGANIZATION ||--o{ REPOSITORY : owns
+    REPOSITORY ||--o{ FILE : contains
+    REPOSITORY ||--o{ COMMIT : has
+    REPOSITORY ||--o{ STAGINGUPLOAD : has
+    COMMIT ||--o{ LFSOBJECTHISTORY : references
 
-Example:
-  repo_type: "model"
-  namespace: "myorg"
-  name: "mymodel"
-  full_id: "myorg/mymodel"
+    USER {
+        int id PK
+        string username UK
+        string email UK
+        string password_hash
+        boolean email_verified
+        boolean is_active
+        bigint private_quota_bytes
+        bigint public_quota_bytes
+        bigint private_used_bytes
+        bigint public_used_bytes
+        datetime created_at
+    }
+
+    REPOSITORY {
+        int id PK
+        string repo_type
+        string namespace
+        string name
+        string full_id
+        boolean private
+        int owner_id FK
+        datetime created_at
+    }
+
+    FILE {
+        int id PK
+        string repo_full_id
+        string path_in_repo
+        int size
+        string sha256
+        boolean lfs
+        datetime created_at
+        datetime updated_at
+    }
+
+    COMMIT {
+        int id PK
+        string commit_id
+        string repo_full_id
+        string repo_type
+        string branch
+        int user_id FK
+        string username
+        text message
+        text description
+        datetime created_at
+    }
+
+    ORGANIZATION {
+        int id PK
+        string name UK
+        text description
+        bigint private_quota_bytes
+        bigint public_quota_bytes
+        bigint private_used_bytes
+        bigint public_used_bytes
+        datetime created_at
+    }
+
+    TOKEN {
+        int id PK
+        int user_id FK
+        string token_hash UK
+        string name
+        datetime last_used
+        datetime created_at
+    }
+
+    SESSION {
+        int id PK
+        string session_id UK
+        int user_id FK
+        string secret
+        datetime expires_at
+        datetime created_at
+    }
+
+    SSHKEY {
+        int id PK
+        int user_id FK
+        string key_type
+        text public_key
+        string fingerprint UK
+        string title
+        datetime last_used
+        datetime created_at
+    }
+
+    STAGINGUPLOAD {
+        int id PK
+        string repo_full_id
+        string repo_type
+        string revision
+        string path_in_repo
+        string sha256
+        int size
+        string upload_id
+        string storage_key
+        boolean lfs
+        datetime created_at
+    }
+
+    LFSOBJECTHISTORY {
+        int id PK
+        string repo_full_id
+        string path_in_repo
+        string sha256
+        int size
+        string commit_id
+        datetime created_at
+    }
 ```
 
-### File Table (Deduplication)
-```
-┌──────────────┬──────────────┬─────────────┐
-│    Column    │     Type     │   Index?    │
-├──────────────┼──────────────┼─────────────┤
-│ id           │ INTEGER PK   │ Primary     │
-│ repo_full_id │ VARCHAR      │ Yes         │
-│ path_in_repo │ VARCHAR      │ Yes         │
-│ size         │ INTEGER      │ No          │
-│ sha256       │ VARCHAR      │ Yes         │
-│ lfs          │ BOOLEAN      │ No          │
-│ created_at   │ TIMESTAMP    │ No          │
-│ updated_at   │ TIMESTAMP    │ No          │
-└──────────────┴──────────────┴─────────────┘
+### Key Tables
 
-Unique constraint: (repo_full_id, path_in_repo)
+**Repository Table** - Stores repository metadata:
+- Unique constraint on `(repo_type, namespace, name)`
+- Allows same `full_id` across different `repo_type`
+- Example: `model:myorg/mymodel`, `dataset:myorg/mymodel`
 
-Purpose:
-  - Track file SHA256 hashes for deduplication
-  - Check if file changed before upload
-  - Maintain file metadata
-```
+**File Table** - Deduplication and metadata:
+- Unique constraint on `(repo_full_id, path_in_repo)`
+- `sha256` indexed for fast deduplication lookups
+- `lfs` flag indicates if file uses LFS storage
 
-### StagingUpload Table (Optional)
-```
-┌──────────────┬──────────────┬─────────────┐
-│    Column    │     Type     │   Index?    │
-├──────────────┼──────────────┼─────────────┤
-│ id           │ INTEGER PK   │ Primary     │
-│ repo_full_id │ VARCHAR      │ Yes         │
-│ revision     │ VARCHAR      │ Yes         │
-│ path_in_repo │ VARCHAR      │ No          │
-│ sha256       │ VARCHAR      │ No          │
-│ size         │ INTEGER      │ No          │
-│ upload_id    │ VARCHAR      │ No          │
-│ storage_key  │ VARCHAR      │ No          │
-│ lfs          │ BOOLEAN      │ No          │
-│ created_at   │ TIMESTAMP    │ No          │
-└──────────────┴──────────────┴─────────────┘
+**Commit Table** - User commit tracking:
+- `commit_id` is LakeFS commit SHA
+- Indexed by `(repo_full_id, branch)` for fast queries
+- Denormalized `username` for performance
 
-Purpose:
-  - Track ongoing multipart uploads
-  - Enable upload resume
-  - Clean up failed uploads
-```
+**LFSObjectHistory Table** - LFS garbage collection:
+- Tracks which commits reference which LFS objects
+- Enables preserving K versions of each file (default: 5)
+- Used for auto-cleanup of old LFS objects
+
+**StagingUpload Table** - Multipart upload tracking:
+- Tracks ongoing multipart uploads
+- Enables upload resume
+- Cleans up failed uploads
 
 ## LakeFS Integration
 
@@ -647,15 +773,25 @@ Examples:
 
 ### Key Operations
 
-| Operation | LakeFS API | Purpose |
-|-----------|------------|---------|
-| Create Repo | `repositories.create_repository()` | Initialize new repository |
-| Upload Small File | `objects.upload_object()` | Direct content upload |
-| Link LFS File | `staging.link_physical_address()` | Link S3 object to LakeFS |
-| Commit | `commits.commit()` | Create atomic commit |
-| List Files | `objects.list_objects()` | Browse repository |
-| Get File Info | `objects.stat_object()` | Get file metadata |
-| Delete File | `objects.delete_object()` | Remove file |
+**All LakeFS operations use pure async REST API via httpx (no thread pools!):**
+
+| Operation | LakeFS REST Endpoint | KohakuHub Method | Purpose |
+|-----------|---------------------|------------------|---------|
+| Create Repo | `POST /repositories` | `create_repository()` | Initialize new repository |
+| Upload Small File | `POST /repositories/{repo}/branches/{branch}/objects` | `upload_object()` | Direct content upload |
+| Link LFS File | `PUT /repositories/{repo}/branches/{branch}/staging/backing` | `link_physical_address()` | Link S3 object to LakeFS |
+| Commit | `POST /repositories/{repo}/branches/{branch}/commits` | `commit()` | Create atomic commit |
+| List Files | `GET /repositories/{repo}/refs/{ref}/objects/ls` | `list_objects()` | Browse repository |
+| Get File Info | `GET /repositories/{repo}/refs/{ref}/objects/stat` | `stat_object()` | Get file metadata |
+| Get File Content | `GET /repositories/{repo}/refs/{ref}/objects` | `get_object()` | Download file |
+| Delete File | `DELETE /repositories/{repo}/branches/{branch}/objects` | `delete_object()` | Remove file |
+| Create Branch | `POST /repositories/{repo}/branches` | `create_branch()` | Create new branch |
+| Delete Branch | `DELETE /repositories/{repo}/branches/{branch}` | `delete_branch()` | Delete branch |
+| Create Tag | `POST /repositories/{repo}/tags` | `create_tag()` | Create tag |
+| Delete Tag | `DELETE /repositories/{repo}/tags/{tag}` | `delete_tag()` | Delete tag |
+| Revert | `POST /repositories/{repo}/branches/{branch}/revert` | `revert_branch()` | Revert commit |
+| Merge | `POST /repositories/{repo}/refs/{source}/merge/{dest}` | `merge_into_branch()` | Merge branches |
+| Hard Reset | `PUT /repositories/{repo}/branches/{branch}/hard_reset` | `hard_reset_branch()` | Reset branch to commit |
 
 ### Physical Address Linking
 
@@ -1210,9 +1346,15 @@ All Downloads:
 
 ### Recommended S3 Providers
 
-| Provider | Best For | Pricing Model |
-|----------|----------|---------------|
-| Cloudflare R2 | High download | Free egress, $0.015/GB storage |
-| Wasabi | Archive/backup | $6/TB/month, free egress if download < storage |
-| MinIO | Self-hosted | Free (your hardware/bandwidth) |
-| AWS S3 | Enterprise | Pay per GB + egress |
+| Provider | Best For | Pricing Model | Notes |
+|----------|----------|---------------|-------|
+| Cloudflare R2 | High download | Free egress, $0.015/GB storage | Best for public datasets |
+| Wasabi | Archive/backup | $6/TB/month, free egress* | *if download < storage |
+| MinIO | Self-hosted | Free (your hardware/bandwidth) | Full control, privacy |
+| AWS S3 | Enterprise | Pay per GB + egress | Most features, expensive egress |
+| Backblaze B2 | Budget | $6/TB storage, $0.01/GB egress | Good for mixed workloads |
+
+**Recommendation for KohakuHub:**
+- **Development**: MinIO (included in docker-compose)
+- **Public Hub**: Cloudflare R2 (free egress saves costs)
+- **Private/Enterprise**: Self-hosted MinIO or AWS S3 with VPC endpoints

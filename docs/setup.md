@@ -1,6 +1,20 @@
 # KohakuHub Setup Guide
 
+*Last Updated: January 2025*
+
 ## Quick Start
+
+```mermaid
+graph LR
+    Start[Start] --> Clone[Clone Repository]
+    Clone --> Config[Configure<br/>docker-compose.yml]
+    Config --> Build[Build Frontend]
+    Build --> Deploy[Start Docker]
+    Deploy --> Verify[Verify Installation]
+    Verify --> CreateUser[Create First User]
+    CreateUser --> Done[Ready!]
+
+```
 
 ### 1. Clone Repository
 
@@ -16,6 +30,17 @@ cp docker-compose.example.yml docker-compose.yml
 ```
 
 **Important:** The repository only includes `docker-compose.example.yml` as a template. You must copy it to `docker-compose.yml` and customize it for your deployment.
+
+**Alternative:** Use the interactive generator:
+```bash
+python scripts/generate_docker_compose.py
+```
+
+The generator will guide you through:
+- PostgreSQL setup (built-in vs external)
+- LakeFS database backend
+- S3 storage (MinIO vs external)
+- Security key generation
 
 ### 2. Customize Configuration
 
@@ -83,6 +108,29 @@ docker-compose logs -f hub-api
 
 ## Configuration Reference
 
+```mermaid
+graph TD
+    subgraph "Security Settings (MUST CHANGE)"
+        MinIO["MinIO Credentials<br/>MINIO_ROOT_USER<br/>MINIO_ROOT_PASSWORD"]
+        Postgres["PostgreSQL Password<br/>POSTGRES_PASSWORD"]
+        LakeFS["LakeFS Encryption Key<br/>LAKEFS_AUTH_ENCRYPT_SECRET_KEY"]
+        Session["Session Secret<br/>KOHAKU_HUB_SESSION_SECRET"]
+        Admin["Admin Token<br/>KOHAKU_HUB_ADMIN_SECRET_TOKEN"]
+    end
+
+    subgraph "Optional Settings"
+        BaseURL["Base URL<br/>KOHAKU_HUB_BASE_URL"]
+        S3Public["S3 Public Endpoint<br/>KOHAKU_HUB_S3_PUBLIC_ENDPOINT"]
+        LFSThreshold["LFS Threshold<br/>KOHAKU_HUB_LFS_THRESHOLD_BYTES"]
+        Email["Email Verification<br/>KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION"]
+    end
+
+    Deploy[Deploy] --> Security
+    Security --> Optional
+    Optional --> Production[Production Ready]
+
+```
+
 ### Required Changes
 
 | Variable | Default | Change To | Why |
@@ -92,6 +140,16 @@ docker-compose logs -f hub-api
 | `POSTGRES_PASSWORD` | hubpass | strong_password | Security |
 | `LAKEFS_AUTH_ENCRYPT_SECRET_KEY` | change_this | random_32_chars | Security |
 | `KOHAKU_HUB_SESSION_SECRET` | change_this | random_string | Security |
+| `KOHAKU_HUB_ADMIN_SECRET_TOKEN` | change_this | random_string | Admin portal access |
+
+**Generate secure values:**
+```bash
+# Generate 32-character hex key
+openssl rand -hex 32
+
+# Generate 64-character random string
+openssl rand -base64 48
+```
 
 ### Optional Changes
 
@@ -99,8 +157,11 @@ docker-compose logs -f hub-api
 |----------|---------|----------------|
 | `KOHAKU_HUB_BASE_URL` | http://localhost:28080 | Deploying to domain |
 | `KOHAKU_HUB_S3_PUBLIC_ENDPOINT` | http://localhost:29001 | Using external S3 |
-| `KOHAKU_HUB_LFS_THRESHOLD_BYTES` | 10000000 (10MB) | Adjust LFS threshold |
+| `KOHAKU_HUB_LFS_THRESHOLD_BYTES` | 5242880 (5MB) | Adjust LFS threshold |
 | `KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION` | false | Enable email verification |
+| `KOHAKU_HUB_LFS_KEEP_VERSIONS` | 5 | Change version retention |
+| `KOHAKU_HUB_LFS_AUTO_GC` | false | Enable auto garbage collection |
+| `KOHAKU_HUB_ADMIN_ENABLED` | true | Disable admin portal |
 
 ## Post-Installation
 
