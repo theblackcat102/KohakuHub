@@ -6,6 +6,7 @@ import secrets
 
 import bcrypt
 
+
 def hash_password(password: str) -> str:
     """Hash password with bcrypt."""
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()

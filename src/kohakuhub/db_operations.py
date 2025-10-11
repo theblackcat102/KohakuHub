@@ -21,6 +21,7 @@ from kohakuhub.db import (
     db,
 )
 
+
 # User operations
 def get_user_by_id(user_id: int) -> User | None:
     """Get user by ID."""

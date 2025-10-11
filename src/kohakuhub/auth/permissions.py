@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from kohakuhub.db import Organization, Repository, User, UserOrganization
 
+
 def check_namespace_permission(
     namespace: str, user: User, require_admin: bool = False
 ) -> bool:

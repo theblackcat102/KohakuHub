@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+
 class Color:
     """ANSI color codes for terminal output."""
 

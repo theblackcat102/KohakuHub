@@ -7,6 +7,7 @@ import hashlib
 import struct
 import zlib
 
+
 def compute_git_object_sha1(obj_type: str, content: bytes) -> str:
     """Compute Git object SHA-1.
 

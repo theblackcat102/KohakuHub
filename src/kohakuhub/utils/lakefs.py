@@ -3,6 +3,7 @@
 from kohakuhub.config import cfg
 from kohakuhub.lakefs_rest_client import LakeFSRestClient, get_lakefs_rest_client
 
+
 def get_lakefs_client() -> LakeFSRestClient:
     """Get configured LakeFS REST client.
 

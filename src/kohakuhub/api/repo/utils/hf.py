@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi.responses import Response
 
+
 class HFErrorCode:
     """HuggingFace error codes for X-Error-Code header.
 
