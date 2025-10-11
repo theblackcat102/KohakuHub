@@ -720,7 +720,7 @@ async def commit(
         is_org = org is not None
 
         # Recalculate storage usage
-        update_namespace_storage(namespace, is_org)
+        await update_namespace_storage(namespace, is_org)
         logger.debug(
             f"Updated storage usage for {'org' if is_org else 'user'} {namespace}"
         )

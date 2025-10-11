@@ -206,7 +206,7 @@ async def recalculate_storage(
 
     # Recalculate storage
     logger.info(f"Recalculating storage for {'org' if is_org else 'user'} {namespace}")
-    update_namespace_storage(namespace, is_org)
+    await update_namespace_storage(namespace, is_org)
 
     # Get updated info
     info = get_storage_info(namespace, is_org)

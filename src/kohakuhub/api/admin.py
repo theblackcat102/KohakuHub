@@ -499,7 +499,7 @@ async def recalculate_quota_admin(
         f"Admin recalculating storage for {'org' if is_org else 'user'} {namespace}"
     )
 
-    storage = update_namespace_storage(namespace, is_org)
+    storage = await update_namespace_storage(namespace, is_org)
     info = get_storage_info(namespace, is_org)
 
     return {
