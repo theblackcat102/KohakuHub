@@ -77,7 +77,7 @@ const getMermaidConfig = (dark) => ({
   securityLevel: "loose",
   fontFamily: "ui-sans-serif, system-ui, sans-serif",
   theme: dark ? "dark" : "default",
-  // Let Mermaid handle colors - built-in themes work better
+  logLevel: 'fatal', // Only log fatal errors, suppress warnings
 });
 
 // Initialize Mermaid
@@ -156,7 +156,23 @@ async function renderSingleDiagram(wrapper, code, index) {
   container.id = id;
 
   // Render mermaid with current theme
-  const { svg } = await mermaid.render(id, code);
+  let svg;
+  try {
+    const result = await mermaid.render(id, code);
+    svg = result.svg;
+  } catch (err) {
+    // Don't show Mermaid's error diagram, show our own error message
+    console.error('Mermaid render error:', err);
+    container.innerHTML = `
+      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-4 text-sm">
+        <div class="font-semibold text-red-600 dark:text-red-400 mb-2">Diagram Syntax Error</div>
+        <div class="text-red-700 dark:text-red-300 text-xs">This diagram has a syntax error and cannot be rendered.</div>
+      </div>
+    `;
+    wrapper.appendChild(container);
+    return; // Exit early
+  }
+
   container.innerHTML = svg;
 
   // Get SVG element
