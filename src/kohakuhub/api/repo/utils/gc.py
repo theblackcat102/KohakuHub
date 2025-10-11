@@ -1,12 +1,11 @@
 """Garbage collection utilities for LFS objects."""
 
-import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
+import asyncio
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory
-from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client
 from kohakuhub.utils.s3 import get_s3_client, object_exists
@@ -446,19 +445,17 @@ async def sync_file_table_with_commit(
             synced_count += 1
 
         # Remove files from File table that no longer exist in commit
-        def _cleanup_removed_files():
-            if file_paths:
-                return (
-                    File.delete()
-                    .where(
-                        (File.repo_full_id == repo_full_id)
-                        & (File.path_in_repo.not_in(file_paths))
-                    )
-                    .execute()
+        if file_paths:
+            removed_count = (
+                File.delete()
+                .where(
+                    (File.repo_full_id == repo_full_id)
+                    & (File.path_in_repo.not_in(file_paths))
                 )
-            return 0
-
-        removed_count = await execute_db_query(_cleanup_removed_files)
+                .execute()
+            )
+        else:
+            removed_count = 0
 
         if removed_count > 0:
             logger.info(f"Removed {removed_count} stale file(s) from File table")
@@ -586,18 +583,14 @@ async def track_commit_lfs_objects(
 
         # Remove deleted files from File table
         if files_to_remove:
-
-            def _cleanup_removed_files():
-                return (
-                    File.delete()
-                    .where(
-                        (File.repo_full_id == repo_full_id)
-                        & (File.path_in_repo.in_(files_to_remove))
-                    )
-                    .execute()
+            removed_count = (
+                File.delete()
+                .where(
+                    (File.repo_full_id == repo_full_id)
+                    & (File.path_in_repo.in_(files_to_remove))
                 )
-
-            removed_count = await execute_db_query(_cleanup_removed_files)
+                .execute()
+            )
             logger.info(f"Removed {removed_count} deleted file(s) from File table")
 
         if tracked_count > 0:

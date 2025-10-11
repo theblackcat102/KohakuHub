@@ -1,11 +1,11 @@
 """Custom logging module for KohakuHub with colored output and formatted tracebacks."""
 
+import os
 import sys
 import traceback as tb
 from datetime import datetime
-from typing import Optional
 from enum import Enum
-
+from typing import Optional
 
 class Color:
     """ANSI color codes for terminal output."""
@@ -73,7 +73,7 @@ class Logger:
     def _format_message(self, level: LogLevel, message: str) -> str:
         """Format log message with colors and structure.
 
-        Format: [LEVEL][API-NAME][HH:MM:SS] message
+        Format: [LEVEL][API-NAME][Worker:PID][HH:MM:SS] message
 
         Args:
             level: Log level
@@ -84,11 +84,13 @@ class Logger:
         """
         level_name, level_color = level.value
         timestamp = self._get_timestamp()
+        worker_id = os.getpid()  # Process ID identifies the worker
 
         # Build formatted message
         parts = [
             f"{level_color}[{level_name}]{Color.RESET}",
             f"{Color.BRIGHT_MAGENTA}[{self.api_name}]{Color.RESET}",
+            f"{Color.BLUE}[W:{worker_id}]{Color.RESET}",
             f"{Color.BRIGHT_BLACK}[{timestamp}]{Color.RESET}",
             message,
         ]

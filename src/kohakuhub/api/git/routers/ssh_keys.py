@@ -3,13 +3,13 @@
 import base64
 import hashlib
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
 from kohakuhub.db import SSHKey, User
-from kohakuhub.db_async import (
+from kohakuhub.db_operations import (
     create_ssh_key,
     delete_ssh_key,
     get_ssh_key_by_fingerprint,
@@ -153,7 +153,7 @@ async def list_ssh_keys(user: User = Depends(get_current_user)):
     Returns:
         List of SSH keys
     """
-    keys = await list_user_ssh_keys(user.id)
+    keys = list_user_ssh_keys(user.id)
 
     return [
         SSHKeyResponse(
@@ -193,7 +193,7 @@ async def add_ssh_key(
         key_type, fingerprint = validate_ssh_key(key_request.key)
 
         # Check if key already exists
-        existing_key = await get_ssh_key_by_fingerprint(fingerprint)
+        existing_key = get_ssh_key_by_fingerprint(fingerprint)
         if existing_key:
             raise HTTPException(
                 409,
@@ -201,7 +201,7 @@ async def add_ssh_key(
             )
 
         # Create key
-        new_key = await create_ssh_key(
+        new_key = create_ssh_key(
             user_id=user.id,
             key_type=key_type,
             public_key=key_request.key.strip(),
@@ -239,7 +239,7 @@ async def remove_ssh_key(key_id: int, user: User = Depends(get_current_user)):
         HTTPException: If key not found or not owned by user
     """
     # Get key
-    key = await get_ssh_key_by_id(key_id)
+    key = get_ssh_key_by_id(key_id)
     if not key:
         raise HTTPException(404, detail="SSH key not found")
 
@@ -248,7 +248,7 @@ async def remove_ssh_key(key_id: int, user: User = Depends(get_current_user)):
         raise HTTPException(403, detail="Not authorized to delete this key")
 
     # Delete key
-    await delete_ssh_key(key)
+    delete_ssh_key(key)
 
     logger.info(
         f"User {user.username} removed SSH key: {key.key_type} {key.fingerprint}"
@@ -272,7 +272,7 @@ async def get_ssh_key(key_id: int, user: User = Depends(get_current_user)):
         HTTPException: If key not found or not owned by user
     """
     # Get key
-    key = await get_ssh_key_by_id(key_id)
+    key = get_ssh_key_by_id(key_id)
     if not key:
         raise HTTPException(404, detail="SSH key not found")
 

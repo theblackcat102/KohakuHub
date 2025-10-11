@@ -190,7 +190,7 @@ def test_org(authenticated_http_client):
 
     This fixture creates an organization for testing org-related features.
     """
-    from kohakuhub.org.routes import CreateOrganizationPayload
+    from kohakuhub.api.org.router import CreateOrganizationPayload
 
     client = authenticated_http_client
 

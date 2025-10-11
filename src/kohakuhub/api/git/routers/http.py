@@ -8,20 +8,19 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from kohakuhub.db import Repository, Token, User
-from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
-from kohakuhub.api.git.utils.lakefs_bridge import GitLakeFSBridge
-from kohakuhub.api.git.utils.server import (
-    GitReceivePackHandler,
-    GitUploadPackHandler,
-    parse_git_credentials,
-)
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import (
     check_repo_read_permission,
     check_repo_write_permission,
 )
 from kohakuhub.auth.utils import hash_token
+from kohakuhub.api.git.utils.lakefs_bridge import GitLakeFSBridge
+from kohakuhub.api.git.utils.server import (
+    GitReceivePackHandler,
+    GitUploadPackHandler,
+    parse_git_credentials,
+)
 
 logger = get_logger("GIT_HTTP")
 router = APIRouter()
@@ -46,30 +45,21 @@ async def get_user_from_git_auth(authorization: str | None) -> User | None:
     # Hash token and lookup
     token_hash = hash_token(token_str)
 
-    def _get_token():
-        return Token.get_or_none(Token.token_hash == token_hash)
-
-    token = await execute_db_query(_get_token)
+    token = Token.get_or_none(Token.token_hash == token_hash)
     if not token:
         logger.debug(f"Invalid token for user {username}")
         return None
 
     # Get user
-    def _get_user():
-        return User.get_or_none(User.id == token.user_id)
-
-    user = await execute_db_query(_get_user)
+    user = User.get_or_none(User.id == token.user_id)
     if not user or not user.is_active:
         logger.warning(f"User {username} not found or inactive")
         return None
 
     # Update token last used
-    def _update_token():
-        Token.update(last_used=datetime.now(timezone.utc)).where(
-            Token.id == token.id
-        ).execute()
-
-    await execute_db_query(_update_token)
+    Token.update(last_used=datetime.now(timezone.utc)).where(
+        Token.id == token.id
+    ).execute()
 
     logger.info(f"Authenticated {username} via Git HTTP")
     return user
@@ -99,23 +89,20 @@ async def git_info_refs(
     logger.info(f"Git info/refs: {service} for {repo_id}")
 
     # Get repository - try all repo types since we don't know from URL
-    def _get_repo():
-        for repo_type in ["model", "dataset", "space"]:
-            repo = Repository.get_or_none(
-                Repository.namespace == namespace,
-                Repository.name == name,
-                Repository.repo_type == repo_type,
-            )
-            if repo:
-                return repo
-        return None
-
-    repo = await execute_db_query(_get_repo)
+    repo = None
+    for repo_type in ["model", "dataset", "space"]:
+        repo = Repository.get_or_none(
+            Repository.namespace == namespace,
+            Repository.name == name,
+            Repository.repo_type == repo_type,
+        )
+        if repo:
+            break
     if not repo:
         raise HTTPException(404, detail="Repository not found")
 
     # Authenticate user
-    user = await get_user_from_git_auth(authorization)
+    user = get_user_from_git_auth(authorization)
 
     # Check permissions based on service
     if service == "git-upload-pack":
@@ -174,23 +161,20 @@ async def git_upload_pack(
     logger.info(f"Git upload-pack for {repo_id}")
 
     # Get repository - try all repo types since we don't know from URL
-    def _get_repo():
-        for repo_type in ["model", "dataset", "space"]:
-            repo = Repository.get_or_none(
-                Repository.namespace == namespace,
-                Repository.name == name,
-                Repository.repo_type == repo_type,
-            )
-            if repo:
-                return repo
-        return None
-
-    repo = await execute_db_query(_get_repo)
+    repo = None
+    for repo_type in ["model", "dataset", "space"]:
+        repo = Repository.get_or_none(
+            Repository.namespace == namespace,
+            Repository.name == name,
+            Repository.repo_type == repo_type,
+        )
+        if repo:
+            break
     if not repo:
         raise HTTPException(404, detail="Repository not found")
 
     # Authenticate and check read permission
-    user = await get_user_from_git_auth(authorization)
+    user = get_user_from_git_auth(authorization)
     check_repo_read_permission(repo, user)
 
     # Read request body
@@ -234,23 +218,20 @@ async def git_receive_pack(
     logger.info(f"Git receive-pack for {repo_id}")
 
     # Get repository - try all repo types since we don't know from URL
-    def _get_repo():
-        for repo_type in ["model", "dataset", "space"]:
-            repo = Repository.get_or_none(
-                Repository.namespace == namespace,
-                Repository.name == name,
-                Repository.repo_type == repo_type,
-            )
-            if repo:
-                return repo
-        return None
-
-    repo = await execute_db_query(_get_repo)
+    repo = None
+    for repo_type in ["model", "dataset", "space"]:
+        repo = Repository.get_or_none(
+            Repository.namespace == namespace,
+            Repository.name == name,
+            Repository.repo_type == repo_type,
+        )
+        if repo:
+            break
     if not repo:
         raise HTTPException(404, detail="Repository not found")
 
     # Authenticate and check write permission
-    user = await get_user_from_git_auth(authorization)
+    user = get_user_from_git_auth(authorization)
     if not user:
         raise HTTPException(401, detail="Authentication required for push")
 
@@ -291,23 +272,20 @@ async def git_head(
     repo_id = f"{namespace}/{name}"
 
     # Get repository - try all repo types since we don't know from URL
-    def _get_repo():
-        for repo_type in ["model", "dataset", "space"]:
-            repo = Repository.get_or_none(
-                Repository.namespace == namespace,
-                Repository.name == name,
-                Repository.repo_type == repo_type,
-            )
-            if repo:
-                return repo
-        return None
-
-    repo = await execute_db_query(_get_repo)
+    repo = None
+    for repo_type in ["model", "dataset", "space"]:
+        repo = Repository.get_or_none(
+            Repository.namespace == namespace,
+            Repository.name == name,
+            Repository.repo_type == repo_type,
+        )
+        if repo:
+            break
     if not repo:
         raise HTTPException(404, detail="Repository not found")
 
     # Authenticate and check read permission
-    user = await get_user_from_git_auth(authorization)
+    user = get_user_from_git_auth(authorization)
     check_repo_read_permission(repo, user)
 
     # Return HEAD reference

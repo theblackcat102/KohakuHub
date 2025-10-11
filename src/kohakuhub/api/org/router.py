@@ -4,16 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from kohakuhub.db import Organization, User, UserOrganization
-from kohakuhub.db_async import (
+from kohakuhub.db_operations import (
     create_organization as create_org_async,
     create_user_organization,
-    execute_db_query,
     get_organization,
     get_user_by_username,
     get_user_organization,
     list_organization_members as list_org_members_async,
 )
 from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.api.org.util import (
     add_member_to_organization as add_member_util,
     get_organization_details as get_org_details_util,
@@ -21,7 +21,6 @@ from kohakuhub.api.org.util import (
     remove_member_from_organization,
     update_member_role as update_member_role_util,
 )
-from kohakuhub.auth.dependencies import get_current_user
 
 # Error messages
 _ERR_ORG_NOT_FOUND = "Organization not found"
@@ -43,18 +42,15 @@ async def create_organization(
     """Create a new organization with default quotas."""
 
     # Check if organization already exists
-    def _check_exists():
-        return Organization.get_or_none(Organization.name == payload.name)
-
-    existing_org = await execute_db_query(_check_exists)
+    existing_org = Organization.get_or_none(Organization.name == payload.name)
     if existing_org:
         raise HTTPException(400, detail="Organization name already exists")
 
     # Create organization with default quotas
-    org = await create_org_async(payload.name, payload.description)
+    org = create_org_async(payload.name, payload.description)
 
     # Add creator as super-admin
-    await create_user_organization(user.id, org.id, "super-admin")
+    create_user_organization(user.id, org.id, "super-admin")
 
     logger.info(f"User {user.username} created organization: {org.name}")
 
@@ -91,7 +87,7 @@ async def add_member(
         raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Check if the current user is an admin of the organization
-    user_org = await get_user_organization(current_user.id, org.id)
+    user_org = get_user_organization(current_user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to add members")
 
@@ -111,7 +107,7 @@ async def remove_member(
         raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Check if the current user is an admin of the organization
-    user_org = await get_user_organization(current_user.id, org.id)
+    user_org = get_user_organization(current_user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to remove members")
 
@@ -122,7 +118,7 @@ async def remove_member(
 @router.get("/users/{username}/orgs")
 async def list_user_organizations(username: str):
     """List organizations a user belongs to."""
-    user = await get_user_by_username(username)
+    user = get_user_by_username(username)
     if not user:
         raise HTTPException(404, detail="User not found")
 
@@ -156,7 +152,7 @@ async def update_member_role(
         raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Check if the current user is an admin of the organization
-    user_org = await get_user_organization(current_user.id, org.id)
+    user_org = get_user_organization(current_user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to update member roles")
 
@@ -167,12 +163,12 @@ async def update_member_role(
 @router.get("/{org_name}/members")
 async def list_organization_members(org_name: str):
     """List organization members."""
-    org = await get_organization(org_name)
+    org = get_organization(org_name)
     if not org:
         raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)
 
     # Get all members
-    members = await list_org_members_async(org.id)
+    members = list_org_members_async(org.id)
 
     return {
         "members": [

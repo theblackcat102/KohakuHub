@@ -13,22 +13,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from kohakuhub.api.quota.util import check_quota
+from kohakuhub.config import cfg
+from kohakuhub.db import Organization, Repository, User
+from kohakuhub.db_operations import get_file_by_sha256
+from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.auth.permissions import (
+    check_repo_read_permission,
+    check_repo_write_permission,
+)
 from kohakuhub.utils.s3 import (
     generate_download_presigned_url,
     generate_upload_presigned_url,
     get_object_metadata,
     object_exists,
 )
-from kohakuhub.auth.dependencies import get_optional_user
-from kohakuhub.auth.permissions import (
-    check_repo_read_permission,
-    check_repo_write_permission,
-)
-from kohakuhub.config import cfg
-from kohakuhub.db_async import execute_db_query, get_file_by_sha256
-from kohakuhub.db import Organization, Repository, User
-from kohakuhub.logger import get_logger
+from kohakuhub.api.quota.util import check_quota
 
 logger = get_logger("LFS")
 router = APIRouter()
@@ -101,7 +101,7 @@ async def process_upload_object(oid: str, size: int, repo_id: str) -> LFSObjectR
     lfs_key = get_lfs_key(oid)
 
     # Check if object already exists (deduplication)
-    existing = await get_file_by_sha256(oid)
+    existing = get_file_by_sha256(oid)
 
     if existing and existing.size == size:
         # Object exists, no upload needed
@@ -178,7 +178,7 @@ async def process_download_object(oid: str, size: int) -> LFSObjectResponse:
     lfs_key = get_lfs_key(oid)
 
     # Check if object exists
-    existing = await get_file_by_sha256(oid)
+    existing = get_file_by_sha256(oid)
 
     if not existing:
         return LFSObjectResponse(
@@ -258,12 +258,9 @@ async def lfs_batch(
         raise HTTPException(400, detail={"error": f"Invalid LFS batch request: {e}"})
 
     # Check repository exists and permissions
-    def _get_repo():
-        return Repository.get_or_none(
-            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-        )
-
-    repo_row = await execute_db_query(_get_repo)
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
 
     if repo_row:
         operation = batch_req.operation
@@ -281,15 +278,12 @@ async def lfs_batch(
                 total_upload_bytes = sum(obj.size for obj in batch_req.objects)
 
                 # Check if namespace is organization
-                def _check_org():
-                    return Organization.get_or_none(Organization.name == namespace)
-
-                org = await execute_db_query(_check_org)
+                org = Organization.get_or_none(Organization.name == namespace)
                 is_org = org is not None
 
                 # Check quota (based on repo privacy)
                 is_private = repo_row.private
-                allowed, error_msg = await check_quota(
+                allowed, error_msg = check_quota(
                     namespace, total_upload_bytes, is_private, is_org
                 )
                 if not allowed:

@@ -3,6 +3,7 @@
 import os
 import tomllib
 from functools import lru_cache
+
 from pydantic import BaseModel
 
 # Default configuration values

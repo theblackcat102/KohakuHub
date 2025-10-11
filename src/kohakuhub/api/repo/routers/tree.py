@@ -1,11 +1,18 @@
 """Repository tree listing and path information endpoints - Refactored version."""
 
-import asyncio
 from datetime import datetime
 from typing import Literal
+import asyncio
 
 from fastapi import APIRouter, Depends, Form
 
+from kohakuhub.config import cfg
+from kohakuhub.db import File, Repository, User
+from kohakuhub.db_operations import get_file
+from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.repo.utils.hf import (
     hf_repo_not_found,
     hf_revision_not_found,
@@ -13,13 +20,6 @@ from kohakuhub.api.repo.utils.hf import (
     is_lakefs_not_found_error,
     is_lakefs_revision_error,
 )
-from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.auth.dependencies import get_optional_user
-from kohakuhub.auth.permissions import check_repo_read_permission
-from kohakuhub.config import cfg
-from kohakuhub.db_async import execute_db_query, get_file
-from kohakuhub.db import File, Repository, User
-from kohakuhub.logger import get_logger
 
 logger = get_logger("REPO")
 router = APIRouter()
@@ -132,7 +132,7 @@ async def convert_file_object(obj, repo_id: str, prefix_len: int) -> dict:
     relative_path = obj["path"][prefix_len:] if prefix_len else obj["path"]
 
     # Get correct checksum from database
-    file_record = await get_file(repo_id, obj["path"])
+    file_record = get_file(repo_id, obj["path"])
 
     checksum = (
         file_record.sha256 if file_record and file_record.sha256 else obj["checksum"]
@@ -236,12 +236,9 @@ async def list_repo_tree(
     repo_id = f"{namespace}/{repo_name}"
 
     # Check if repository exists
-    def _get_repo():
-        return Repository.get_or_none(
-            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-        )
-
-    repo_row = await execute_db_query(_get_repo)
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -325,12 +322,9 @@ async def get_paths_info(
     repo_id = f"{namespace}/{repo_name}"
 
     # Check if repository exists
-    def _get_repo():
-        return Repository.get_or_none(
-            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-        )
-
-    repo_row = await execute_db_query(_get_repo)
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -358,7 +352,7 @@ async def get_paths_info(
             is_lfs = obj_stats["size_bytes"] > cfg.app.lfs_threshold_bytes
 
             # Get correct checksum from database
-            file_record = await get_file(repo_id, clean_path)
+            file_record = get_file(repo_id, clean_path)
 
             checksum = (
                 file_record.sha256

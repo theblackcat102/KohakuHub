@@ -38,7 +38,7 @@ class TestRepositoryCRUD:
 
     def test_create_repo_http_client(self, authenticated_http_client):
         """Test repository creation using custom HTTP client with Pydantic model."""
-        from kohakuhub.api.routers.repo_crud import CreateRepoPayload
+        from kohakuhub.api.repo.routers.crud import CreateRepoPayload
 
         unique_id = uuid.uuid4().hex[:6]
         repo_name = f"htc-{unique_id}"  # htc = http-create
@@ -65,7 +65,7 @@ class TestRepositoryCRUD:
         assert resp.status_code == 200, f"Get repo info failed: {resp.text}"
 
         # Cleanup using actual delete model
-        from kohakuhub.api.routers.repo_crud import DeleteRepoPayload
+        from kohakuhub.api.repo.routers.crud import DeleteRepoPayload
 
         delete_payload = DeleteRepoPayload(
             type="model", name=repo_name, organization=None
@@ -189,7 +189,7 @@ class TestRepositoryCRUD:
 
     def test_move_repo(self, authenticated_http_client, hf_client):
         """Test moving/renaming repository."""
-        from kohakuhub.api.routers.repo_crud import MoveRepoPayload
+        from kohakuhub.api.repo.routers.crud import MoveRepoPayload
 
         unique_id = uuid.uuid4().hex[:6]
         old_name = f"old-{unique_id}"
@@ -244,7 +244,7 @@ class TestRepositoryCRUD:
 
     def test_create_org_repo(self, authenticated_http_client, hf_client, test_org):
         """Test creating repository under organization."""
-        from kohakuhub.api.routers.repo_crud import CreateRepoPayload
+        from kohakuhub.api.repo.routers.crud import CreateRepoPayload
 
         unique_id = uuid.uuid4().hex[:6]
         repo_name = f"org-{unique_id}"

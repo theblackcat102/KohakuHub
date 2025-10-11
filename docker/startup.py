@@ -107,7 +107,16 @@ def main():
 
     print("[startup] Starting API server...")
     subprocess.run(
-        ["uvicorn", "kohakuhub.main:app", "--host", "0.0.0.0", "--port", "48888"],
+        [
+            "uvicorn",
+            "kohakuhub.main:app",
+            "--workers",
+            "4",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "48888",
+        ],
         check=True,
         env=os.environ,
     )

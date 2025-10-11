@@ -2,6 +2,7 @@
 
 from fastapi import HTTPException
 
+from kohakuhub.config import cfg
 from kohakuhub.db import Organization, User, UserOrganization
 
 # Error messages
@@ -13,8 +14,6 @@ def create_organization(name: str, description: str | None, user: User):
 
     Note: This function is deprecated. Use async version from db_async instead.
     """
-    from kohakuhub.config import cfg
-
     if Organization.get_or_none(Organization.name == name):
         raise HTTPException(400, detail="Organization name already exists")
 

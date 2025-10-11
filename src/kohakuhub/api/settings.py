@@ -5,17 +5,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from kohakuhub.api.repo.utils.hf import hf_repo_not_found
-from kohakuhub.auth.dependencies import get_current_user
-from kohakuhub.auth.permissions import check_repo_delete_permission
-from kohakuhub.db_async import (
-    execute_db_query,
+from kohakuhub.db import Organization, Repository, User, UserOrganization
+from kohakuhub.db_operations import (
     get_organization,
     get_repository,
     get_user_organization,
 )
-from kohakuhub.db import Organization, Repository, User, UserOrganization
 from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.auth.permissions import check_repo_delete_permission
+from kohakuhub.api.repo.utils.hf import hf_repo_not_found
 
 logger = get_logger("SETTINGS")
 
@@ -56,19 +55,13 @@ async def update_user_settings(
     # Update fields if provided
     if req.email is not None:
         # Check if email is already taken by another user
-        def _check_email():
-            return User.get_or_none((User.email == req.email) & (User.id != user.id))
-
-        existing = await execute_db_query(_check_email)
+        existing = User.get_or_none((User.email == req.email) & (User.id != user.id))
         if existing:
             raise HTTPException(400, detail="Email already in use")
 
-        def _update_email():
-            User.update(email=req.email, email_verified=False).where(
-                User.id == user.id
-            ).execute()
-
-        await execute_db_query(_update_email)
+        User.update(email=req.email, email_verified=False).where(
+            User.id == user.id
+        ).execute()
         # TODO: Send new verification email
 
     return {"success": True, "message": "User settings updated successfully"}
@@ -99,12 +92,12 @@ async def update_organization_settings(
     Returns:
         Success message
     """
-    org = await get_organization(org_name)
+    org = get_organization(org_name)
     if not org:
         raise HTTPException(404, detail="Organization not found")
 
     # Check if user is admin of the organization
-    user_org = await get_user_organization(user.id, org.id)
+    user_org = get_user_organization(user.id, org.id)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(
             403, detail="Not authorized to update organization settings"
@@ -112,13 +105,9 @@ async def update_organization_settings(
 
     # Update fields if provided
     if req.description is not None:
-
-        def _update_org():
-            Organization.update(description=req.description).where(
-                Organization.id == org.id
-            ).execute()
-
-        await execute_db_query(_update_org)
+        Organization.update(description=req.description).where(
+            Organization.id == org.id
+        ).execute()
 
     return {"success": True, "message": "Organization settings updated successfully"}
 
@@ -160,7 +149,7 @@ async def update_repo_settings(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -170,13 +159,9 @@ async def update_repo_settings(
 
     # Update fields if provided
     if payload.private is not None:
-
-        def _update_private():
-            Repository.update(private=payload.private).where(
-                Repository.id == repo_row.id
-            ).execute()
-
-        await execute_db_query(_update_private)
+        Repository.update(private=payload.private).where(
+            Repository.id == repo_row.id
+        ).execute()
 
     # Note: gated functionality not yet implemented in database schema
     # Would require adding a 'gated' field to Repository model

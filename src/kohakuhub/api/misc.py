@@ -1,14 +1,13 @@
 """Utility API endpoints for Kohaku Hub."""
 
-import yaml
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+import yaml
 
-from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.config import cfg
 from kohakuhub.db import Organization, User, UserOrganization
 from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_optional_user
 
 logger = get_logger("UTILS")
 

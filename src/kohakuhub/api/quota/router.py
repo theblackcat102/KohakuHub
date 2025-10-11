@@ -3,15 +3,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from kohakuhub.db import Organization, User, UserOrganization
+from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.api.quota.util import (
     get_storage_info,
     set_quota,
     update_namespace_storage,
 )
-from kohakuhub.auth.dependencies import get_current_user, get_optional_user
-from kohakuhub.db import Organization, User, UserOrganization
-from kohakuhub.db_async import execute_db_query
-from kohakuhub.logger import get_logger
 
 logger = get_logger("QUOTA")
 router = APIRouter()
@@ -74,25 +73,19 @@ async def get_quota(
     """
 
     # Check if namespace is organization
-    def _check_org():
-        return Organization.get_or_none(Organization.name == namespace)
-
-    org = await execute_db_query(_check_org)
+    org = Organization.get_or_none(Organization.name == namespace)
     is_org = org is not None
 
     # Check if namespace exists
-    def _check_user():
-        return User.get_or_none(User.username == namespace)
-
     if not is_org:
-        target_user = await execute_db_query(_check_user)
+        target_user = User.get_or_none(User.username == namespace)
         if not target_user:
             raise HTTPException(
                 404, detail={"error": f"User or organization not found: {namespace}"}
             )
 
     # Get storage info
-    info = await get_storage_info(namespace, is_org)
+    info = get_storage_info(namespace, is_org)
 
     return QuotaInfo(
         namespace=namespace,
@@ -127,25 +120,17 @@ async def update_quota(
     """
 
     # Check if namespace is organization
-    def _check_org():
-        return Organization.get_or_none(Organization.name == namespace)
-
-    org = await execute_db_query(_check_org)
+    org = Organization.get_or_none(Organization.name == namespace)
     is_org = org is not None
 
     # Authorization check
     if is_org:
         # For orgs, must be admin member
-        def _check_org_admin():
-            from kohakuhub.db import UserOrganization
-
-            member = UserOrganization.get_or_none(
-                (UserOrganization.user == user.id)
-                & (UserOrganization.organization == org.id)
-            )
-            return member and member.role in ("admin", "super-admin")
-
-        is_admin = await execute_db_query(_check_org_admin)
+        member = UserOrganization.get_or_none(
+            (UserOrganization.user == user.id)
+            & (UserOrganization.organization == org.id)
+        )
+        is_admin = member and member.role in ("admin", "super-admin")
         if not is_admin:
             raise HTTPException(
                 403,
@@ -161,7 +146,7 @@ async def update_quota(
             )
 
     # Set quota
-    info = await set_quota(namespace, request.quota_bytes, is_org)
+    info = set_quota(namespace, request.quota_bytes, is_org)
 
     return QuotaInfo(
         namespace=namespace,
@@ -194,25 +179,17 @@ async def recalculate_storage(
     """
 
     # Check if namespace is organization
-    def _check_org():
-        return Organization.get_or_none(Organization.name == namespace)
-
-    org = await execute_db_query(_check_org)
+    org = Organization.get_or_none(Organization.name == namespace)
     is_org = org is not None
 
     # Authorization check (same as update_quota)
     if is_org:
         # For orgs, must be admin member
-        def _check_org_admin():
-            from kohakuhub.db import UserOrganization
-
-            member = UserOrganization.get_or_none(
-                (UserOrganization.user == user.id)
-                & (UserOrganization.organization == org.id)
-            )
-            return member and member.role in ("admin", "super-admin")
-
-        is_admin = await execute_db_query(_check_org_admin)
+        member = UserOrganization.get_or_none(
+            (UserOrganization.user == user.id)
+            & (UserOrganization.organization == org.id)
+        )
+        is_admin = member and member.role in ("admin", "super-admin")
         if not is_admin:
             raise HTTPException(
                 403,
@@ -229,10 +206,10 @@ async def recalculate_storage(
 
     # Recalculate storage
     logger.info(f"Recalculating storage for {'org' if is_org else 'user'} {namespace}")
-    await update_namespace_storage(namespace, is_org)
+    update_namespace_storage(namespace, is_org)
 
     # Get updated info
-    info = await get_storage_info(namespace, is_org)
+    info = get_storage_info(namespace, is_org)
 
     return QuotaInfo(
         namespace=namespace,
@@ -271,19 +248,13 @@ async def get_public_quota(
     """
 
     # Check if namespace is organization
-    def _check_org():
-        return Organization.get_or_none(Organization.name == namespace)
-
-    org = await execute_db_query(_check_org)
+    org = Organization.get_or_none(Organization.name == namespace)
     is_org = org is not None
 
     # Check if namespace exists
-    def _check_user():
-        return User.get_or_none(User.username == namespace)
-
     target_user = None
     if not is_org:
-        target_user = await execute_db_query(_check_user)
+        target_user = User.get_or_none(User.username == namespace)
         if not target_user:
             raise HTTPException(
                 404, detail={"error": f"User or organization not found: {namespace}"}
@@ -295,20 +266,17 @@ async def get_public_quota(
     if user:
         if is_org:
             # For organizations: user must be a member
-            def _check_membership():
-                return UserOrganization.get_or_none(
-                    (UserOrganization.user == user.id)
-                    & (UserOrganization.organization == org.id)
-                )
-
-            membership = await execute_db_query(_check_membership)
+            membership = UserOrganization.get_or_none(
+                (UserOrganization.user == user.id)
+                & (UserOrganization.organization == org.id)
+            )
             can_see_private = membership is not None
         else:
             # For users: user must be viewing their own profile
             can_see_private = user.username == namespace
 
     # Get storage info
-    info = await get_storage_info(namespace, is_org)
+    info = get_storage_info(namespace, is_org)
 
     # Build response based on permissions
     response_data = {

@@ -16,7 +16,7 @@ class TestOrganization:
 
     def test_create_organization(self, authenticated_http_client):
         """Test organization creation."""
-        from kohakuhub.org.routes import CreateOrganizationPayload
+        from kohakuhub.api.org.router import CreateOrganizationPayload
 
         unique_id = uuid.uuid4().hex[:6]
         org_name = f"org-{unique_id}"
@@ -51,7 +51,7 @@ class TestOrganization:
     def test_add_remove_member(self, authenticated_http_client, test_org):
         """Test adding and removing organization members."""
         from kohakuhub.auth.routes import RegisterRequest
-        from kohakuhub.org.routes import AddMemberPayload
+        from kohakuhub.api.org.router import AddMemberPayload
 
         # Create a new user to add as member
         unique_id = uuid.uuid4().hex[:6]
@@ -99,7 +99,7 @@ class TestOrganization:
     def test_update_member_role(self, authenticated_http_client, test_org):
         """Test updating organization member role."""
         from kohakuhub.auth.routes import RegisterRequest
-        from kohakuhub.org.routes import AddMemberPayload, UpdateMemberRolePayload
+        from kohakuhub.api.org.router import AddMemberPayload, UpdateMemberRolePayload
 
         # Create a new user
         unique_id = uuid.uuid4().hex[:6]
@@ -157,7 +157,7 @@ class TestOrganization:
 
     def test_duplicate_organization(self, authenticated_http_client, test_org):
         """Test that creating duplicate organization fails."""
-        from kohakuhub.org.routes import CreateOrganizationPayload
+        from kohakuhub.api.org.router import CreateOrganizationPayload
 
         # Try to create organization with same name
         payload = CreateOrganizationPayload(name=test_org, description="Duplicate org")

@@ -2,7 +2,7 @@
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from functools import wraps, partial
+from functools import partial, wraps
 from typing import Callable, TypeVar
 
 # Create separate thread pool executors for different types of operations
@@ -14,8 +14,9 @@ _lakefs_executor = ThreadPoolExecutor(
     max_workers=32, thread_name_prefix="kohakuhub_lakefs"
 )
 
-# Peewee operations should use single worker to avoid database concurrency issues
-# (unless we implement proper transaction handling for multi-instance deployment)
+# DEPRECATED: DB operations are now synchronous and don't need thread pool
+# Database operations use db.atomic() for transactions instead
+# Keeping this for backward compatibility only
 _db_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kohakuhub_db")
 
 T = TypeVar("T")
@@ -56,7 +57,10 @@ async def run_in_lakefs_executor(func: Callable[..., T], *args, **kwargs) -> T:
 
 
 async def run_in_db_executor(func: Callable[..., T], *args, **kwargs) -> T:
-    """Run database operation in dedicated single-worker DB thread pool.
+    """DEPRECATED: Run database operation in dedicated single-worker DB thread pool.
+
+    Database operations are now synchronous and use db.atomic() for transactions.
+    This function is kept for backward compatibility only.
 
     Args:
         func: Database operation to run
@@ -268,6 +272,7 @@ def get_async_lakefs_client():
     Returns:
         LakeFSRestClient instance (already async, no wrapping needed)
     """
+    # Import here to avoid circular dependency
     from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 
     return get_lakefs_rest_client()

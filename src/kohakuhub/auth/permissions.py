@@ -1,10 +1,10 @@
 """Authorization and permission checking utilities."""
 
 from typing import Optional
+
 from fastapi import HTTPException
 
-from ..db import User, Repository, Organization, UserOrganization
-
+from kohakuhub.db import Organization, Repository, User, UserOrganization
 
 def check_namespace_permission(
     namespace: str, user: User, require_admin: bool = False

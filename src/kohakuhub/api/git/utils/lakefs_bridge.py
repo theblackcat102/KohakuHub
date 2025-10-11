@@ -1,14 +1,14 @@
 """Git-LakeFS bridge - Pure Python implementation (no pygit2, no file I/O)."""
 
+from datetime import datetime
 import asyncio
 import fnmatch
 import hashlib
-from datetime import datetime
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File
-from kohakuhub.db_async import execute_db_query
 from kohakuhub.logger import get_logger
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.git.utils.objects import (
     build_nested_trees,
     create_blob_object,
@@ -16,7 +16,6 @@ from kohakuhub.api.git.utils.objects import (
     create_pack_file,
 )
 from kohakuhub.api.git.utils.server import create_empty_pack
-from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 
 logger = get_logger("GIT_LAKEFS")
 
@@ -172,13 +171,10 @@ class GitLakeFSBridge:
         """
 
         # Get File table records for LFS tracking
-        def _get_all_files():
-            return {
-                f.path_in_repo: f
-                for f in File.select().where(File.repo_full_id == self.repo_id)
-            }
-
-        file_records = await execute_db_query(_get_all_files)
+        file_records = {
+            f.path_in_repo: f
+            for f in File.select().where(File.repo_full_id == self.repo_id)
+        }
 
         # Check for .gitattributes and parse LFS patterns
         existing_lfs_patterns = set()

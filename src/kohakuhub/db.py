@@ -1,22 +1,24 @@
 """Database models for Kohaku Hub."""
 
-from functools import partial
 from datetime import datetime, timezone
+from functools import partial
+
 from peewee import (
     AutoField,
     BigIntegerField,
     BooleanField,
     CharField,
     DateTimeField,
+    ForeignKeyField,
     IntegerField,
     Model,
-    SqliteDatabase,
     PostgresqlDatabase,
+    SqliteDatabase,
     TextField,
-    ForeignKeyField,
 )
-from .config import cfg
-from .logger import get_logger
+
+from kohakuhub.config import cfg
+from kohakuhub.logger import get_logger
 
 logger = get_logger("DB")
 

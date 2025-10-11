@@ -12,24 +12,24 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
+from kohakuhub.config import cfg
+from kohakuhub.db import File, Organization, Repository, User
+from kohakuhub.db_operations import get_file, get_repository
+from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_current_user, get_optional_user
+from kohakuhub.auth.permissions import (
+    check_repo_read_permission,
+    check_repo_write_permission,
+)
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.s3 import generate_download_presigned_url, parse_s3_uri
+from kohakuhub.api.quota.util import check_quota
 from kohakuhub.api.repo.utils.hf import (
     hf_repo_not_found,
     hf_revision_not_found,
     hf_server_error,
     is_lakefs_not_found_error,
 )
-from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.api.quota.util import check_quota
-from kohakuhub.utils.s3 import generate_download_presigned_url, parse_s3_uri
-from kohakuhub.auth.dependencies import get_current_user, get_optional_user
-from kohakuhub.auth.permissions import (
-    check_repo_read_permission,
-    check_repo_write_permission,
-)
-from kohakuhub.config import cfg
-from kohakuhub.db_async import execute_db_query, get_file, get_repository
-from kohakuhub.db import File, Organization, Repository, User
-from kohakuhub.logger import get_logger
 
 logger = get_logger("FILE")
 router = APIRouter()
@@ -58,7 +58,7 @@ async def check_file_by_sha256(repo_id: str, path: str, sha256: str, size: int) 
     Returns:
         True if file should be ignored (already exists), False otherwise
     """
-    existing = await get_file(repo_id, path)
+    existing = get_file(repo_id, path)
     if existing and existing.sha256 == sha256 and existing.size == size:
         return True
     return False
@@ -189,7 +189,7 @@ async def preupload(
     """
     repo_id = f"{namespace}/{name}"
     # Verify repository exists
-    repo_row = await get_repository(repo_type.value, namespace, name)
+    repo_row = get_repository(repo_type.value, namespace, name)
     if not repo_row:
         raise HTTPException(404, detail={"error": "Repository not found"})
 
@@ -214,17 +214,12 @@ async def preupload(
     total_upload_bytes = sum(int(f.get("size", 0)) for f in files)
 
     # Check if namespace is organization
-    def _check_org():
-        return Organization.get_or_none(Organization.name == namespace)
-
-    org = await execute_db_query(_check_org)
+    org = Organization.get_or_none(Organization.name == namespace)
     is_org = org is not None
 
     # Check storage quota before upload (based on repo privacy)
     is_private = repo_row.private
-    allowed, error_msg = await check_quota(
-        namespace, total_upload_bytes, is_private, is_org
-    )
+    allowed, error_msg = check_quota(namespace, total_upload_bytes, is_private, is_org)
     if not allowed:
         raise HTTPException(
             status_code=413,  # Payload Too Large
@@ -275,7 +270,7 @@ async def get_revision(
     """
     repo_id = f"{namespace}/{name}"
     # Check if repository exists in database first
-    repo_row = await get_repository(repo_type.value, namespace, name)
+    repo_row = get_repository(repo_type.value, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type.value)
@@ -353,12 +348,9 @@ async def _get_file_metadata(
     repo_id = f"{namespace}/{name}"
 
     # Check repository exists and read permission
-    def _get_repo():
-        return Repository.get_or_none(
-            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-        )
-
-    repo_row = await execute_db_query(_get_repo)
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
+    )
     if repo_row:
         check_repo_read_permission(repo_row, user)
 
@@ -402,7 +394,7 @@ async def _get_file_metadata(
 
     # Get correct checksum from database
     # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
-    file_record = await get_file(repo_id, path)
+    file_record = get_file(repo_id, path)
 
     # HuggingFace expects plain SHA256 hex (64 characters, unquoted)
     # For non-LFS: use git blob SHA1, for LFS: use SHA256

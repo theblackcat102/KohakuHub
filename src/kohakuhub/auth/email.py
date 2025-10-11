@@ -1,11 +1,11 @@
 """Email utilities for authentication."""
 
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-from ..config import cfg
-from ..logger import get_logger
+from kohakuhub.config import cfg
+from kohakuhub.logger import get_logger
 
 logger = get_logger("EMAIL")
 

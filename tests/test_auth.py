@@ -151,7 +151,7 @@ class TestAuthentication:
         assert resp.status_code == 401, "Should require authentication"
 
         # Try to create repo without auth
-        from kohakuhub.api.routers.repo_crud import CreateRepoPayload
+        from kohakuhub.api.repo.routers.crud import CreateRepoPayload
 
         payload = CreateRepoPayload(type="model", name="test-repo")
 

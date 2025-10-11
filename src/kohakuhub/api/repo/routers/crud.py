@@ -5,6 +5,16 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from kohakuhub.config import cfg
+from kohakuhub.db import File, Repository, StagingUpload, User, init_db
+from kohakuhub.db_operations import get_repository
+from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.auth.permissions import (
+    check_namespace_permission,
+    check_repo_delete_permission,
+)
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     hf_error_response,
@@ -12,16 +22,6 @@ from kohakuhub.api.repo.utils.hf import (
     hf_server_error,
     is_lakefs_not_found_error,
 )
-from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.auth.dependencies import get_current_user
-from kohakuhub.auth.permissions import (
-    check_namespace_permission,
-    check_repo_delete_permission,
-)
-from kohakuhub.config import cfg
-from kohakuhub.db_async import execute_db_query, get_repository
-from kohakuhub.db import File, Repository, StagingUpload, User, init_db
-from kohakuhub.logger import get_logger
 
 logger = get_logger("REPO")
 router = APIRouter()
@@ -64,7 +64,7 @@ async def create_repo(
     full_id = f"{namespace}/{payload.name}"
     lakefs_repo = lakefs_repo_name(payload.type, full_id)
 
-    existing_repo = await get_repository(payload.type, namespace, payload.name)
+    existing_repo = get_repository(payload.type, namespace, payload.name)
     if existing_repo:
         return hf_error_response(
             400,
@@ -87,16 +87,13 @@ async def create_repo(
         return hf_server_error(f"LakeFS repository creation failed: {str(e)}")
 
     # Store in database for listing/metadata
-    def _create_repo():
-        Repository.get_or_create(
-            repo_type=payload.type,
-            namespace=namespace,
-            name=payload.name,
-            full_id=full_id,
-            defaults={"private": payload.private, "owner_id": user.id},
-        )
-
-    await execute_db_query(_create_repo)
+    Repository.get_or_create(
+        repo_type=payload.type,
+        namespace=namespace,
+        name=payload.name,
+        full_id=full_id,
+        defaults={"private": payload.private, "owner_id": user.id},
+    )
 
     return {
         "url": f"{cfg.app.base_url}/{payload.type}s/{full_id}",
@@ -135,7 +132,7 @@ async def delete_repo(
     lakefs_repo = lakefs_repo_name(repo_type, full_id)
 
     # 1. Check if repository exists in database
-    repo_row = await get_repository(repo_type, namespace, payload.name)
+    repo_row = get_repository(repo_type, namespace, payload.name)
 
     if not repo_row:
         # NOTE: HuggingFace client expects 400 for delete repo not found
@@ -160,22 +157,14 @@ async def delete_repo(
         logger.info(f"LakeFS repository {lakefs_repo} not found/already deleted (OK)")
 
     # 3. Delete related metadata from database (manual cascade)
-    def _delete_db_records():
-        try:
-            # Delete related file records first
-            File.delete().where(File.repo_full_id == full_id).execute()
-            StagingUpload.delete().where(
-                StagingUpload.repo_full_id == full_id
-            ).execute()
-            repo_row.delete_instance()
-            logger.success(f"Successfully deleted database records for: {full_id}")
-        except Exception as e:
-            logger.exception(f"Database deletion failed for {full_id}", e)
-            raise
-
     try:
-        await execute_db_query(_delete_db_records)
+        # Delete related file records first
+        File.delete().where(File.repo_full_id == full_id).execute()
+        StagingUpload.delete().where(StagingUpload.repo_full_id == full_id).execute()
+        repo_row.delete_instance()
+        logger.success(f"Successfully deleted database records for: {full_id}")
     except Exception as e:
+        logger.exception(f"Database deletion failed for {full_id}", e)
         return hf_server_error(f"Database deletion failed for {full_id}: {str(e)}")
 
     # 4. Return success response (200 OK with a simple message)
@@ -219,7 +208,7 @@ async def move_repo(
         )
 
     from_namespace, from_name = from_parts
-    repo_row = await get_repository(repo_type, from_namespace, from_name)
+    repo_row = get_repository(repo_type, from_namespace, from_name)
 
     if not repo_row:
         return hf_repo_not_found(from_id, repo_type)
@@ -235,7 +224,7 @@ async def move_repo(
         )
 
     to_namespace, to_name = to_parts
-    existing = await get_repository(repo_type, to_namespace, to_name)
+    existing = get_repository(repo_type, to_namespace, to_name)
     if existing:
         return hf_error_response(
             400,
@@ -247,23 +236,20 @@ async def move_repo(
     check_namespace_permission(to_namespace, user)
 
     # Update database records
-    def _update_db_records():
-        # Update repository record
-        Repository.update(
-            namespace=to_namespace,
-            name=to_name,
-            full_id=to_id,
-        ).where(Repository.id == repo_row.id).execute()
+    # Update repository record
+    Repository.update(
+        namespace=to_namespace,
+        name=to_name,
+        full_id=to_id,
+    ).where(Repository.id == repo_row.id).execute()
 
-        # Update related file records
-        File.update(repo_full_id=to_id).where(File.repo_full_id == from_id).execute()
+    # Update related file records
+    File.update(repo_full_id=to_id).where(File.repo_full_id == from_id).execute()
 
-        # Update staging uploads
-        StagingUpload.update(repo_full_id=to_id).where(
-            StagingUpload.repo_full_id == from_id
-        ).execute()
-
-    await execute_db_query(_update_db_records)
+    # Update staging uploads
+    StagingUpload.update(repo_full_id=to_id).where(
+        StagingUpload.repo_full_id == from_id
+    ).execute()
 
     # Note: LakeFS repository rename not implemented yet
     # Would require creating new LakeFS repo and migrating data

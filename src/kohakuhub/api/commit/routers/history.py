@@ -1,21 +1,21 @@
 """Commit history API endpoints."""
 
+from typing import Optional
 import asyncio
 import difflib
-from typing import Optional
 
-import httpx
 from fastapi import APIRouter, Depends, Query
+import httpx
 
-from kohakuhub.api.repo.utils.hf import hf_repo_not_found, hf_server_error
-from kohakuhub.utils.lakefs import lakefs_repo_name
-from kohakuhub.auth.dependencies import get_optional_user
-from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.config import cfg
-from kohakuhub.db_async import execute_db_query, get_commit, get_repository
 from kohakuhub.db import Commit, Repository, User
+from kohakuhub.db_operations import get_commit, get_repository
 from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.utils.lakefs import lakefs_repo_name
+from kohakuhub.api.repo.utils.hf import hf_repo_not_found, hf_server_error
 
 logger = get_logger("COMMITS")
 router = APIRouter()
@@ -48,7 +48,7 @@ async def list_commits(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -92,16 +92,13 @@ async def list_commits(
         commit_ids = [c["id"] for c in log_result["results"]]
 
         # Fetch our commit records (with actual user info)
-        def _get_our_commits():
-            return {
-                c.commit_id: c
-                for c in Commit.select().where(
-                    Commit.commit_id.in_(commit_ids),
-                    Commit.repo_full_id == repo_id,
-                )
-            }
-
-        our_commits = await execute_db_query(_get_our_commits)
+        our_commits = {
+            c.commit_id: c
+            for c in Commit.select().where(
+                Commit.commit_id.in_(commit_ids),
+                Commit.repo_full_id == repo_id,
+            )
+        }
 
         for commit in log_result["results"]:
             try:
@@ -171,7 +168,7 @@ async def get_commit_detail(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -189,7 +186,7 @@ async def get_commit_detail(
         )
 
         # Get our commit record (with actual user info)
-        our_commit = await get_commit(commit_id, repo_id)
+        our_commit = get_commit(commit_id, repo_id)
 
         # Build response
         response = {
@@ -242,7 +239,7 @@ async def get_commit_diff(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -283,17 +280,17 @@ async def get_commit_diff(
         file_paths = [d["path"] for d in diff_results]
 
         # Fetch File records for LFS status
-        def _get_file_records():
+        if file_paths:
             from kohakuhub.db import File
 
-            return {
+            file_records = {
                 f.path_in_repo: f
                 for f in File.select().where(
                     File.repo_full_id == repo_id, File.path_in_repo.in_(file_paths)
                 )
             }
-
-        file_records = await execute_db_query(_get_file_records) if file_paths else {}
+        else:
+            file_records = {}
 
         # Process diff entries concurrently
         async def process_diff_entry(diff_entry):
@@ -454,7 +451,7 @@ async def get_commit_diff(
         )
 
         # Get our commit record for user info
-        our_commit = await get_commit(commit_id, repo_id)
+        our_commit = get_commit(commit_id, repo_id)
 
         response = {
             "commit_id": commit_id,

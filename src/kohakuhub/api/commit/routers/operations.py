@@ -1,31 +1,30 @@
 """Commit creation endpoint - Refactored version with smaller functions."""
 
+from datetime import datetime, timezone
+from enum import Enum
 import asyncio
 import base64
 import hashlib
 import json
-from datetime import datetime, timezone
-from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from kohakuhub.api.repo.utils.gc import run_gc_for_file, track_lfs_object
-from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.api.quota.util import update_namespace_storage
-from kohakuhub.utils.s3 import get_object_metadata, object_exists
-from kohakuhub.auth.dependencies import get_current_user
-from kohakuhub.auth.permissions import check_repo_write_permission
 from kohakuhub.config import cfg
-from kohakuhub.db_async import (
+from kohakuhub.db import File, Organization, Repository, User
+from kohakuhub.db_operations import (
     create_commit,
     create_file,
     delete_file,
-    execute_db_query,
     get_file,
     update_file,
 )
-from kohakuhub.db import File, Organization, Repository, User
 from kohakuhub.logger import get_logger
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.auth.permissions import check_repo_write_permission
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.s3 import get_object_metadata, object_exists
+from kohakuhub.api.quota.util import update_namespace_storage
+from kohakuhub.api.repo.utils.gc import run_gc_for_file, track_lfs_object
 
 logger = get_logger("FILE")
 router = APIRouter()
@@ -94,7 +93,7 @@ async def process_regular_file(
     git_blob_sha1 = calculate_git_blob_sha1(data)
 
     # Check if file unchanged (deduplication)
-    existing = await get_file(repo_id, path)
+    existing = get_file(repo_id, path)
     if existing and existing.sha256 == git_blob_sha1 and existing.size == len(data):
         logger.info(f"Skipping unchanged file: {path}")
         return False
@@ -115,23 +114,20 @@ async def process_regular_file(
         raise HTTPException(500, detail={"error": f"Failed to upload {path}: {e}"})
 
     # Update database - store git blob SHA1 in sha256 column for non-LFS files
-    def _update_db():
-        File.insert(
-            repo_full_id=repo_id,
-            path_in_repo=path,
-            size=len(data),
-            sha256=git_blob_sha1,
-            lfs=False,
-        ).on_conflict(
-            conflict_target=(File.repo_full_id, File.path_in_repo),
-            update={
-                File.sha256: git_blob_sha1,
-                File.size: len(data),
-                File.updated_at: datetime.now(timezone.utc),
-            },
-        ).execute()
-
-    await execute_db_query(_update_db)
+    File.insert(
+        repo_full_id=repo_id,
+        path_in_repo=path,
+        size=len(data),
+        sha256=git_blob_sha1,
+        lfs=False,
+    ).on_conflict(
+        conflict_target=(File.repo_full_id, File.path_in_repo),
+        update={
+            File.sha256: git_blob_sha1,
+            File.size: len(data),
+            File.updated_at: datetime.now(timezone.utc),
+        },
+    ).execute()
 
     return True
 
@@ -166,7 +162,7 @@ async def process_lfs_file(
         raise HTTPException(400, detail={"error": f"Missing OID for LFS file {path}"})
 
     # Check for existing file
-    existing = await get_file(repo_id, path)
+    existing = get_file(repo_id, path)
 
     # Track old LFS object for potential deletion
     old_lfs_oid = None
@@ -238,24 +234,21 @@ async def process_lfs_file(
         )
 
     # Update database
-    def _update_db():
-        File.insert(
-            repo_full_id=repo_id,
-            path_in_repo=path,
-            size=size,
-            sha256=oid,
-            lfs=True,
-        ).on_conflict(
-            conflict_target=(File.repo_full_id, File.path_in_repo),
-            update={
-                File.sha256: oid,
-                File.size: size,
-                File.lfs: True,
-                File.updated_at: datetime.now(timezone.utc),
-            },
-        ).execute()
-
-    await execute_db_query(_update_db)
+    File.insert(
+        repo_full_id=repo_id,
+        path_in_repo=path,
+        size=size,
+        sha256=oid,
+        lfs=True,
+    ).on_conflict(
+        conflict_target=(File.repo_full_id, File.path_in_repo),
+        update={
+            File.sha256: oid,
+            File.size: size,
+            File.lfs: True,
+            File.updated_at: datetime.now(timezone.utc),
+        },
+    ).execute()
 
     logger.success(f"Updated database record for LFS file: {path}")
 
@@ -293,14 +286,11 @@ async def process_deleted_file(
         logger.warning(f"Failed to delete {path} from LakeFS: {e}")
 
     # Remove from database
-    def _delete_from_db():
-        return (
-            File.delete()
-            .where((File.repo_full_id == repo_id) & (File.path_in_repo == path))
-            .execute()
-        )
-
-    deleted_count = await execute_db_query(_delete_from_db)
+    deleted_count = (
+        File.delete()
+        .where((File.repo_full_id == repo_id) & (File.path_in_repo == path))
+        .execute()
+    )
 
     if deleted_count > 0:
         logger.success(f"Removed {path} from database")
@@ -377,18 +367,14 @@ async def process_deleted_folder(
 
         # Remove from database
         if deleted_files:
-
-            def _delete_from_db():
-                return (
-                    File.delete()
-                    .where(
-                        (File.repo_full_id == repo_id)
-                        & (File.path_in_repo.startswith(folder_path))
-                    )
-                    .execute()
+            deleted_count = (
+                File.delete()
+                .where(
+                    (File.repo_full_id == repo_id)
+                    & (File.path_in_repo.startswith(folder_path))
                 )
-
-            deleted_count = await execute_db_query(_delete_from_db)
+                .execute()
+            )
             logger.success(f"Removed {deleted_count} records from database")
 
     except Exception as e:
@@ -458,45 +444,42 @@ async def process_copy_file(
         )
 
         # Update database - copy file metadata
-        src_file = await get_file(repo_id, src_path)
+        src_file = get_file(repo_id, src_path)
 
-        def _update_db():
-            if src_file:
-                File.insert(
-                    repo_full_id=repo_id,
-                    path_in_repo=dest_path,
-                    size=src_file.size,
-                    sha256=src_file.sha256,
-                    lfs=src_file.lfs,
-                ).on_conflict(
-                    conflict_target=(File.repo_full_id, File.path_in_repo),
-                    update={
-                        File.sha256: src_file.sha256,
-                        File.size: src_file.size,
-                        File.lfs: src_file.lfs,
-                        File.updated_at: datetime.now(timezone.utc),
-                    },
-                ).execute()
-            else:
-                # If not in database, create entry based on LakeFS info
-                is_lfs = src_obj["size_bytes"] >= cfg.app.lfs_threshold_bytes
-                File.insert(
-                    repo_full_id=repo_id,
-                    path_in_repo=dest_path,
-                    size=src_obj["size_bytes"],
-                    sha256=src_obj["checksum"],
-                    lfs=is_lfs,
-                ).on_conflict(
-                    conflict_target=(File.repo_full_id, File.path_in_repo),
-                    update={
-                        File.sha256: src_obj["checksum"],
-                        File.size: src_obj["size_bytes"],
-                        File.lfs: is_lfs,
-                        File.updated_at: datetime.now(timezone.utc),
-                    },
-                ).execute()
-
-        await execute_db_query(_update_db)
+        if src_file:
+            File.insert(
+                repo_full_id=repo_id,
+                path_in_repo=dest_path,
+                size=src_file.size,
+                sha256=src_file.sha256,
+                lfs=src_file.lfs,
+            ).on_conflict(
+                conflict_target=(File.repo_full_id, File.path_in_repo),
+                update={
+                    File.sha256: src_file.sha256,
+                    File.size: src_file.size,
+                    File.lfs: src_file.lfs,
+                    File.updated_at: datetime.now(timezone.utc),
+                },
+            ).execute()
+        else:
+            # If not in database, create entry based on LakeFS info
+            is_lfs = src_obj["size_bytes"] >= cfg.app.lfs_threshold_bytes
+            File.insert(
+                repo_full_id=repo_id,
+                path_in_repo=dest_path,
+                size=src_obj["size_bytes"],
+                sha256=src_obj["checksum"],
+                lfs=is_lfs,
+            ).on_conflict(
+                conflict_target=(File.repo_full_id, File.path_in_repo),
+                update={
+                    File.sha256: src_obj["checksum"],
+                    File.size: src_obj["size_bytes"],
+                    File.lfs: is_lfs,
+                    File.updated_at: datetime.now(timezone.utc),
+                },
+            ).execute()
 
         logger.success(f"Successfully copied {src_path} to {dest_path}")
 
@@ -542,12 +525,9 @@ async def commit(
     repo_id = f"{namespace}/{name}"
 
     # Check repository exists and write permission
-    def _get_repo():
-        return Repository.get_or_none(
-            (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
-        )
-
-    repo_row = await execute_db_query(_get_repo)
+    repo_row = Repository.get_or_none(
+        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type.value)
+    )
     if not repo_row:
         raise HTTPException(404, detail={"error": "Repository not found"})
 
@@ -692,7 +672,7 @@ async def commit(
 
     # Record commit in our database (track the actual user)
     try:
-        await create_commit(
+        create_commit(
             commit_id=commit_result["id"],
             repo_full_id=repo_id,
             repo_type=repo_type,
@@ -736,14 +716,11 @@ async def commit(
     # Update storage usage for namespace after successful commit
     try:
         # Check if namespace is organization
-        def _check_org():
-            return Organization.get_or_none(Organization.name == namespace)
-
-        org = await execute_db_query(_check_org)
+        org = Organization.get_or_none(Organization.name == namespace)
         is_org = org is not None
 
         # Recalculate storage usage
-        await update_namespace_storage(namespace, is_org)
+        update_namespace_storage(namespace, is_org)
         logger.debug(
             f"Updated storage usage for {'org' if is_org else 'user'} {namespace}"
         )

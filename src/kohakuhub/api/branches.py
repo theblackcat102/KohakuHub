@@ -6,8 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from kohakuhub.db import Repository, User
+from kohakuhub.db_operations import create_commit, get_repository
 from kohakuhub.logger import get_logger
-from kohakuhub.db_async import create_commit, get_repository
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.auth.permissions import (
+    check_repo_delete_permission,
+    check_repo_write_permission,
+)
+from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.repo.utils.gc import (
     check_commit_range_recoverability,
     check_lfs_recoverability,
@@ -19,12 +25,6 @@ from kohakuhub.api.repo.utils.hf import (
     hf_error_response,
     hf_repo_not_found,
     hf_server_error,
-)
-from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.auth.dependencies import get_current_user
-from kohakuhub.auth.permissions import (
-    check_repo_delete_permission,
-    check_repo_write_permission,
 )
 
 logger = get_logger("BRANCHES")
@@ -62,9 +62,7 @@ async def create_branch(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -131,7 +129,7 @@ async def delete_branch(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -219,7 +217,7 @@ async def create_tag(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -275,7 +273,7 @@ async def delete_tag(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -326,7 +324,7 @@ async def revert_branch(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -409,7 +407,7 @@ async def revert_branch(
         # Record commit in database
         commit_msg = payload.message or f"Revert commit {commit_id[:8]}"
         try:
-            await create_commit(
+            create_commit(
                 commit_id=new_commit_id,
                 repo_full_id=repo_id,
                 repo_type=repo_type,
@@ -468,7 +466,7 @@ async def merge_branches(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -538,7 +536,7 @@ async def merge_branches(
                 payload.message or f"Merge {source_ref} into {destination_branch}"
             )
             try:
-                await create_commit(
+                create_commit(
                     commit_id=merge_commit_id,
                     repo_full_id=repo_id,
                     repo_type=repo_type,
@@ -598,7 +596,7 @@ async def reset_branch(
     repo_id = f"{namespace}/{name}"
 
     # Check if repository exists
-    repo_row = await get_repository(repo_type, namespace, name)
+    repo_row = get_repository(repo_type, namespace, name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -787,7 +785,7 @@ async def reset_branch(
 
         # Record reset commit in database
         try:
-            await create_commit(
+            create_commit(
                 commit_id=commit_result["id"],
                 repo_full_id=repo_id,
                 repo_type=repo_type,

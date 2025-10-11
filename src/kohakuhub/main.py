@@ -5,36 +5,23 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from kohakuhub.api import admin, branches, files, misc, settings
+from kohakuhub.auth import router as auth_router
 from kohakuhub.config import cfg
 from kohakuhub.db import Repository, User
 from kohakuhub.logger import get_logger
-from kohakuhub.utils.s3 import init_storage
-from kohakuhub.api import (
-    admin,
-    branches,
-    files,
-    misc,
-    settings,
-)
+from kohakuhub.api.commit import history as commit_history
+from kohakuhub.api.commit import router as commits
 from kohakuhub.api.files import resolve_file_get, resolve_file_head
 from kohakuhub.api.org import router as org
 from kohakuhub.api.quota import router as quota
-from kohakuhub.api.commit import (
-    history as commit_history,
-    router as commits,
-)
-from kohakuhub.api.git.routers import (
-    http as git_http,
-    lfs,
-    ssh_keys,
-)
-from kohakuhub.api.repo.routers import (
-    crud as repo_crud,
-    info as repo_info,
-    tree as repo_tree,
-)
-from kohakuhub.auth import router as auth_router
 from kohakuhub.auth.dependencies import get_optional_user
+from kohakuhub.utils.s3 import init_storage
+from kohakuhub.api.git.routers import http as git_http
+from kohakuhub.api.git.routers import lfs, ssh_keys
+from kohakuhub.api.repo.routers import crud as repo_crud
+from kohakuhub.api.repo.routers import info as repo_info
+from kohakuhub.api.repo.routers import tree as repo_tree
 
 logger = get_logger("MAIN")
 
