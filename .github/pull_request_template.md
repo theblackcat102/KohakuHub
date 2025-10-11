@@ -86,7 +86,6 @@
 - [ ] Code is self-documenting and follows project conventions
 - [ ] Docstrings/comments added for complex logic
 - [ ] README.md updated (if needed)
-- [ ] CLAUDE.md updated (if needed)
 - [ ] API.md updated (if API changes)
 - [ ] CLI.md updated (if CLI changes)
 - [ ] CONTRIBUTING.md updated (if workflow changes)
@@ -122,7 +121,6 @@
 
 ### Pre-submission
 - [ ] I have read the [CONTRIBUTING.md](../CONTRIBUTING.md) guidelines
-- [ ] I have read the [CLAUDE.md](../CLAUDE.md) developer guide
 - [ ] My code follows the project's coding standards
 - [ ] I have searched existing issues/PRs to avoid duplicates
 

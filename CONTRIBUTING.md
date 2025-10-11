@@ -6,7 +6,6 @@ Thank you for your interest in contributing to KohakuHub! We welcome contributio
 
 - **Discord:** https://discord.gg/xWYrkyvJ2s (Best for discussions)
 - **GitHub Issues:** Bug reports and feature requests
-- **Development Guide:** See [CLAUDE.md](./CLAUDE.md)
 - **Roadmap:** See [Project Status](#project-status) below
 
 ## Getting Started
@@ -44,7 +43,7 @@ cp docker-compose.example.yml docker-compose.yml
 
 ### Backend (Python)
 
-Follow [CLAUDE.md](./CLAUDE.md) principles:
+Follow following principles:
 - Modern Python (match-case, async/await, native types like `list[]`, `dict[]`)
 - Import order: **builtin → 3rd party → ours**, then **shorter paths first**, then **alphabetical**
   - `import os` before `from datetime import`
@@ -153,7 +152,7 @@ app.include_router(commit_history.router, ...)  # commit_history is a module
 
 ### Frontend (Vue 3)
 
-Follow [CLAUDE.md](./CLAUDE.md) principles:
+Follow following principles:
 - JavaScript only (no TypeScript), use JSDoc comments for type hints
 - Vue 3 Composition API with `<script setup>`
 - Split reusable components
@@ -292,7 +291,6 @@ We're especially looking for help in:
 ## Pull Request Process
 
 1. **Before submitting:**
-   - Read [CLAUDE.md](./CLAUDE.md) to understand the codebase
    - Update relevant documentation (API.md, CLI.md, etc.)
    - Add tests for new functionality
    - Ensure code follows style guidelines
