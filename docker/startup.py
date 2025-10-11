@@ -105,13 +105,15 @@ def main():
             os.environ["KOHAKU_HUB_LAKEFS_ACCESS_KEY"] = access_key
             os.environ["KOHAKU_HUB_LAKEFS_SECRET_KEY"] = secret_key
 
-    print("[startup] Starting API server...")
+    # Get worker count from environment
+    workers = int(os.getenv("KOHAKU_HUB_WORKERS", "4"))
+    print(f"[startup] Starting API server with {workers} worker(s)...")
     subprocess.run(
         [
             "uvicorn",
             "kohakuhub.main:app",
             "--workers",
-            "4",
+            str(workers),
             "--host",
             "0.0.0.0",
             "--port",
