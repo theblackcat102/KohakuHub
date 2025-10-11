@@ -168,8 +168,8 @@ async def verify_email(token: str, response: Response):
     )
 
     # Set session cookie
-    response = RedirectResponse(url=f"/{user.username}", status_code=302)
-    response.set_cookie(
+    redirect_response = RedirectResponse(url=f"/{user.username}", status_code=302)
+    redirect_response.set_cookie(
         key="session_id",
         value=session_id,
         httponly=True,
@@ -181,7 +181,7 @@ async def verify_email(token: str, response: Response):
         f"Auto-login session created for: {user.username} (session={session_id[:8]}...)"
     )
 
-    return response
+    return redirect_response
 
 
 @router.post("/login")
