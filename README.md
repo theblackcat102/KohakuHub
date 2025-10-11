@@ -206,8 +206,6 @@ python scripts/test.py
 python scripts/test_auth.py
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for development guidelines.
-
 ## Documentation
 
 - [docs/setup.md](./docs/setup.md) - Setup and installation guide
@@ -216,7 +214,6 @@ See [CLAUDE.md](./CLAUDE.md) for development guidelines.
 - [docs/API.md](./docs/API.md) - API endpoints and workflows
 - [docs/CLI.md](./docs/CLI.md) - Command-line tool usage
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contributing guide & roadmap
-- [CLAUDE.md](./CLAUDE.md) - Developer guide for Claude Code
 
 ## Security Notes
 
