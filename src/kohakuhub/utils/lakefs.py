@@ -24,6 +24,6 @@ def lakefs_repo_name(repo_type: str, repo_id: str) -> str:
         LakeFS-safe repository name (e.g., "hf-model-org-repo-name")
     """
     # Replace slashes with hyphens for LakeFS compatibility
-    safe_id = repo_id.replace("/", "-")
+    safe_id = repo_id.replace("/", "-").replace("_", "-")
     basename = f"{cfg.lakefs.repo_namespace}-{repo_type}-{safe_id}".lower()
     return basename
