@@ -108,7 +108,7 @@ def _generate_upload_presigned_url_sync(
     bucket: str,
     key: str,
     expires_in: int = 3600,
-    content_type: str = "application/octet-stream",
+    content_type: str = None,
     checksum_sha256: str = None,
 ) -> dict:
     """Synchronous implementation of generate_upload_presigned_url."""
@@ -118,6 +118,11 @@ def _generate_upload_presigned_url_sync(
         "Bucket": bucket,
         "Key": key,
     }
+
+    # Only include ContentType in params if provided
+    # This makes it part of the signature - client MUST send matching Content-Type
+    if content_type:
+        params["ContentType"] = content_type
 
     url = s3.generate_presigned_url(
         "put_object",
@@ -130,9 +135,11 @@ def _generate_upload_presigned_url_sync(
         "%Y-%m-%dT%H:%M:%S.%fZ"
     )
 
-    headers = {
-        "Content-Type": content_type,
-    }
+    headers = {}
+
+    # Include Content-Type in response headers if it was in params
+    if content_type:
+        headers["Content-Type"] = content_type
 
     return {
         "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),
@@ -146,7 +153,7 @@ async def generate_upload_presigned_url(
     bucket: str,
     key: str,
     expires_in: int = 3600,
-    content_type: str = "application/octet-stream",
+    content_type: str = None,
     checksum_sha256: str = None,
 ) -> dict:
     """Generate presigned URL for uploading to S3.
@@ -379,3 +386,185 @@ def parse_s3_uri(uri: str) -> tuple:
     key = parts[1] if len(parts) > 1 else ""
 
     return bucket, key
+
+
+def _delete_objects_with_prefix_sync(bucket: str, prefix: str) -> int:
+    """Synchronous implementation of delete_objects_with_prefix.
+
+    Deletes all objects under a given prefix in batches.
+
+    Args:
+        bucket: S3 bucket name
+        prefix: Prefix to delete (e.g., "hf-model-user-repo/")
+
+    Returns:
+        Number of objects deleted
+    """
+    s3_client = get_s3_client()
+    deleted_count = 0
+
+    try:
+        # List all objects with prefix
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+
+        # Collect all object keys
+        objects_to_delete = []
+        for page in pages:
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    objects_to_delete.append(obj["Key"])
+
+        if not objects_to_delete:
+            logger.info(f"No objects found with prefix: {prefix}")
+            return 0
+
+        logger.info(
+            f"Found {len(objects_to_delete)} object(s) to delete with prefix: {prefix}"
+        )
+
+        # Delete in batches (S3 allows max 1000 objects per request)
+        batch_size = 1000
+        for i in range(0, len(objects_to_delete), batch_size):
+            batch = objects_to_delete[i : i + batch_size]
+            delete_keys = [{"Key": key} for key in batch]
+
+            response = s3_client.delete_objects(
+                Bucket=bucket, Delete={"Objects": delete_keys, "Quiet": True}
+            )
+
+            if "Deleted" in response:
+                deleted_count += len(response["Deleted"])
+
+            if "Errors" in response:
+                for error in response["Errors"]:
+                    logger.warning(
+                        f"Failed to delete {error.get('Key')}: {error.get('Message')}"
+                    )
+
+        logger.success(
+            f"Deleted {deleted_count} object(s) from S3 with prefix: {prefix}"
+        )
+        return deleted_count
+
+    except Exception as e:
+        logger.exception(f"Failed to delete objects with prefix {prefix}", e)
+        return deleted_count
+
+
+async def delete_objects_with_prefix(bucket: str, prefix: str) -> int:
+    """Delete all objects under a given prefix.
+
+    Args:
+        bucket: S3 bucket name
+        prefix: Prefix to delete (e.g., "hf-model-user-repo/")
+
+    Returns:
+        Number of objects deleted
+    """
+    return await run_in_s3_executor(_delete_objects_with_prefix_sync, bucket, prefix)
+
+
+def _copy_s3_folder_sync(
+    bucket: str, from_prefix: str, to_prefix: str, exclude_prefix: str = None
+) -> int:
+    """Synchronous implementation of copy_s3_folder.
+
+    Copies all objects from one S3 prefix to another within the same bucket.
+
+    Args:
+        bucket: S3 bucket name
+        from_prefix: Source prefix (e.g., "hf-model-old-repo/")
+        to_prefix: Destination prefix (e.g., "hf-model-new-repo/")
+        exclude_prefix: Optional sub-prefix to exclude (e.g., "_lakefs/")
+
+    Returns:
+        Number of objects copied
+    """
+    s3_client = get_s3_client()
+    copied_count = 0
+
+    try:
+        # List all objects with source prefix
+        paginator = s3_client.get_paginator("list_objects_v2")
+        pages = paginator.paginate(Bucket=bucket, Prefix=from_prefix)
+
+        objects_to_copy = []
+        for page in pages:
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    key = obj["Key"]
+                    # Skip objects matching exclude_prefix
+                    if exclude_prefix:
+                        relative_path = key[len(from_prefix) :]
+                        if relative_path.startswith(exclude_prefix):
+                            continue
+                    objects_to_copy.append(key)
+
+        if not objects_to_copy:
+            logger.info(f"No objects found to copy with prefix: {from_prefix}")
+            return 0
+
+        logger.info(
+            f"Copying {len(objects_to_copy)} object(s) from {from_prefix} to {to_prefix}"
+        )
+
+        # Copy each object to new prefix
+        for old_key in objects_to_copy:
+            # Calculate new key by replacing prefix
+            if not old_key.startswith(from_prefix):
+                logger.warning(
+                    f"Object key {old_key} doesn't start with {from_prefix}, skipping"
+                )
+                continue
+
+            # Replace old prefix with new prefix
+            relative_path = old_key[len(from_prefix) :]
+            new_key = to_prefix + relative_path
+
+            # Copy object
+            try:
+                s3_client.copy_object(
+                    Bucket=bucket,
+                    CopySource={"Bucket": bucket, "Key": old_key},
+                    Key=new_key,
+                )
+                copied_count += 1
+
+                if copied_count % 100 == 0:
+                    logger.info(
+                        f"Copied {copied_count}/{len(objects_to_copy)} objects..."
+                    )
+
+            except Exception as e:
+                logger.warning(f"Failed to copy {old_key} to {new_key}: {e}")
+
+        logger.success(
+            f"Copied {copied_count}/{len(objects_to_copy)} object(s) from {from_prefix} to {to_prefix}"
+        )
+        return copied_count
+
+    except Exception as e:
+        logger.exception(
+            f"Failed to copy S3 folder from {from_prefix} to {to_prefix}", e
+        )
+        return copied_count
+
+
+async def copy_s3_folder(
+    bucket: str, from_prefix: str, to_prefix: str, exclude_prefix: str = None
+) -> int:
+    """Copy all objects from one S3 prefix to another.
+
+    Args:
+        bucket: S3 bucket name
+        from_prefix: Source prefix (e.g., "hf-model-old-repo/")
+        to_prefix: Destination prefix (e.g., "hf-model-new-repo/")
+        exclude_prefix: Optional sub-prefix to exclude (e.g., "_lakefs/")
+
+    Returns:
+        Number of objects copied
+    """
+    return await run_in_s3_executor(
+        _copy_s3_folder_sync, bucket, from_prefix, to_prefix, exclude_prefix
+    )

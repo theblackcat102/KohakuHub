@@ -66,6 +66,9 @@ async def process_regular_file(
 ) -> bool:
     """Process regular file with inline base64 content.
 
+    IMPORTANT: This should only be used for small files (< LFS threshold).
+    Large files MUST use the lfsFile operation to avoid duplication.
+
     Args:
         path: File path in repository
         content_b64: Base64 encoded content
@@ -78,7 +81,7 @@ async def process_regular_file(
         True if file was changed, False if unchanged
 
     Raises:
-        HTTPException: If processing fails
+        HTTPException: If processing fails or file is too large for standard commit
     """
     if not encoding.startswith("base64"):
         raise HTTPException(400, detail={"error": f"Invalid file operation for {path}"})
@@ -88,6 +91,24 @@ async def process_regular_file(
         data = base64.b64decode(content_b64)
     except Exception as e:
         raise HTTPException(400, detail={"error": f"Failed to decode base64: {e}"})
+
+    # Check file size against LFS threshold
+    file_size = len(data)
+    lfs_threshold = cfg.app.lfs_threshold_bytes
+
+    if file_size >= lfs_threshold:
+        # File is too large for standard commit - must use LFS workflow
+        raise HTTPException(
+            400,
+            detail={
+                "error": f"File {path} is too large ({file_size} bytes) for standard commit. "
+                f"Files >= {lfs_threshold} bytes must be uploaded through Git LFS. "
+                f"Use 'lfsFile' operation instead of 'file' operation.",
+                "file_size": file_size,
+                "lfs_threshold": lfs_threshold,
+                "suggested_operation": "lfsFile",
+            },
+        )
 
     # Calculate git blob SHA1 for non-LFS files (HuggingFace format)
     git_blob_sha1 = calculate_git_blob_sha1(data)
@@ -99,7 +120,7 @@ async def process_regular_file(
         return False
 
     # File changed, need to upload
-    logger.info(f"Uploading regular file: {path}")
+    logger.info(f"Uploading regular file: {path} ({file_size} bytes)")
 
     # Upload to LakeFS
     try:
@@ -125,6 +146,7 @@ async def process_regular_file(
         update={
             File.sha256: git_blob_sha1,
             File.size: len(data),
+            File.lfs: False,  # Explicitly set to False
             File.updated_at: datetime.now(timezone.utc),
         },
     ).execute()

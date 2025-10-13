@@ -48,6 +48,9 @@ class LFSBatchRequest(BaseModel):
     transfers: list[str] | None = ["basic"]
     objects: list[LFSObject]
     hash_algo: str | None = "sha256"
+    is_browser: bool = (
+        False  # True if request from browser (needs Content-Type in signature)
+    )
 
 
 class LFSError(BaseModel):
@@ -87,7 +90,9 @@ def get_lfs_key(oid: str) -> str:
     return f"lfs/{oid[:2]}/{oid[2:4]}/{oid}"
 
 
-async def process_upload_object(oid: str, size: int, repo_id: str) -> LFSObjectResponse:
+async def process_upload_object(
+    oid: str, size: int, repo_id: str, is_browser: bool = False
+) -> LFSObjectResponse:
     """Process single LFS object for upload operation.
 
     Args:
@@ -130,11 +135,16 @@ async def process_upload_object(oid: str, size: int, repo_id: str) -> LFSObjectR
         # Convert SHA256 hex to base64 for S3 checksum verification
         checksum_sha256 = base64.b64encode(bytes.fromhex(oid)).decode("utf-8")
 
+        # For browser uploads, we need to include Content-Type in the presigned URL
+        # because browsers always send Content-Type header
+        # For CLI clients, we don't include it because they might not send it
+        content_type = "application/octet-stream" if is_browser else None
+
         upload_info = await generate_upload_presigned_url(
             bucket=cfg.s3.bucket,
             key=lfs_key,
             expires_in=3600,  # 1 hour
-            content_type="application/octet-stream",
+            content_type=content_type,
             checksum_sha256=checksum_sha256,
         )
 
@@ -308,7 +318,9 @@ async def lfs_batch(
         """Process single LFS object based on operation type."""
         match batch_req.operation:
             case "upload":
-                return await process_upload_object(obj.oid, obj.size, repo_id)
+                return await process_upload_object(
+                    obj.oid, obj.size, repo_id, batch_req.is_browser
+                )
             case "download":
                 return await process_download_object(obj.oid, obj.size)
             case _:

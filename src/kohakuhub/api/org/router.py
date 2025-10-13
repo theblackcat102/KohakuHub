@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from kohakuhub.db import Organization, User, UserOrganization
+from kohakuhub.db import Organization, User, UserOrganization, db
 from kohakuhub.db_operations import (
     create_organization as create_org_async,
     create_user_organization,
@@ -41,16 +41,17 @@ async def create_organization(
 ):
     """Create a new organization with default quotas."""
 
-    # Check if organization already exists
-    existing_org = Organization.get_or_none(Organization.name == payload.name)
-    if existing_org:
-        raise HTTPException(400, detail="Organization name already exists")
+    # Check if organization already exists and create atomically
+    with db.atomic():
+        existing_org = Organization.get_or_none(Organization.name == payload.name)
+        if existing_org:
+            raise HTTPException(400, detail="Organization name already exists")
 
-    # Create organization with default quotas
-    org = create_org_async(payload.name, payload.description)
+        # Create organization with default quotas
+        org = create_org_async(payload.name, payload.description)
 
-    # Add creator as super-admin
-    create_user_organization(user.id, org.id, "super-admin")
+        # Add creator as super-admin
+        create_user_organization(user.id, org.id, "super-admin")
 
     logger.info(f"User {user.username} created organization: {org.name}")
 

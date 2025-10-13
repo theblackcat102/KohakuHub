@@ -2,12 +2,20 @@
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from kohakuhub.config import cfg
-from kohakuhub.db import File, Repository, StagingUpload, User, init_db
-from kohakuhub.db_operations import get_repository
+from kohakuhub.db import (
+    File,
+    Organization,
+    Repository,
+    StagingUpload,
+    User,
+    db,
+    init_db,
+)
+from kohakuhub.db_operations import get_file, get_organization, get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import (
@@ -15,6 +23,8 @@ from kohakuhub.auth.permissions import (
     check_repo_delete_permission,
 )
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.utils.s3 import copy_s3_folder, delete_objects_with_prefix
+from kohakuhub.lakefs_rest_client import StagingLocation, StagingMetadata
 from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     hf_error_response,
@@ -22,6 +32,12 @@ from kohakuhub.api.repo.utils.hf import (
     hf_server_error,
     is_lakefs_not_found_error,
 )
+from kohakuhub.api.quota.util import (
+    calculate_repository_storage,
+    check_quota,
+    increment_storage,
+)
+from kohakuhub.api.repo.utils.gc import cleanup_repository_storage
 
 logger = get_logger("REPO")
 router = APIRouter()
@@ -156,18 +172,34 @@ async def delete_repo(
             return hf_server_error(f"LakeFS repository deletion failed: {str(e)}")
         logger.info(f"LakeFS repository {lakefs_repo} not found/already deleted (OK)")
 
-    # 3. Delete related metadata from database (manual cascade)
+    # 3. Delete related metadata from database (manual cascade) atomically
     try:
-        # Delete related file records first
-        File.delete().where(File.repo_full_id == full_id).execute()
-        StagingUpload.delete().where(StagingUpload.repo_full_id == full_id).execute()
-        repo_row.delete_instance()
+        with db.atomic():
+            # Delete related file records first
+            File.delete().where(File.repo_full_id == full_id).execute()
+            StagingUpload.delete().where(
+                StagingUpload.repo_full_id == full_id
+            ).execute()
+            repo_row.delete_instance()
         logger.success(f"Successfully deleted database records for: {full_id}")
     except Exception as e:
         logger.exception(f"Database deletion failed for {full_id}", e)
         return hf_server_error(f"Database deletion failed for {full_id}: {str(e)}")
 
-    # 4. Return success response (200 OK with a simple message)
+    # 4. Clean up S3 storage (repository folder and unreferenced LFS objects)
+    try:
+        cleanup_stats = await cleanup_repository_storage(full_id, lakefs_repo)
+        logger.info(
+            f"S3 cleanup for {full_id}: "
+            f"{cleanup_stats['repo_objects_deleted']} repo objects, "
+            f"{cleanup_stats['lfs_objects_deleted']} LFS objects, "
+            f"{cleanup_stats['lfs_history_deleted']} history records deleted"
+        )
+    except Exception as e:
+        # S3 cleanup failure is non-fatal - repository is already deleted from LakeFS/DB
+        logger.warning(f"S3 cleanup failed for {full_id} (non-fatal): {e}")
+
+    # 5. Return success response (200 OK with a simple message)
     # HuggingFace Hub delete_repo returns a simple 200 OK.
     return {"message": f"Repository '{full_id}' of type '{repo_type}' deleted."}
 
@@ -178,6 +210,283 @@ class MoveRepoPayload(BaseModel):
     fromRepo: str  # format: "namespace/repo-name"
     toRepo: str  # format: "namespace/repo-name"
     type: str = "model"
+
+
+async def _migrate_lakefs_repository(repo_type: str, from_id: str, to_id: str) -> None:
+    """Migrate LakeFS repository with proper LFS handling using File table.
+
+    Strategy:
+    1. Get list of all objects with metadata from old repo
+    2. Query File table to determine LFS status (source of truth)
+    3. Create new LakeFS repo
+    4. For each object:
+       - LFS files (File.lfs=True): Link to SAME global lfs/ address (no duplication)
+       - Regular files (File.lfs=False): Download and re-upload to new repo
+    5. Commit all staged/uploaded objects
+    6. Delete old LakeFS repo and old S3 folder
+
+    This prevents LFS duplication and handles dynamic LFS rules correctly.
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        from_id: Source repository ID (namespace/name)
+        to_id: Target repository ID (namespace/name)
+
+    Raises:
+        HTTPException: If migration fails
+    """
+    from_lakefs_repo = lakefs_repo_name(repo_type, from_id)
+    to_lakefs_repo = lakefs_repo_name(repo_type, to_id)
+
+    if from_lakefs_repo == to_lakefs_repo:
+        # No migration needed (e.g., just renaming within namespace)
+        return
+
+    client = get_lakefs_client()
+    from_s3_prefix = f"{from_lakefs_repo}/"
+
+    try:
+        # 1. Get list of all objects with metadata from old repo
+        logger.info(f"Listing objects in {from_lakefs_repo}")
+        objects_to_migrate = []
+        after = ""
+        has_more = True
+
+        while has_more:
+            result = await client.list_objects(
+                repository=from_lakefs_repo,
+                ref="main",
+                delimiter="",
+                amount=1000,
+                after=after,
+            )
+
+            for obj in result["results"]:
+                if obj["path_type"] == "object":
+                    objects_to_migrate.append(
+                        {
+                            "path": obj["path"],
+                            "size_bytes": obj.get("size_bytes", 0),
+                            "checksum": obj.get("checksum", ""),
+                            "physical_address": obj.get("physical_address", ""),
+                        }
+                    )
+
+            if result.get("pagination") and result["pagination"].get("has_more"):
+                after = result["pagination"]["next_offset"]
+                has_more = True
+            else:
+                has_more = False
+
+        logger.info(f"Found {len(objects_to_migrate)} object(s) to migrate")
+
+        # 2. Create new LakeFS repository
+        storage_namespace = f"s3://{cfg.s3.bucket}/{to_lakefs_repo}"
+        await client.create_repository(
+            name=to_lakefs_repo,
+            storage_namespace=storage_namespace,
+            default_branch="main",
+        )
+        logger.info(f"Created new LakeFS repository: {to_lakefs_repo}")
+
+        # 3. Process each object using File table to determine LFS status
+        lfs_count = 0
+        regular_count = 0
+
+        for obj in objects_to_migrate:
+            obj_path = obj["path"]
+            size_bytes = obj["size_bytes"]
+
+            # Query File table to get LFS status (source of truth)
+            # This handles dynamic LFS rules and ensures consistency
+            file_record = get_file(from_id, obj_path)
+
+            # Determine if file is LFS:
+            # - Primary: Use File table record if exists (handles dynamic rules)
+            # - Fallback: Use size threshold (for edge cases where File record missing)
+            if file_record:
+                is_lfs = file_record.lfs
+                logger.debug(
+                    f"File {obj_path}: LFS={is_lfs} from File table "
+                    f"(size={size_bytes}, db_lfs={file_record.lfs})"
+                )
+            else:
+                # Fallback to size threshold if File record doesn't exist
+                is_lfs = size_bytes >= cfg.app.lfs_threshold_bytes
+                logger.warning(
+                    f"File {obj_path}: No File record, using size threshold "
+                    f"(size={size_bytes}, is_lfs={is_lfs})"
+                )
+
+            try:
+                if is_lfs:
+                    # LFS file: Link to SAME global lfs/ address (no copy/upload)
+                    # LFS files are stored at: s3://bucket/lfs/{sha[:2]}/{sha[2:4]}/{sha}
+                    # They are shared across ALL repositories
+                    staging_metadata = StagingMetadata(
+                        staging=StagingLocation(
+                            physical_address=obj["physical_address"]
+                        ),
+                        checksum=obj["checksum"],
+                        size_bytes=size_bytes,
+                    )
+
+                    await client.link_physical_address(
+                        repository=to_lakefs_repo,
+                        branch="main",
+                        path=obj_path,
+                        staging_metadata=staging_metadata,
+                    )
+                    lfs_count += 1
+                    logger.debug(f"Linked LFS file: {obj_path} ({size_bytes} bytes)")
+
+                else:
+                    # Regular file: Download and re-upload to new repo's data folder
+                    # Each repo has its own copy in: s3://bucket/{repo}/data/...
+                    content = await client.get_object(
+                        repository=from_lakefs_repo,
+                        ref="main",
+                        path=obj_path,
+                    )
+
+                    await client.upload_object(
+                        repository=to_lakefs_repo,
+                        branch="main",
+                        path=obj_path,
+                        content=content,
+                        force=True,
+                    )
+                    regular_count += 1
+                    logger.debug(
+                        f"Uploaded regular file: {obj_path} ({size_bytes} bytes)"
+                    )
+
+                if (lfs_count + regular_count) % 10 == 0:
+                    logger.info(
+                        f"Migrated {lfs_count + regular_count}/{len(objects_to_migrate)} objects "
+                        f"({lfs_count} LFS, {regular_count} regular)..."
+                    )
+
+            except Exception as e:
+                logger.warning(f"Failed to migrate object {obj_path}: {e}")
+                # Continue with other objects
+
+        logger.success(
+            f"Migrated {lfs_count + regular_count} object(s): "
+            f"{lfs_count} LFS linked, {regular_count} regular uploaded"
+        )
+
+        # 4. Commit all staged/uploaded objects
+        if lfs_count + regular_count > 0:
+            await client.commit(
+                repository=to_lakefs_repo,
+                branch="main",
+                message=f"Repository moved from {from_id} to {to_id}",
+            )
+            logger.success(f"Committed all objects to new repository")
+
+        # 5. Delete old LakeFS repository
+        try:
+            await client.delete_repository(repository=from_lakefs_repo)
+            logger.info(f"Deleted old LakeFS repository: {from_lakefs_repo}")
+        except Exception as e:
+            if not is_lakefs_not_found_error(e):
+                logger.warning(f"Failed to delete old LakeFS repo: {e}")
+
+        # 6. Delete old S3 folder to free up the name
+        deleted_count = await delete_objects_with_prefix(cfg.s3.bucket, from_s3_prefix)
+        logger.success(f"Deleted {deleted_count} object(s) from old S3 prefix")
+
+        logger.success(
+            f"Successfully migrated repository from {from_lakefs_repo} to {to_lakefs_repo}"
+        )
+
+    except Exception as e:
+        # Clean up on failure
+        logger.exception(f"LakeFS repository migration failed: {e}")
+
+        # Try to delete new LakeFS repo if it was created
+        try:
+            await client.delete_repository(repository=to_lakefs_repo)
+            logger.info(f"Cleaned up new LakeFS repo: {to_lakefs_repo}")
+        except Exception:
+            pass
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": f"Failed to migrate repository: {str(e)}",
+            },
+        )
+
+
+def _update_repository_database_records(
+    repo_row: Repository,
+    from_id: str,
+    to_id: str,
+    from_namespace: str,
+    to_namespace: str,
+    to_name: str,
+    moving_namespace: bool,
+    repo_size: int,
+) -> None:
+    """Update database records for repository move (must be called within db.atomic()).
+
+    Args:
+        repo_row: Repository database record
+        from_id: Source repository ID
+        to_id: Target repository ID
+        from_namespace: Source namespace
+        to_namespace: Target namespace
+        to_name: Target repository name
+        moving_namespace: Whether namespace is changing
+        repo_size: Repository size in bytes
+    """
+    # Update repository record
+    Repository.update(
+        namespace=to_namespace,
+        name=to_name,
+        full_id=to_id,
+    ).where(Repository.id == repo_row.id).execute()
+
+    # Update related file records
+    File.update(repo_full_id=to_id).where(File.repo_full_id == from_id).execute()
+
+    # Update staging uploads
+    StagingUpload.update(repo_full_id=to_id).where(
+        StagingUpload.repo_full_id == from_id
+    ).execute()
+
+    # Update storage quotas if namespace changed
+    if moving_namespace and repo_size > 0:
+        # Check if source namespace is an organization
+        source_org = get_organization(from_namespace)
+        is_source_org = source_org is not None
+
+        # Check if target namespace is an organization
+        target_org = get_organization(to_namespace)
+        is_target_org = target_org is not None
+
+        # Decrement from source namespace
+        increment_storage(
+            namespace=from_namespace,
+            bytes_delta=-repo_size,
+            is_private=repo_row.private,
+            is_org=is_source_org,
+        )
+
+        # Increment to target namespace
+        increment_storage(
+            namespace=to_namespace,
+            bytes_delta=repo_size,
+            is_private=repo_row.private,
+            is_org=is_target_org,
+        )
+
+        logger.info(
+            f"Updated storage quotas: {from_namespace} -{repo_size:,} bytes, "
+            f"{to_namespace} +{repo_size:,} bytes"
+        )
 
 
 @router.post("/repos/move")
@@ -235,24 +544,85 @@ async def move_repo(
     # Check if user has permission to use destination namespace
     check_namespace_permission(to_namespace, user)
 
-    # Update database records
-    # Update repository record
-    Repository.update(
-        namespace=to_namespace,
-        name=to_name,
-        full_id=to_id,
-    ).where(Repository.id == repo_row.id).execute()
+    # Check storage quota and prepare for namespace change if moving to different namespace
+    repo_size = 0
+    moving_namespace = from_namespace != to_namespace
 
-    # Update related file records
-    File.update(repo_full_id=to_id).where(File.repo_full_id == from_id).execute()
+    if moving_namespace:
+        logger.info(
+            f"Checking storage quota for moving {from_id} to {to_namespace} namespace"
+        )
 
-    # Update staging uploads
-    StagingUpload.update(repo_full_id=to_id).where(
-        StagingUpload.repo_full_id == from_id
-    ).execute()
+        # Calculate repository storage size
+        repo_storage = await calculate_repository_storage(repo_row)
+        repo_size = repo_storage["total_bytes"]
 
-    # Note: LakeFS repository rename not implemented yet
-    # Would require creating new LakeFS repo and migrating data
+        # Check if target namespace is an organization
+        target_org = get_organization(to_namespace)
+        is_target_org = target_org is not None
+
+        # Check quota for the target namespace based on repository privacy
+        allowed, error_msg = check_quota(
+            namespace=to_namespace,
+            additional_bytes=repo_size,
+            is_private=repo_row.private,
+            is_org=is_target_org,
+        )
+
+        if not allowed:
+            logger.warning(
+                f"Quota check failed for moving {from_id} to {to_namespace}: {error_msg}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": error_msg,
+                    "repo_size_bytes": repo_size,
+                },
+            )
+
+        logger.info(
+            f"Quota check passed for moving {from_id} to {to_namespace} "
+            f"(repo size: {repo_size:,} bytes)"
+        )
+
+    # Update database records and migrate LakeFS repository atomically
+    # If LakeFS migration fails (raises HTTPException), Peewee will automatically rollback
+    from_lakefs_repo = lakefs_repo_name(repo_type, from_id)
+
+    with db.atomic():
+        # Update database records
+        _update_repository_database_records(
+            repo_row=repo_row,
+            from_id=from_id,
+            to_id=to_id,
+            from_namespace=from_namespace,
+            to_namespace=to_namespace,
+            to_name=to_name,
+            moving_namespace=moving_namespace,
+            repo_size=repo_size,
+        )
+
+        # Migrate LakeFS repository (will raise HTTPException on failure)
+        await _migrate_lakefs_repository(
+            repo_type=repo_type,
+            from_id=from_id,
+            to_id=to_id,
+        )
+
+    # Clean up old S3 storage after successful migration
+    # Note: Migration already deleted the old LakeFS repo, but S3 data remains
+    # We need to clean up the S3 folder and unreferenced LFS objects
+    try:
+        cleanup_stats = await cleanup_repository_storage(from_id, from_lakefs_repo)
+        logger.info(
+            f"S3 cleanup for moved repo {from_id}: "
+            f"{cleanup_stats['repo_objects_deleted']} repo objects, "
+            f"{cleanup_stats['lfs_objects_deleted']} LFS objects deleted"
+        )
+    except Exception as e:
+        # S3 cleanup failure is non-fatal - repository is already moved successfully
+        logger.warning(f"S3 cleanup failed for {from_id} (non-fatal): {e}")
 
     return {
         "success": True,

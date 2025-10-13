@@ -4,14 +4,43 @@ This module provides a pure async HTTP client for LakeFS API,
 replacing the deprecated lakefs-client library which has threading issues.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import httpx
+from pydantic import BaseModel, Field
 
 from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
 
 logger = get_logger("LAKEFS_REST")
+
+
+class StagingLocation(BaseModel):
+    """LakeFS staging location for physical address linking.
+
+    Schema from LakeFS API: #/components/schemas/StagingLocation
+    """
+
+    physical_address: str
+    presigned_url: Optional[str] = None
+    presigned_url_expiry: Optional[int] = Field(None, description="Unix Epoch time")
+
+
+class StagingMetadata(BaseModel):
+    """LakeFS staging metadata for link_physical_address API.
+
+    Schema from LakeFS API: #/components/schemas/StagingMetadata
+    """
+
+    staging: StagingLocation
+    checksum: str = Field(
+        ..., description="Unique identifier of object content (typically ETag)"
+    )
+    size_bytes: int
+    user_metadata: Optional[dict[str, str]] = None
+    content_type: Optional[str] = Field(None, description="Object media type")
+    mtime: Optional[int] = Field(None, description="Unix Epoch in seconds")
+    force: bool = False
 
 
 class LakeFSRestClient:
@@ -129,7 +158,7 @@ class LakeFSRestClient:
         repository: str,
         branch: str,
         path: str,
-        staging_metadata: dict[str, Any],
+        staging_metadata: StagingMetadata | dict[str, Any],
     ) -> dict[str, Any]:
         """Link physical address (for LFS objects).
 
@@ -137,18 +166,24 @@ class LakeFSRestClient:
             repository: Repository name
             branch: Branch name
             path: Object path in repo
-            staging_metadata: Dict with physical_address, checksum, size_bytes
+            staging_metadata: StagingMetadata model or dict with staging, checksum, size_bytes
 
         Returns:
             ObjectStats dict
         """
         url = f"{self.base_url}/repositories/{repository}/branches/{branch}/staging/backing"
 
+        # Convert StagingMetadata to dict if needed
+        if isinstance(staging_metadata, StagingMetadata):
+            metadata_dict = staging_metadata.model_dump(exclude_none=True)
+        else:
+            metadata_dict = staging_metadata
+
         async with httpx.AsyncClient() as client:
             response = await client.put(
                 url,
                 params={"path": path},
-                json=staging_metadata,
+                json=metadata_dict,
                 auth=self.auth,
                 timeout=30.0,
             )

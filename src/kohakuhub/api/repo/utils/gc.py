@@ -8,7 +8,7 @@ from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client
-from kohakuhub.utils.s3 import get_s3_client, object_exists
+from kohakuhub.utils.s3 import delete_objects_with_prefix, get_s3_client, object_exists
 
 logger = get_logger("GC")
 
@@ -468,6 +468,76 @@ async def sync_file_table_with_commit(
     except Exception as e:
         logger.exception(f"Failed to sync file table", e)
         return 0
+
+
+async def cleanup_repository_storage(
+    repo_full_id: str,
+    lakefs_repo: str,
+) -> dict[str, int]:
+    """Clean up S3 storage for a deleted or moved repository.
+
+    This function:
+    1. Deletes the repository folder in S3 (LakeFS data)
+    2. Cleans up LFS objects that are only used by this repository
+
+    LFS objects are only deleted if they are not referenced by any other repository.
+
+    Args:
+        repo_full_id: Full repository ID (namespace/name)
+        lakefs_repo: LakeFS repository name (for S3 prefix)
+
+    Returns:
+        Dict with 'repo_objects_deleted' and 'lfs_objects_deleted' counts
+    """
+    # 1. Delete repository folder in S3 (LakeFS data)
+    repo_prefix = f"{lakefs_repo}/"
+    repo_objects_deleted = await delete_objects_with_prefix(cfg.s3.bucket, repo_prefix)
+
+    logger.info(
+        f"Deleted {repo_objects_deleted} repository object(s) from S3 prefix: {repo_prefix}"
+    )
+
+    # 2. Clean up LFS objects that were only used by this repository
+    # Get all LFS objects ever used by this repository
+    lfs_objects = list(
+        LFSObjectHistory.select(LFSObjectHistory.sha256)
+        .where(LFSObjectHistory.repo_full_id == repo_full_id)
+        .distinct()
+    )
+
+    lfs_objects_deleted = 0
+    for lfs_obj in lfs_objects:
+        sha256 = lfs_obj.sha256
+
+        # Check if this LFS object is used by any other repository or file
+        # cleanup_lfs_object will check:
+        # - Current File table (any repo)
+        # - LFSObjectHistory (any other repo)
+        # Only deletes if not referenced anywhere
+        if cleanup_lfs_object(sha256, repo_full_id=None):
+            lfs_objects_deleted += 1
+
+    if lfs_objects_deleted > 0:
+        logger.success(
+            f"Cleaned up {lfs_objects_deleted} unreferenced LFS object(s) for {repo_full_id}"
+        )
+
+    # 3. Clean up LFSObjectHistory for this repository
+    history_deleted = (
+        LFSObjectHistory.delete()
+        .where(LFSObjectHistory.repo_full_id == repo_full_id)
+        .execute()
+    )
+
+    logger.info(
+        f"Removed {history_deleted} LFS history record(s) for repository: {repo_full_id}"
+    )
+
+    return {
+        "repo_objects_deleted": repo_objects_deleted,
+        "lfs_objects_deleted": lfs_objects_deleted,
+        "lfs_history_deleted": history_deleted,
+    }
 
 
 async def track_commit_lfs_objects(
