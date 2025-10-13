@@ -40,6 +40,20 @@
     <div class="card">
       <h2 class="text-xl font-semibold mb-4">Select Files</h2>
 
+      <!-- LFS Info -->
+      <el-alert type="info" :closable="false" class="mb-4">
+        <template #title>
+          <div class="flex items-center gap-2">
+            <div class="i-carbon-information" />
+            Automatic LFS Detection
+          </div>
+        </template>
+        <div class="text-sm">
+          Large files will be automatically uploaded using Git LFS for efficient
+          storage. LFS files are deduplicated and shared across repositories.
+        </div>
+      </el-alert>
+
       <!-- File Drop Zone -->
       <div
         class="upload-zone"
@@ -95,7 +109,7 @@
               <div class="flex-1 min-w-0">
                 <div class="font-medium truncate">{{ fileItem.file.name }}</div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">
-                  {{ formatSize(fileItem.file.size) }}
+                  {{ formatFileSize(fileItem.file.size) }}
                 </div>
               </div>
               <div class="flex-shrink-0" style="width: 300px">
@@ -191,6 +205,7 @@ import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { repoAPI } from "@/utils/api";
 import { useAuthStore } from "@/stores/auth";
+import { formatFileSize } from "@/utils/lfs";
 
 const route = useRoute();
 const router = useRouter();
@@ -263,15 +278,6 @@ function removeFile(index) {
 
 function clearFiles() {
   files.value = [];
-}
-
-function formatSize(bytes) {
-  if (!bytes || bytes === 0) return "0 B";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  if (bytes < 1024 * 1024 * 1024)
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
 }
 
 async function handleUpload() {

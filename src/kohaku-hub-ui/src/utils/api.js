@@ -114,12 +114,43 @@ export const repoAPI = {
    * @param {string} namespace - Owner namespace
    * @param {string} name - Repository name
    * @param {string} revision - Branch name
-   * @param {Object} data - { files: Array<{path, content}>, message: string, description?: string }
+   * @param {Object} data - { files: Array<{path, file}>, message: string, description?: string }
    * @param {Function} onProgress - Progress callback
    * @returns {Promise} - Commit result
    */
   uploadFiles: async (type, namespace, name, revision, data, onProgress) => {
-    // Convert files to NDJSON format for commit API
+    const { uploadLFSFile, calculateSHA256 } = await import("./lfs.js");
+
+    const repoId = `${namespace}/${name}`;
+    const totalFiles = data.files.length;
+    let processedFiles = 0;
+
+    // Step 1: Calculate SHA256 for all files and call preupload API
+    const fileMetadata = [];
+    for (const fileItem of data.files) {
+      const sha256 = await calculateSHA256(fileItem.file);
+      fileMetadata.push({
+        path: fileItem.path,
+        size: fileItem.file.size,
+        sha256: sha256,
+      });
+    }
+
+    // Call preupload API to determine upload mode for each file
+    const preuploadResponse = await api.post(
+      `/api/${type}s/${namespace}/${name}/preupload/${revision}`,
+      { files: fileMetadata },
+    );
+
+    const preuploadResults = preuploadResponse.data.files;
+
+    // Create a map of path -> preupload result
+    const preuploadMap = new Map();
+    for (const result of preuploadResults) {
+      preuploadMap.set(result.path, result);
+    }
+
+    // Step 2: Convert files to NDJSON format based on uploadMode from API
     const ndjsonLines = [];
 
     // Header
@@ -131,29 +162,91 @@ export const repoAPI = {
       },
     });
 
-    // Files
-    for (const file of data.files) {
-      const reader = new FileReader();
-      const content = await new Promise((resolve, reject) => {
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file.file);
-      });
+    // Process each file based on uploadMode from preupload API
+    for (let i = 0; i < data.files.length; i++) {
+      const fileItem = data.files[i];
+      const file = fileItem.file;
+      const path = fileItem.path;
+      const metadata = fileMetadata[i];
+      const preuploadResult = preuploadMap.get(path);
 
-      // Extract base64 content (remove data:...;base64, prefix)
-      const base64Content = content.split(",")[1];
+      if (!preuploadResult) {
+        throw new Error(`No preupload result for ${path}`);
+      }
 
-      ndjsonLines.push({
-        key: "file",
-        value: {
-          path: file.path,
-          content: base64Content,
-          encoding: "base64",
-        },
-      });
+      // Skip files that should be ignored (already exist with same content)
+      if (preuploadResult.shouldIgnore) {
+        console.log(`Skipping unchanged file: ${path}`);
+        processedFiles++;
+        if (onProgress) onProgress(processedFiles / totalFiles);
+        continue;
+      }
+
+      // Use uploadMode from backend to determine how to upload
+      const uploadMode = preuploadResult.uploadMode;
+
+      if (uploadMode === "lfs") {
+        // LFS file: Upload to S3 through Git LFS
+        console.log(`Uploading ${path} via LFS (${file.size} bytes)`);
+
+        try {
+          const lfsResult = await uploadLFSFile(
+            repoId,
+            file,
+            metadata.sha256,
+            (progress) => {
+              const fileProgress = (processedFiles + progress) / totalFiles;
+              if (onProgress) onProgress(fileProgress);
+            },
+          );
+
+          // Add lfsFile operation to NDJSON
+          ndjsonLines.push({
+            key: "lfsFile",
+            value: {
+              path: path,
+              oid: lfsResult.oid,
+              size: lfsResult.size,
+              algo: "sha256",
+            },
+          });
+
+          processedFiles++;
+        } catch (err) {
+          console.error(`Failed to upload LFS file ${path}:`, err);
+          throw err;
+        }
+      } else {
+        // Regular file: Use inline base64 content
+        console.log(
+          `Uploading ${path} via standard commit (${file.size} bytes)`,
+        );
+
+        const reader = new FileReader();
+        const content = await new Promise((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Extract base64 content
+        const base64Content = content.split(",")[1];
+
+        ndjsonLines.push({
+          key: "file",
+          value: {
+            path: path,
+            content: base64Content,
+            encoding: "base64",
+          },
+        });
+
+        processedFiles++;
+        if (onProgress) onProgress(processedFiles / totalFiles);
+      }
     }
 
-    // Convert to NDJSON
+    // Step 3: Create commit with all operations
     const ndjson = ndjsonLines.map((line) => JSON.stringify(line)).join("\n");
 
     return api.post(
@@ -162,12 +255,6 @@ export const repoAPI = {
       {
         headers: {
           "Content-Type": "application/x-ndjson",
-        },
-        onUploadProgress: (progressEvent) => {
-          if (onProgress && progressEvent.total) {
-            const progress = progressEvent.loaded / progressEvent.total;
-            onProgress(progress);
-          }
         },
       },
     );
