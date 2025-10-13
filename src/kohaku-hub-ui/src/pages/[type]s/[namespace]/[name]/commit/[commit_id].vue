@@ -1,6 +1,29 @@
 <!-- src/pages/[type]s/[namespace]/[name]/commit/[commit_id].vue -->
 <template>
   <div class="container-main">
+    <!-- Breadcrumb Navigation -->
+    <el-breadcrumb separator="/" class="mb-6 text-gray-700 dark:text-gray-300">
+      <el-breadcrumb-item :to="{ path: '/' }">Home</el-breadcrumb-item>
+      <el-breadcrumb-item :to="{ path: `/${type}s` }">
+        {{
+          type === "model"
+            ? "Models"
+            : type === "dataset"
+              ? "Datasets"
+              : "Spaces"
+        }}
+      </el-breadcrumb-item>
+      <el-breadcrumb-item :to="{ path: `/${namespace}` }">
+        {{ namespace }}
+      </el-breadcrumb-item>
+      <el-breadcrumb-item :to="{ path: `/${type}s/${namespace}/${name}` }">
+        {{ name }}
+      </el-breadcrumb-item>
+      <el-breadcrumb-item
+        >Commit {{ commitId?.substring(0, 8) }}</el-breadcrumb-item
+      >
+    </el-breadcrumb>
+
     <!-- Loading State -->
     <div v-if="loading" class="flex justify-center items-center py-20">
       <el-icon class="is-loading" size="48">

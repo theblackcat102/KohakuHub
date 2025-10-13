@@ -15,6 +15,7 @@ from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
 from kohakuhub.api.repo.utils.hf import hf_repo_not_found
+from kohakuhub.api.quota.util import calculate_repository_storage, check_quota
 
 logger = get_logger("SETTINGS")
 
@@ -159,6 +160,43 @@ async def update_repo_settings(
 
     # Update fields if provided
     if payload.private is not None:
+        # Check if visibility is actually changing
+        if repo_row.private != payload.private:
+            # Calculate repository storage
+            logger.info(
+                f"Checking quota for visibility change: {repo_id} from "
+                f"{'private to public' if repo_row.private else 'public to private'}"
+            )
+
+            repo_storage = await calculate_repository_storage(repo_row)
+            repo_size = repo_storage["total_bytes"]
+
+            # Check if namespace is an organization
+            org = get_organization(namespace)
+            is_org = org is not None
+
+            # Check quota for the new visibility setting
+            # If changing to private, check private quota; if to public, check public quota
+            allowed, error_msg = check_quota(
+                namespace=namespace,
+                additional_bytes=repo_size,
+                is_private=payload.private,
+                is_org=is_org,
+            )
+
+            if not allowed:
+                logger.warning(
+                    f"Quota check failed for {repo_id} visibility change: {error_msg}"
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": error_msg,
+                        "repo_size_bytes": repo_size,
+                    },
+                )
+
+        # Update repository visibility
         Repository.update(private=payload.private).where(
             Repository.id == repo_row.id
         ).execute()

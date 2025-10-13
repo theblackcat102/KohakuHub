@@ -1,6 +1,31 @@
 <!-- src/pages/[type]s/[namespace]/[name]/settings.vue -->
 <template>
   <div class="container-main">
+    <!-- Breadcrumb Navigation -->
+    <el-breadcrumb separator="/" class="mb-6 text-gray-700 dark:text-gray-300">
+      <el-breadcrumb-item :to="{ path: '/' }">Home</el-breadcrumb-item>
+      <el-breadcrumb-item :to="{ path: `/${repoType}s` }">
+        {{
+          repoType === "model"
+            ? "Models"
+            : repoType === "dataset"
+              ? "Datasets"
+              : "Spaces"
+        }}
+      </el-breadcrumb-item>
+      <el-breadcrumb-item :to="{ path: `/${route.params.namespace}` }">
+        {{ route.params.namespace }}
+      </el-breadcrumb-item>
+      <el-breadcrumb-item
+        :to="{
+          path: `/${repoType}s/${route.params.namespace}/${route.params.name}`,
+        }"
+      >
+        {{ route.params.name }}
+      </el-breadcrumb-item>
+      <el-breadcrumb-item>Settings</el-breadcrumb-item>
+    </el-breadcrumb>
+
     <h1 class="text-3xl font-bold mb-6">
       Repository Settings: {{ route.params.name }}
     </h1>
@@ -14,30 +39,60 @@
             <h2 class="text-xl font-semibold mb-4">Visibility</h2>
             <el-form label-position="top">
               <el-form-item label="Repository Visibility">
-                <el-radio-group v-model="settings.private">
-                  <el-radio :label="false">
-                    <div class="flex items-center gap-2">
-                      <div class="i-carbon-unlock" />
-                      <div>
-                        <div class="font-medium">Public</div>
-                        <div class="text-sm text-gray-500">
-                          Anyone can see this repository
-                        </div>
+                <div class="visibility-options">
+                  <div
+                    :class="[
+                      'visibility-option',
+                      { selected: !settings.private },
+                    ]"
+                    @click="settings.private = false"
+                  >
+                    <div class="option-radio">
+                      <div
+                        :class="[
+                          'radio-circle',
+                          { checked: !settings.private },
+                        ]"
+                      >
+                        <div v-if="!settings.private" class="radio-dot" />
                       </div>
                     </div>
-                  </el-radio>
-                  <el-radio :label="true">
-                    <div class="flex items-center gap-2">
-                      <div class="i-carbon-locked" />
-                      <div>
-                        <div class="font-medium">Private</div>
-                        <div class="text-sm text-gray-500">
-                          Only you and collaborators can see this repository
-                        </div>
+                    <div class="option-icon">
+                      <div class="i-carbon-unlock text-xl" />
+                    </div>
+                    <div class="option-content">
+                      <div class="option-title">Public</div>
+                      <div class="option-description">
+                        Anyone can see this repository
                       </div>
                     </div>
-                  </el-radio>
-                </el-radio-group>
+                  </div>
+
+                  <div
+                    :class="[
+                      'visibility-option',
+                      { selected: settings.private },
+                    ]"
+                    @click="settings.private = true"
+                  >
+                    <div class="option-radio">
+                      <div
+                        :class="['radio-circle', { checked: settings.private }]"
+                      >
+                        <div v-if="settings.private" class="radio-dot" />
+                      </div>
+                    </div>
+                    <div class="option-icon">
+                      <div class="i-carbon-locked text-xl" />
+                    </div>
+                    <div class="option-content">
+                      <div class="option-title">Private</div>
+                      <div class="option-description">
+                        Only you and collaborators can see this repository
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </el-form-item>
 
               <el-button type="primary" @click="saveGeneralSettings">
@@ -351,3 +406,138 @@ onMounted(() => {
   loadRepoInfo();
 });
 </script>
+
+<style scoped>
+/* Visibility options container */
+.visibility-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+/* Individual visibility option */
+.visibility-option {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dark .visibility-option {
+  border-color: #374151;
+}
+
+.visibility-option:hover {
+  background-color: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.dark .visibility-option:hover {
+  background-color: #1f2937;
+  border-color: #4b5563;
+}
+
+.visibility-option.selected {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.dark .visibility-option.selected {
+  border-color: #60a5fa;
+  background-color: #1e3a8a;
+}
+
+/* Custom radio circle */
+.option-radio {
+  display: flex;
+  align-items: center;
+  padding-top: 0.125rem;
+}
+
+.radio-circle {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #d1d5db;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.dark .radio-circle {
+  border-color: #6b7280;
+}
+
+.radio-circle.checked {
+  border-color: #3b82f6;
+  background-color: #3b82f6;
+}
+
+.dark .radio-circle.checked {
+  border-color: #60a5fa;
+  background-color: #60a5fa;
+}
+
+.radio-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: white;
+  border-radius: 50%;
+}
+
+/* Icon styling */
+.option-icon {
+  display: flex;
+  align-items: center;
+  color: #6b7280;
+  padding-top: 0.125rem;
+}
+
+.dark .option-icon {
+  color: #9ca3af;
+}
+
+.visibility-option.selected .option-icon {
+  color: #3b82f6;
+}
+
+.dark .visibility-option.selected .option-icon {
+  color: #60a5fa;
+}
+
+/* Content area */
+.option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.option-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #111827;
+  line-height: 1.4;
+}
+
+.dark .option-title {
+  color: #f9fafb;
+}
+
+.option-description {
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.dark .option-description {
+  color: #9ca3af;
+}
+</style>

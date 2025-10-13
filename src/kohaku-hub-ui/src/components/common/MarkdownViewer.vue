@@ -77,7 +77,7 @@ const getMermaidConfig = (dark) => ({
   securityLevel: "loose",
   fontFamily: "ui-sans-serif, system-ui, sans-serif",
   theme: dark ? "dark" : "default",
-  logLevel: 'fatal', // Only log fatal errors, suppress warnings
+  logLevel: "fatal", // Only log fatal errors, suppress warnings
 });
 
 // Initialize Mermaid
@@ -162,7 +162,7 @@ async function renderSingleDiagram(wrapper, code, index) {
     svg = result.svg;
   } catch (err) {
     // Don't show Mermaid's error diagram, show our own error message
-    console.error('Mermaid render error:', err);
+    console.error("Mermaid render error:", err);
     container.innerHTML = `
       <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-4 text-sm">
         <div class="font-semibold text-red-600 dark:text-red-400 mb-2">Diagram Syntax Error</div>
