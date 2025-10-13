@@ -408,6 +408,40 @@ class LakeFSRestClient:
             )
             response.raise_for_status()
 
+    async def get_repository(self, repository: str) -> dict[str, Any]:
+        """Get repository details.
+
+        Args:
+            repository: Repository name
+
+        Returns:
+            Repository dict
+
+        Raises:
+            httpx.HTTPStatusError: If repository not found (404)
+        """
+        url = f"{self.base_url}/repositories/{repository}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, auth=self.auth, timeout=30.0)
+            response.raise_for_status()
+            return response.json()
+
+    async def repository_exists(self, repository: str) -> bool:
+        """Check if repository exists.
+
+        Args:
+            repository: Repository name
+
+        Returns:
+            True if repository exists, False otherwise
+        """
+        try:
+            await self.get_repository(repository)
+            return True
+        except Exception:
+            return False
+
     async def get_branch(self, repository: str, branch: str) -> dict[str, Any]:
         """Get branch details.
 

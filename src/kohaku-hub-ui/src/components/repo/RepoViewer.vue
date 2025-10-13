@@ -905,8 +905,11 @@ async function createReadme() {
   try {
     const readmeContent = `# ${props.name}\n\nAdd your project description here.\n`;
 
+    console.log("Creating README with content:", readmeContent);
+    console.log("Using branch:", currentBranch.value);
+
     // Commit the README file using the commit API
-    await repoAPI.commitFiles(
+    const result = await repoAPI.commitFiles(
       props.repoType,
       props.namespace,
       props.name,
@@ -922,6 +925,8 @@ async function createReadme() {
       },
     );
 
+    console.log("Commit result:", result);
+
     ElMessage.success("README.md created successfully");
 
     // Reload file tree and README
@@ -929,7 +934,11 @@ async function createReadme() {
     await loadReadme();
   } catch (err) {
     console.error("Failed to create README:", err);
-    ElMessage.error("Failed to create README.md");
+    console.error("Error response:", err.response);
+    console.error("Error data:", err.response?.data);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to create README.md";
+    ElMessage.error(errorMsg);
   }
 }
 

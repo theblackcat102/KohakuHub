@@ -1,5 +1,7 @@
 """Repository CRUD operations (create, delete, move)."""
 
+import asyncio
+import uuid
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,6 +40,7 @@ from kohakuhub.api.quota.util import (
     increment_storage,
 )
 from kohakuhub.api.repo.utils.gc import cleanup_repository_storage
+from kohakuhub.api.validation import normalize_name
 
 logger = get_logger("REPO")
 router = APIRouter()
@@ -80,6 +83,7 @@ async def create_repo(
     full_id = f"{namespace}/{payload.name}"
     lakefs_repo = lakefs_repo_name(payload.type, full_id)
 
+    # Check for exact match
     existing_repo = get_repository(payload.type, namespace, payload.name)
     if existing_repo:
         return hf_error_response(
@@ -87,6 +91,19 @@ async def create_repo(
             HFErrorCode.REPO_EXISTS,
             f"Repository {full_id} already exists",
         )
+
+    # Check for normalized name conflicts
+    normalized = normalize_name(payload.name)
+    all_repos = Repository.select().where(
+        (Repository.repo_type == payload.type) & (Repository.namespace == namespace)
+    )
+    for repo in all_repos:
+        if normalize_name(repo.name) == normalized:
+            return hf_error_response(
+                400,
+                HFErrorCode.REPO_EXISTS,
+                f"Repository name conflicts with existing repository: {repo.name}",
+            )
 
     # Create LakeFS repository
     client = get_lakefs_client()
@@ -209,6 +226,13 @@ class MoveRepoPayload(BaseModel):
 
     fromRepo: str  # format: "namespace/repo-name"
     toRepo: str  # format: "namespace/repo-name"
+    type: str = "model"
+
+
+class SquashRepoPayload(BaseModel):
+    """Payload for repository squashing (clear history)."""
+
+    repo: str  # format: "namespace/repo-name"
     type: str = "model"
 
 
@@ -586,12 +610,18 @@ async def move_repo(
             f"(repo size: {repo_size:,} bytes)"
         )
 
-    # Update database records and migrate LakeFS repository atomically
-    # If LakeFS migration fails (raises HTTPException), Peewee will automatically rollback
+    # Migrate LakeFS repository FIRST (before updating DB)
+    # This ensures File table queries use correct from_id
     from_lakefs_repo = lakefs_repo_name(repo_type, from_id)
 
+    await _migrate_lakefs_repository(
+        repo_type=repo_type,
+        from_id=from_id,
+        to_id=to_id,
+    )
+
+    # Update database records AFTER successful LakeFS migration
     with db.atomic():
-        # Update database records
         _update_repository_database_records(
             repo_row=repo_row,
             from_id=from_id,
@@ -601,13 +631,6 @@ async def move_repo(
             to_name=to_name,
             moving_namespace=moving_namespace,
             repo_size=repo_size,
-        )
-
-        # Migrate LakeFS repository (will raise HTTPException on failure)
-        await _migrate_lakefs_repository(
-            repo_type=repo_type,
-            from_id=from_id,
-            to_id=to_id,
         )
 
     # Clean up old S3 storage after successful migration
@@ -629,3 +652,192 @@ async def move_repo(
         "url": f"{cfg.app.base_url}/{repo_type}s/{to_id}",
         "message": f"Repository moved from {from_id} to {to_id}",
     }
+
+
+@router.post("/repos/squash")
+async def squash_repo(
+    payload: SquashRepoPayload,
+    user: User = Depends(get_current_user),
+):
+    """Squash repository to clear all commit history and compress storage.
+
+    This operation:
+    1. Moves repository to temporary name
+    2. Moves back to original name
+    3. Result: All commit history cleared, only current state preserved
+
+    Args:
+        payload: Squash parameters
+        user: Current authenticated user
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException: If operation fails
+    """
+
+    repo_id = payload.repo
+    repo_type = payload.type
+
+    # Parse repository ID
+    parts = repo_id.split("/", 1)
+    if len(parts) != 2:
+        return hf_error_response(
+            400, HFErrorCode.INVALID_REPO_ID, "Invalid repository ID"
+        )
+
+    namespace, name = parts
+
+    # Check if repository exists
+    repo_row = get_repository(repo_type, namespace, name)
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    # Check if user has permission
+    check_repo_delete_permission(repo_row, user)
+
+    # Generate temporary repository name
+    temp_suffix = uuid.uuid4().hex[:8]
+    temp_name = f"{name}-squash-{temp_suffix}"
+    temp_id = f"{namespace}/{temp_name}"
+
+    logger.info(f"Squashing repository {repo_id} via temporary name {temp_id}")
+
+    try:
+        # Step 1: Move to temporary name
+        logger.info(f"Step 1: Moving {repo_id} to temporary {temp_id}")
+
+        # Use internal move logic
+        from_lakefs_repo = lakefs_repo_name(repo_type, repo_id)
+
+        # Migrate LakeFS FIRST (before updating DB)
+        await _migrate_lakefs_repository(
+            repo_type=repo_type, from_id=repo_id, to_id=temp_id
+        )
+
+        # Update DB AFTER successful migration
+        with db.atomic():
+            _update_repository_database_records(
+                repo_row=repo_row,
+                from_id=repo_id,
+                to_id=temp_id,
+                from_namespace=namespace,
+                to_namespace=namespace,
+                to_name=temp_name,
+                moving_namespace=False,  # Same namespace
+                repo_size=0,  # No quota change
+            )
+
+        # Clean up old storage
+        await cleanup_repository_storage(repo_id, from_lakefs_repo)
+
+        logger.success(f"Moved to temporary repository: {temp_id}")
+
+        # Wait for old LakeFS repo to be fully deleted (with exponential backoff)
+        # This ensures we can reuse the name immediately
+        client = get_lakefs_client()
+        old_deleted = False
+        max_attempts = 20
+        for attempt in range(max_attempts):
+            if not await client.repository_exists(from_lakefs_repo):
+                old_deleted = True
+                logger.info(
+                    f"Confirmed old repository {from_lakefs_repo} deleted after {attempt + 1} check(s)"
+                )
+                break
+            # Exponential backoff: 0.05s, 0.1s, 0.2s, 0.4s, ...
+            wait_time = 0.05 * (2 ** min(attempt, 5))
+            logger.debug(
+                f"Old repository still exists, waiting {wait_time:.2f}s... (attempt {attempt + 1}/{max_attempts})"
+            )
+            await asyncio.sleep(wait_time)
+
+        if not old_deleted:
+            logger.warning(
+                f"Old repository {from_lakefs_repo} still exists after {max_attempts} checks"
+            )
+            # Continue anyway - the 409 error will be caught and handled
+
+        # Step 2: Move back to original name
+        logger.info(f"Step 2: Moving {temp_id} back to {repo_id}")
+
+        # Reload repo row (it was updated to temp name)
+        repo_row = get_repository(repo_type, namespace, temp_name)
+
+        # Migrate LakeFS FIRST (before updating DB)
+        await _migrate_lakefs_repository(
+            repo_type=repo_type, from_id=temp_id, to_id=repo_id
+        )
+
+        # Update DB AFTER successful migration
+        with db.atomic():
+            _update_repository_database_records(
+                repo_row=repo_row,
+                from_id=temp_id,
+                to_id=repo_id,
+                from_namespace=namespace,
+                to_namespace=namespace,
+                to_name=name,
+                moving_namespace=False,  # Same namespace
+                repo_size=0,  # No quota change
+            )
+
+        # Clean up temp storage
+        temp_lakefs_repo = lakefs_repo_name(repo_type, temp_id)
+        await cleanup_repository_storage(temp_id, temp_lakefs_repo)
+
+        # Wait for temp LakeFS repo to be fully deleted
+        temp_deleted = False
+        for attempt in range(20):
+            if not await client.repository_exists(temp_lakefs_repo):
+                temp_deleted = True
+                logger.info(
+                    f"Confirmed temp repository {temp_lakefs_repo} deleted after {attempt + 1} check(s)"
+                )
+                break
+            wait_time = 0.05 * (2 ** min(attempt, 5))
+            await asyncio.sleep(wait_time)
+
+        if not temp_deleted:
+            logger.warning(
+                f"Temp repository {temp_lakefs_repo} still exists after cleanup"
+            )
+
+        logger.success(f"Repository squashed successfully: {repo_id}")
+
+        return {
+            "success": True,
+            "message": f"Repository {repo_id} squashed successfully. All commit history has been cleared.",
+        }
+
+    except Exception as e:
+        logger.exception(f"Repository squash failed for {repo_id}: {e}")
+
+        # Try to recover by moving back from temp if it exists
+        try:
+            temp_repo = get_repository(repo_type, namespace, temp_name)
+            if temp_repo:
+                logger.info(f"Attempting to recover from temp repository: {temp_id}")
+                # Move back from temp
+                with db.atomic():
+                    _update_repository_database_records(
+                        repo_row=temp_repo,
+                        from_id=temp_id,
+                        to_id=repo_id,
+                        from_namespace=namespace,
+                        to_namespace=namespace,
+                        to_name=name,
+                        moving_namespace=False,
+                        repo_size=0,
+                    )
+                logger.info("Recovery attempt completed")
+        except Exception as recovery_error:
+            logger.exception(f"Recovery failed: {recovery_error}")
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": f"Failed to squash repository: {str(e)}",
+            },
+        )

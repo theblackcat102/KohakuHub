@@ -124,7 +124,10 @@
                   @input="handleMoveToRepoChange"
                 >
                   <template #suffix>
-                    <el-icon v-if="moveToRepoValidation.checking" class="is-loading">
+                    <el-icon
+                      v-if="moveToRepoValidation.checking"
+                      class="is-loading"
+                    >
                       <div class="i-carbon-circle-dash" />
                     </el-icon>
                     <el-icon
@@ -162,8 +165,8 @@
                 </h3>
                 <p class="text-sm text-gray-600 mb-3">
                   This will clear all commit history and optimize storage by
-                  removing old versions. Only the current state will be preserved.
-                  This action cannot be undone.
+                  removing old versions. Only the current state will be
+                  preserved. This action cannot be undone.
                 </p>
                 <el-button type="warning" @click="handleSquashRepo">
                   Squash Repository
