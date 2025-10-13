@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from kohakuhub.api import admin, branches, files, misc, settings
+from kohakuhub.api import admin, branches, files, misc, settings, validation
 from kohakuhub.auth import router as auth_router
 from kohakuhub.config import cfg
 from kohakuhub.db import Repository, User
@@ -78,6 +78,7 @@ app.include_router(misc.router, prefix=cfg.app.api_base, tags=["utils"])
 app.include_router(org, prefix="/org", tags=["organizations"])
 app.include_router(git_http.router, tags=["git"])
 app.include_router(ssh_keys.router, tags=["ssh-keys"])
+app.include_router(validation.router, tags=["validation"])
 
 
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")

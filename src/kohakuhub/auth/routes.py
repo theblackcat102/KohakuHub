@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 from kohakuhub.config import cfg
-from kohakuhub.db import EmailVerification, Session, Token, User, db
+from kohakuhub.db import EmailVerification, Organization, Session, Token, User, db
 from kohakuhub.db_operations import (
     create_email_verification,
     create_session,
@@ -37,6 +37,7 @@ from kohakuhub.auth.utils import (
     hash_token,
     verify_password,
 )
+from kohakuhub.api.validation import normalize_name
 
 logger = get_logger("AUTH")
 
@@ -76,6 +77,33 @@ async def register(req: RegisterRequest):
         if get_user_by_email(req.email):
             logger.warning(f"Registration failed: email '{req.email}' already exists")
             raise HTTPException(400, detail="Email already exists")
+
+        # Check for normalized name conflicts with users and organizations
+        normalized = normalize_name(req.username)
+
+        # Check other users
+        all_users = User.select()
+        for user in all_users:
+            if normalize_name(user.username) == normalized:
+                logger.warning(
+                    f"Registration failed: username conflicts with '{user.username}'"
+                )
+                raise HTTPException(
+                    400,
+                    detail=f"Username conflicts with existing user: {user.username}",
+                )
+
+        # Check organizations
+        all_orgs = Organization.select()
+        for org in all_orgs:
+            if normalize_name(org.name) == normalized:
+                logger.warning(
+                    f"Registration failed: username conflicts with organization '{org.name}'"
+                )
+                raise HTTPException(
+                    400,
+                    detail=f"Username conflicts with existing organization: {org.name}",
+                )
 
         # Create user
         user = create_user(

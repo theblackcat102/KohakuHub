@@ -431,6 +431,13 @@ export const settingsAPI = {
   moveRepo: (data) => api.post("/api/repos/move", data),
 
   /**
+   * Squash repository (clear all history)
+   * @param {Object} data - { repo: string, type: string }
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  squashRepo: (data) => api.post("/api/repos/squash", data),
+
+  /**
    * Create branch
    * @param {string} repoType - Repository type
    * @param {string} namespace - Repository namespace
@@ -473,4 +480,16 @@ export const settingsAPI = {
    */
   deleteTag: (repoType, namespace, name, tag) =>
     api.delete(`/api/${repoType}s/${namespace}/${name}/tag/${tag}`),
+};
+
+/**
+ * Validation API
+ */
+export const validationAPI = {
+  /**
+   * Check if name is available (no conflicts)
+   * @param {Object} data - { name: string, namespace?: string, type?: string }
+   * @returns {Promise} - { available: boolean, normalized_name: string, conflict_with?: string, message: string }
+   */
+  checkName: (data) => api.post("/api/validate/check-name", data),
 };

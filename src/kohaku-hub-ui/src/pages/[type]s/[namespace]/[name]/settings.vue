@@ -110,13 +110,43 @@
               Moving a repository will redirect the old URL to the new one.
             </p>
             <el-form label-position="top">
-              <el-form-item label="New Repository ID (namespace/name)">
+              <el-form-item
+                label="New Repository ID (namespace/name)"
+                :error="
+                  moveToRepoValidation.available === false
+                    ? moveToRepoValidation.message
+                    : undefined
+                "
+              >
                 <el-input
                   v-model="moveToRepo"
                   placeholder="e.g., my-org/my-new-repo"
-                />
+                  @input="handleMoveToRepoChange"
+                >
+                  <template #suffix>
+                    <el-icon v-if="moveToRepoValidation.checking" class="is-loading">
+                      <div class="i-carbon-circle-dash" />
+                    </el-icon>
+                    <el-icon
+                      v-else-if="moveToRepoValidation.available === true"
+                      style="color: #67c23a"
+                    >
+                      <div class="i-carbon-checkmark" />
+                    </el-icon>
+                    <el-icon
+                      v-else-if="moveToRepoValidation.available === false"
+                      style="color: #f56c6c"
+                    >
+                      <div class="i-carbon-warning" />
+                    </el-icon>
+                  </template>
+                </el-input>
               </el-form-item>
-              <el-button type="warning" @click="handleMoveRepo">
+              <el-button
+                type="warning"
+                @click="handleMoveRepo"
+                :disabled="moveToRepoValidation.available !== true"
+              >
                 Move Repository
               </el-button>
             </el-form>
@@ -127,6 +157,20 @@
             <h2 class="text-xl font-semibold mb-4 text-red-600">Danger Zone</h2>
             <div class="space-y-4">
               <div>
+                <h3 class="font-medium text-orange-600 mb-2">
+                  Squash repository history
+                </h3>
+                <p class="text-sm text-gray-600 mb-3">
+                  This will clear all commit history and optimize storage by
+                  removing old versions. Only the current state will be preserved.
+                  This action cannot be undone.
+                </p>
+                <el-button type="warning" @click="handleSquashRepo">
+                  Squash Repository
+                </el-button>
+              </div>
+
+              <div class="pt-4 border-t border-red-300">
                 <h3 class="font-medium text-red-600 mb-2">
                   Delete this repository
                 </h3>
@@ -211,7 +255,7 @@
 
 <script setup>
 import { useRoute, useRouter } from "vue-router";
-import { repoAPI, settingsAPI } from "@/utils/api";
+import { repoAPI, settingsAPI, validationAPI } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useAuthStore } from "@/stores/auth";
 
@@ -224,6 +268,11 @@ const settings = ref({
   private: false,
 });
 const moveToRepo = ref("");
+const moveToRepoValidation = ref({
+  checking: false,
+  available: null,
+  message: "",
+});
 const newBranch = ref({
   name: "",
   revision: "",
@@ -269,9 +318,89 @@ async function saveGeneralSettings() {
   }
 }
 
+let validateTimeout = null;
+async function handleMoveToRepoChange() {
+  // Clear previous timeout
+  if (validateTimeout) {
+    clearTimeout(validateTimeout);
+  }
+
+  const newRepoId = moveToRepo.value.trim();
+
+  // Reset validation state
+  moveToRepoValidation.value = {
+    checking: false,
+    available: null,
+    message: "",
+  };
+
+  if (!newRepoId) {
+    return;
+  }
+
+  // Normalize and check if same as current
+  const normalizedCurrent = repoId.value.toLowerCase();
+  const normalizedNew = newRepoId.toLowerCase();
+
+  if (normalizedCurrent === normalizedNew) {
+    moveToRepoValidation.value = {
+      checking: false,
+      available: false,
+      message: "New repository ID is the same as current ID",
+    };
+    return;
+  }
+
+  // Check format
+  if (!newRepoId.includes("/")) {
+    moveToRepoValidation.value = {
+      checking: false,
+      available: false,
+      message: "Repository ID must be in format: namespace/name",
+    };
+    return;
+  }
+
+  // Debounce validation API call
+  validateTimeout = setTimeout(async () => {
+    moveToRepoValidation.value.checking = true;
+
+    try {
+      const [namespace, name] = newRepoId.split("/");
+      const { data } = await validationAPI.checkName({
+        name: name,
+        namespace: namespace,
+        type: repoType.value,
+      });
+
+      moveToRepoValidation.value = {
+        checking: false,
+        available: data.available,
+        message: data.message,
+      };
+    } catch (err) {
+      console.error("Name validation failed:", err);
+      moveToRepoValidation.value = {
+        checking: false,
+        available: false,
+        message: "Failed to validate name",
+      };
+    }
+  }, 500); // 500ms debounce
+}
+
 async function handleMoveRepo() {
-  if (!moveToRepo.value || moveToRepo.value === repoId.value) {
+  if (!moveToRepo.value) {
     ElMessage.warning("Please enter a new repository ID");
+    return;
+  }
+
+  // Normalize repository IDs for comparison (lowercase, trim)
+  const normalizedCurrent = repoId.value.toLowerCase().trim();
+  const normalizedNew = moveToRepo.value.toLowerCase().trim();
+
+  if (normalizedCurrent === normalizedNew) {
+    ElMessage.warning("New repository ID is the same as current ID");
     return;
   }
 
@@ -300,7 +429,66 @@ async function handleMoveRepo() {
   } catch (err) {
     if (err !== "cancel") {
       console.error("Failed to move repository:", err);
-      ElMessage.error("Failed to move repository");
+      const errorMsg =
+        err.response?.data?.detail?.error || "Failed to move repository";
+      ElMessage.error(errorMsg);
+    }
+  }
+}
+
+async function handleSquashRepo() {
+  try {
+    await ElMessageBox.confirm(
+      `This will clear all commit history for ${repoId.value} and optimize storage. Only the current state will be preserved. This action cannot be undone!`,
+      "Squash Repository",
+      {
+        type: "warning",
+        confirmButtonText: "Squash",
+        cancelButtonText: "Cancel",
+      },
+    );
+
+    // Second confirmation
+    await ElMessageBox.prompt(
+      `Please type the repository name "${route.params.name}" to confirm`,
+      "Confirm Squash",
+      {
+        confirmButtonText: "Squash",
+        cancelButtonText: "Cancel",
+        inputPattern: new RegExp(`^${route.params.name}$`),
+        inputErrorMessage: "Repository name does not match",
+      },
+    );
+
+    const loading = ElMessage({
+      message: "Squashing repository... This may take a few minutes.",
+      type: "info",
+      duration: 0,
+    });
+
+    try {
+      await settingsAPI.squashRepo({
+        repo: repoId.value,
+        type: repoType.value,
+      });
+
+      loading.close();
+      ElMessage.success("Repository squashed successfully");
+
+      // Reload page to show updated state
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      loading.close();
+      throw err;
+    }
+  } catch (err) {
+    if (err !== "cancel" && err !== "close") {
+      console.error("Failed to squash repository:", err);
+      const errorMsg =
+        err.response?.data?.detail?.error || "Failed to squash repository";
+      ElMessage.error(errorMsg);
     }
   }
 }
