@@ -1,6 +1,8 @@
-# KohakuHub CLI Design Document
+# KohakuHub CLI Documentation
 
 *Last Updated: January 2025*
+
+**Status:** ✅ Fully Implemented and Functional
 
 ## Quick Reference
 
@@ -22,21 +24,43 @@ kohub-cli org member add ORG USER --role R  # Add member
 # Settings & Management
 kohub-cli settings repo update REPO_ID --private        # Update repo settings
 kohub-cli settings repo move FROM TO --type TYPE        # Move/rename repo
+kohub-cli settings repo squash REPO_ID --type TYPE      # Squash repo history
 kohub-cli settings repo branch create REPO_ID BRANCH    # Create branch
 kohub-cli settings repo tag create REPO_ID TAG          # Create tag
 kohub-cli settings organization members ORG             # List org members
 
+# File Operations
+kohub-cli settings repo upload REPO_ID FILE             # Upload file to repo
+kohub-cli settings repo download REPO_ID PATH           # Download file from repo
+
+# Commit History
+kohub-cli repo commits REPO_ID                          # List commit history
+kohub-cli repo commit REPO_ID COMMIT_ID                 # Show commit details
+kohub-cli repo commit-diff REPO_ID COMMIT_ID            # Show commit diff
+
 # Configuration
 kohub-cli config set KEY VALUE              # Set config value
 kohub-cli config list                       # Show all config
+kohub-cli config history                    # Show operation history
+
+# Health & Diagnostics
+kohub-cli health                            # Check service health
 
 # Interactive Mode
 kohub-cli interactive                       # Launch TUI mode
+kohub-cli                                   # Default: launch TUI mode
 ```
 
 ## Overview
 
-The KohakuHub CLI (`kohub-cli`) provides both a **Python API** for programmatic access and a **command-line interface** for interactive and scripted usage. This design aims to make it easy to integrate KohakuHub into existing workflows while maintaining compatibility with HuggingFace ecosystem patterns.
+The KohakuHub CLI (`kohub-cli`) provides comprehensive access to KohakuHub through two interfaces:
+
+1. **Python API (`KohubClient`)** - For programmatic access and integration
+2. **Command-Line Interface** - Two modes:
+   - **Interactive TUI Mode**: Full-featured menu-driven interface (default when running `kohub-cli`)
+   - **Command Mode**: Click-based commands for scripting and automation (e.g., `kohub-cli repo list`)
+
+This dual-mode design makes it easy to integrate KohakuHub into existing workflows while maintaining compatibility with HuggingFace ecosystem patterns.
 
 ## Design Goals
 
@@ -248,6 +272,75 @@ client.update_user_settings(
     username="alice",
     email="newemail@example.com"
 )
+
+# Squash repository history
+client.squash_repo(
+    repo_id="my-org/my-model",
+    repo_type="model"
+)
+```
+
+### Commit History
+
+```python
+# List commits
+result = client.list_commits(
+    repo_id="my-org/my-model",
+    branch="main",
+    repo_type="model",
+    limit=20,
+    after=None  # Pagination cursor
+)
+commits = result["commits"]
+has_more = result["hasMore"]
+
+# Get commit details
+commit = client.get_commit_detail(
+    repo_id="my-org/my-model",
+    commit_id="abc1234567890",
+    repo_type="model"
+)
+
+# Get commit diff
+diff = client.get_commit_diff(
+    repo_id="my-org/my-model",
+    commit_id="abc1234567890",
+    repo_type="model"
+)
+files = diff["files"]
+```
+
+### File Upload/Download
+
+```python
+# Upload file
+result = client.upload_file(
+    repo_id="my-org/my-model",
+    local_path="./model.safetensors",
+    repo_path="model.safetensors",
+    repo_type="model",
+    branch="main",
+    commit_message="Upload model weights"
+)
+
+# Download file
+local_path = client.download_file(
+    repo_id="my-org/my-model",
+    repo_path="model.safetensors",
+    local_path="./downloaded_model.safetensors",
+    repo_type="model",
+    revision="main"
+)
+```
+
+### Health Check
+
+```python
+# Check service health
+health = client.health_check()
+api_status = health["api"]["status"]  # "healthy", "unreachable", etc.
+authenticated = health["authenticated"]
+username = health["user"]  # If authenticated
 ```
 
 ### Configuration
@@ -286,7 +379,10 @@ kohub-cli
 │   ├── info            # Show repository info
 │   ├── list            # List repositories
 │   ├── ls              # List repositories under a namespace
-│   └── files           # List repository files
+│   ├── files           # List repository files
+│   ├── commits         # List commit history
+│   ├── commit          # Show commit details
+│   └── commit-diff     # Show commit diff
 ├── org
 │   ├── create          # Create organization
 │   ├── info            # Show organization info
@@ -301,6 +397,12 @@ kohub-cli
 │   ├── repo
 │   │   ├── update      # Update repository settings
 │   │   ├── move        # Move/rename repository
+│   │   ├── squash      # Squash repository history
+│   │   ├── upload      # Upload file to repository
+│   │   ├── download    # Download file from repository
+│   │   ├── commits     # List commit history (alias)
+│   │   ├── commit      # Show commit details (alias)
+│   │   ├── commit-diff # Show commit diff (alias)
 │   │   ├── branch
 │   │   │   ├── create  # Create branch
 │   │   │   └── delete  # Delete branch
@@ -314,7 +416,10 @@ kohub-cli
 │   ├── set             # Set configuration value
 │   ├── get             # Get configuration value
 │   ├── list            # Show all configuration
-│   └── clear           # Clear all configuration
+│   ├── clear           # Clear all configuration
+│   ├── history         # Show operation history
+│   └── clear-history   # Clear operation history
+├── health              # Check service health
 └── interactive         # Launch interactive TUI mode
 ```
 
@@ -430,6 +535,43 @@ kohub-cli settings organization update my-org --description "New description"
 kohub-cli settings organization members my-org
 ```
 
+#### File Operations
+
+```bash
+# Upload file to repository
+kohub-cli settings repo upload my-org/my-model model.safetensors --type model
+kohub-cli settings repo upload my-org/my-model ./weights/model.bin --path weights/model.bin --type model --branch main --message "Upload model weights"
+
+# Download file from repository
+kohub-cli settings repo download my-org/my-model model.safetensors --type model
+kohub-cli settings repo download my-org/my-model weights/model.bin -o ./local-model.bin --type model --revision v1.0
+```
+
+#### Commit History
+
+```bash
+# List commits
+kohub-cli repo commits my-org/my-model --type model
+kohub-cli repo commits my-org/my-model --type model --branch main --limit 50
+kohub-cli settings repo commits my-org/my-model --type model --branch dev
+
+# Show commit details
+kohub-cli repo commit my-org/my-model abc1234 --type model
+kohub-cli settings repo commit my-org/my-model abc1234567890 --type model
+
+# Show commit diff
+kohub-cli repo commit-diff my-org/my-model abc1234 --type model
+kohub-cli repo commit-diff my-org/my-model abc1234 --type model --show-diff
+kohub-cli settings repo commit-diff my-org/my-model abc1234 --type model
+```
+
+#### Repository Squash
+
+```bash
+# Squash repository history (WARNING: irreversible)
+kohub-cli settings repo squash my-org/my-model --type model
+```
+
 #### Configuration
 
 ```bash
@@ -445,17 +587,32 @@ kohub-cli config get endpoint
 # Show all configuration
 kohub-cli config list
 
+# Show operation history
+kohub-cli config history
+kohub-cli config history --limit 20
+
+# Clear operation history
+kohub-cli config clear-history
+
 # Clear configuration
 kohub-cli config clear
+```
+
+#### Health Check
+
+```bash
+# Check service health
+kohub-cli health
+kohub-cli --output json health
 ```
 
 #### Interactive Mode
 
 ```bash
-# Launch interactive TUI (current behavior)
+# Launch interactive TUI
 kohub-cli interactive
 
-# Or just run without arguments
+# Or just run without arguments (default behavior)
 kohub-cli
 ```
 
@@ -528,19 +685,35 @@ $ kohub-cli --output json repo info nonexistent/repo --type model
 - `HF_TOKEN` - API token for authentication
 - `KOHUB_CONFIG_DIR` - Config directory (default: `~/.kohub`)
 
-## Migration from Current Implementation
+## Interactive TUI Mode
 
-### Compatibility
+The interactive TUI mode provides a full-featured menu-driven interface for managing KohakuHub. It's perfect for:
+- Exploring available operations
+- Interactive navigation with breadcrumb context
+- Visual feedback and rich formatting
+- Guided workflows with confirmation prompts
 
-1. Keep existing `main_menu()` function for backward compatibility
-2. Make it accessible via `kohub-cli interactive`
-3. If no arguments provided, launch interactive mode (current behavior)
+**Features:**
+- Context-aware navigation (browse repos → select repo → manage files/commits)
+- Error handling with helpful suggestions
+- Session management with persistent config
+- Rich UI with tables, panels, and progress indicators
+- Support for Ctrl+C to go back at any prompt
 
-### Deprecation Path
+**Access:**
+```bash
+kohub-cli                # Default: launches interactive mode
+kohub-cli interactive    # Explicit: launches interactive mode
+```
 
-1. v0.1.x - Add new API and CLI commands alongside interactive mode
-2. v0.2.x - Recommend new CLI commands in help text
-3. v0.3.x - Default to CLI commands, require `--interactive` for TUI
+## Dual-Mode Design
+
+Both command mode and interactive TUI mode are fully implemented and production-ready:
+
+- **Command Mode**: Best for scripting, automation, CI/CD pipelines
+- **Interactive Mode**: Best for exploration, learning, and interactive management
+
+Use whichever mode fits your workflow!
 
 ## Implementation Phases
 
@@ -566,18 +739,25 @@ $ kohub-cli --output json repo info nonexistent/repo --type model
 - [x] Rich output formatting with tables
 
 ### Phase 3: Enhanced Features (Priority: Medium)
-- [ ] Bash/Zsh completion scripts
+- [ ] Bash/Zsh/Fish completion scripts
 - [ ] Progress bars for long operations
-- [x] Rich output formatting with tables (partial - implemented for lists)
+- [x] Rich output formatting with tables
+- [x] Operation history tracking
 - [ ] Configuration wizard
 - [ ] Batch operations support
 
-### Phase 4: Advanced Features (Priority: Low)
+### Phase 4: Additional Features ✅ COMPLETED
+- [x] File upload/download commands
+- [x] Commit history viewing
+- [x] Health check command
+- [x] Repository squash command
+- [x] Config history management
+
+### Phase 5: Future Enhancements (Priority: Low)
 - [ ] Plugin system
 - [ ] Alias support
-- [ ] History and undo
-- [ ] Integration with git
-- [ ] File upload/download commands (if needed beyond hfutils)
+- [ ] History undo functionality
+- [ ] Deep git integration (beyond current Git LFS support)
 
 ## Testing Strategy
 

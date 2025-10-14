@@ -5,9 +5,11 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/KohakuBlueleaf/KohakuHub)
 
-**⚠️ Work In Progress - Not Production Ready**
+**🚀 Active Development - Alpha Release Ready**
 
 Self-hosted HuggingFace alternative with Git-like versioning for AI models and datasets. Fully compatible with the official `huggingface_hub` Python client.
+
+> **Status:** Core features are complete and functional. Ready for testing and early adoption. APIs may evolve as we gather feedback.
 
 </div>
 
@@ -46,12 +48,16 @@ python scripts/generate_docker_compose.py
 
 # Build frontend and start services
 npm install --prefix ./src/kohaku-hub-ui
+npm install --prefix ./src/kohaku-hub-admin
 npm run build --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-admin
 docker-compose up -d --build
 ```
 
 **Access:**
 - Web UI & API: http://localhost:28080 (all traffic goes here)
+- Web Admin Portal: http://localhost:28080/admin
+    - Use the value of KOHAKU_HUB_ADMIN_SECRET_TOKEN to login the portal
 - API Docs (Swagger): http://localhost:48888/docs (direct access for development)
 - LakeFS UI: http://localhost:28000
 - MinIO Console: http://localhost:29000
@@ -62,12 +68,12 @@ docker-compose up -d --build
 
 ```python
 import os
-from huggingface_hub import HfApi
-
 os.environ["HF_ENDPOINT"] = "http://localhost:28080"
 os.environ["HF_TOKEN"] = "your_token_here"
 
-api = HfApi(endpoint=os.environ["HF_ENDPOINT"], token=os.environ["HF_TOKEN"])
+from huggingface_hub import HfApi
+
+api = HfApi()
 
 # Create repo
 api.create_repo("my-org/my-model", repo_type="model")
@@ -88,7 +94,7 @@ api.hf_hub_download(repo_id="my-org/my-model", filename="model.safetensors")
 ```python
 import os
 os.environ["HF_ENDPOINT"] = "http://localhost:28080"
-os.environ["HF_TOKEN"] = "your_token_here"
+os.environ["HF_TOKEN"] = "your_token_here" # needed for private repository
 
 from diffusers import AutoencoderKL
 vae = AutoencoderKL.from_pretrained("my-org/my-model")
@@ -101,7 +107,7 @@ vae = AutoencoderKL.from_pretrained("my-org/my-model")
 pip install -e .
 
 # Interactive mode
-kohub-cli
+kohub-cli interactive
 
 # Command mode
 kohub-cli auth login
@@ -127,9 +133,6 @@ cd repo-name
 git lfs install
 git lfs pull  # Download large files (>1MB)
 
-# All standard Git operations work
-git pull
-git checkout -b feature-branch
 # (push operations coming soon)
 ```
 
@@ -235,10 +238,14 @@ python scripts/test_auth.py
 
 ## Known Limitations
 
-- Repository transfer between namespaces not fully supported
+While core features are stable for alpha release, some advanced features are still in development:
+
+- Repository transfer/squash/delete are experimental/not stable
 - Some HuggingFace API endpoints may be incomplete
-- No rate limiting yet
-- See [docs/TODO.md](./docs/TODO.md) for full list
+    - Feel free to open issue in this case, but remember to provide full information and minimal reproduction!
+- LFS strategy is not yet configurable
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md#project-status) for full roadmap and [docs/TODO.md](./docs/TODO.md) for detailed status.
 
 ## License
 
@@ -257,4 +264,4 @@ AGPL-3.0 (may change to more permissive license later)
 
 ---
 
-**Note:** Active development. APIs may change. Not for production use yet.
+**Ready for Alpha Testing!** Core features are stable, but APIs may evolve based on community feedback. Use in development/testing environments and help us improve.
