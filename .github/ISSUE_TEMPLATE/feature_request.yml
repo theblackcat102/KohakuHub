@@ -1,105 +1,41 @@
 name: Feature Request
-description: Suggest a new feature or enhancement
+description: Suggest a feature
 title: "[Feature]: "
-labels: ["enhancement", "needs-triage"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a new feature! Please describe your idea in detail.
+        Have an idea? We'd love to hear it!
 
   - type: textarea
-    id: problem
+    id: feature
     attributes:
-      label: Problem Statement
-      description: What problem does this feature solve?
-      placeholder: Describe the problem or limitation you're facing...
+      label: What feature do you want?
+      placeholder: Describe what you'd like to see
     validations:
       required: true
 
   - type: textarea
-    id: solution
+    id: why
     attributes:
-      label: Proposed Solution
-      description: How would you like this to work?
-      placeholder: Describe your proposed solution...
+      label: Why do you need it?
+      placeholder: What problem does it solve? Who benefits?
     validations:
       required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives Considered
-      description: What alternative solutions have you considered?
-      placeholder: Describe any alternative approaches you've considered...
-
-  - type: dropdown
-    id: component
-    attributes:
-      label: Component
-      description: Which component would this feature affect?
-      options:
-        - Backend API
-        - Frontend UI
-        - CLI Tool
-        - Documentation
-        - Docker/Deployment
-        - LakeFS Integration
-        - S3/Storage
-        - Authentication
-        - Organizations
-        - Other
-    validations:
-      required: true
-
-  - type: dropdown
-    id: priority
-    attributes:
-      label: Priority
-      description: How important is this feature to you?
-      options:
-        - Low - Nice to have
-        - Medium - Would improve workflow
-        - High - Blocking current work
-    validations:
-      required: true
-
-  - type: textarea
-    id: use-case
-    attributes:
-      label: Use Case
-      description: Describe your use case for this feature
-      placeholder: |
-        Who will benefit from this feature?
-        How will it be used?
-        What value does it provide?
-    validations:
-      required: true
-
-  - type: textarea
-    id: examples
-    attributes:
-      label: Examples
-      description: Any examples, mockups, or code snippets
-      placeholder: |
-        Provide examples of how this feature would work,
-        including API examples, UI mockups, or code snippets.
 
   - type: textarea
     id: additional
     attributes:
-      label: Additional Context
-      description: Any additional information
-      placeholder: Links to related projects, similar features in other tools, etc.
+      label: Additional context
+      placeholder: Examples, mockups, links to similar features, etc.
 
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
+      label: Checklist
       options:
-        - label: I have searched existing issues to ensure this is not a duplicate
+        - label: I searched existing issues
           required: true
-        - label: I have checked the roadmap in CONTRIBUTING.md
-          required: true
-        - label: I am willing to help implement this feature
+        - label: I checked the roadmap in CONTRIBUTING.md
           required: false
