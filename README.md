@@ -7,21 +7,23 @@
 
 **🚀 Active Development - Alpha Release Ready**
 
-Self-hosted HuggingFace alternative with Git-like versioning for AI models and datasets. Fully compatible with the official `huggingface_hub` Python client.
+Self-hosted HuggingFace alternative with Git-like versioning for AI models and datasets. Compatible* with the official `huggingface_hub` Python client.
 
 > **Status:** Core features are complete and functional. Ready for testing and early adoption. APIs may evolve as we gather feedback.
 
+> *: May not perform exactly same behavior, if you meet any unexpected result, feel free to open issue.
+
 </div>
 
-|![Web UI](image/README/1759520817420.png)|![Dark Mode](image/README/1759521021890.png)|
-|-|-|
+|![1760453905163](image/README/1760453905163.png)|![1760453924852](image/README/1760453924852.png)|![1760453957231](image/README/1760453957231.png)|
+|-|-|-|
 
 **Join our community:** https://discord.gg/xWYrkyvJ2s
 
 ## Features
 
 - **HuggingFace Compatible** - Drop-in replacement for `huggingface_hub`, `hfutils`, `transformers`, `diffusers`
-- **Native Git Clone** - Standard Git operations (clone, pull, push) with Git LFS support
+- **Native Git Clone** - Standard Git operations (clone) with Git LFS support
 - **Git-Like Versioning** - Branches, commits, tags via LakeFS
 - **S3 Storage** - Works with MinIO, AWS S3, Cloudflare R2, etc.
 - **Large File Support** - Git LFS protocol with automatic LFS pointers (>1MB files)
