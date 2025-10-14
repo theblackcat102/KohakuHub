@@ -7,6 +7,8 @@
 
 **🚀 Active Development - Alpha Release Ready**
 
+DEMO Site (**testing only, no guarantee on data integrity**): https://hub.kohaku-lab.org
+
 Self-hosted HuggingFace alternative with Git-like versioning for AI models and datasets. Compatible* with the official `huggingface_hub` Python client.
 
 > **Status:** Core features are complete and functional. Ready for testing and early adoption. APIs may evolve as we gather feedback.
