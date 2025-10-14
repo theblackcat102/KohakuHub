@@ -630,6 +630,231 @@ def files(ctx, repo_id, repo_type, revision, path, recursive):
         handle_error(e, ctx)
 
 
+@repo.command("commits")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--branch", default="main", help="Branch name")
+@click.option("--limit", default=20, help="Maximum number of commits")
+@click.pass_context
+def list_repo_commits_main(ctx, repo_id, repo_type, branch, limit):
+    """List commit history for a repository.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        result = client.list_commits(
+            repo_id, branch=branch, repo_type=repo_type, limit=limit
+        )
+
+        commits = result.get("commits", [])
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, result)
+        else:
+            if not commits:
+                console.print("[yellow]No commits found[/yellow]")
+                return
+
+            table = Table(title=f"Commits for {repo_id} ({branch})")
+            table.add_column("SHA", style="yellow", no_wrap=True)
+            table.add_column("Message", style="cyan")
+            table.add_column("Author", style="green")
+            table.add_column("Date", style="blue")
+
+            for c in commits:
+                sha_short = c.get("oid", "")[:8]
+                message = c.get("title", c.get("message", ""))
+                # Truncate long messages
+                if len(message) > 60:
+                    message = message[:57] + "..."
+                author = c.get("author", "unknown")
+                date = c.get("date", "")
+
+                table.add_row(sha_short, message, author, date)
+
+            console.print(table)
+
+            if result.get("hasMore"):
+                console.print(
+                    f"\n[dim]Showing {len(commits)} commits. Use --limit to see more.[/dim]"
+                )
+            else:
+                console.print(f"\n[dim]Total: {len(commits)} commits[/dim]")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo.command("commit")
+@click.argument("repo_id")
+@click.argument("commit_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.pass_context
+def get_commit_info_main(ctx, repo_id, commit_id, repo_type):
+    """Show detailed information about a specific commit.
+
+    REPO_ID format: namespace/name
+    COMMIT_ID: Full or short commit SHA
+    """
+    client = ctx.obj["client"]
+    try:
+        commit = client.get_commit_detail(repo_id, commit_id, repo_type=repo_type)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, commit)
+        else:
+            from rich.panel import Panel
+            from rich.text import Text
+
+            info_text = Text()
+
+            # Commit header
+            info_text.append(
+                f"Commit {commit.get('oid', commit_id)}\n", style="bold yellow"
+            )
+            info_text.append("─" * 60 + "\n", style="dim")
+
+            # Commit info
+            info_text.append("Author:  ", style="bold")
+            info_text.append(f"{commit.get('author', 'unknown')}\n")
+
+            info_text.append("Date:    ", style="bold")
+            info_text.append(f"{commit.get('date', 'N/A')}\n")
+
+            if commit.get("parents"):
+                info_text.append("Parents: ", style="bold")
+                parents_str = ", ".join([p[:8] for p in commit["parents"]])
+                info_text.append(f"{parents_str}\n")
+
+            # Message
+            info_text.append("\n", style="bold")
+            info_text.append(commit.get("message", "No message") + "\n")
+
+            # Description if available
+            if commit.get("description"):
+                info_text.append("\n")
+                info_text.append(commit["description"] + "\n", style="dim")
+
+            # Metadata
+            if commit.get("metadata"):
+                info_text.append("\n")
+                info_text.append("Metadata:\n", style="bold")
+                for key, value in commit["metadata"].items():
+                    info_text.append(f"  {key}: {value}\n", style="dim")
+
+            panel = Panel(
+                info_text,
+                title=f"[bold]Commit Details[/bold]",
+                border_style="blue",
+                padding=(1, 2),
+            )
+            console.print(panel)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo.command("commit-diff")
+@click.argument("repo_id")
+@click.argument("commit_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--show-diff", is_flag=True, help="Show actual diff content")
+@click.pass_context
+def get_commit_diff_cmd_main(ctx, repo_id, commit_id, repo_type, show_diff):
+    """Show files changed in a commit.
+
+    REPO_ID format: namespace/name
+    COMMIT_ID: Full or short commit SHA
+    """
+    client = ctx.obj["client"]
+    try:
+        diff_result = client.get_commit_diff(repo_id, commit_id, repo_type=repo_type)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, diff_result)
+        else:
+            # Header
+            console.print(
+                f"\n[bold]Commit:[/bold] {diff_result.get('commit_id', commit_id)}"
+            )
+            console.print(
+                f"[bold]Author:[/bold] {diff_result.get('author', 'unknown')}"
+            )
+            console.print(f"[bold]Date:[/bold] {diff_result.get('date', 'N/A')}")
+            console.print(f"[bold]Message:[/bold] {diff_result.get('message', '')}\n")
+
+            files = diff_result.get("files", [])
+            if not files:
+                console.print("[yellow]No files changed[/yellow]")
+                return
+
+            # Summary table
+            table = Table(title="Files Changed")
+            table.add_column("Type", style="cyan")
+            table.add_column("Path", style="green")
+            table.add_column("Size", style="yellow")
+            table.add_column("LFS", style="magenta")
+
+            for file_info in files:
+                change_type = file_info.get("type", "unknown")
+                path = file_info.get("path", "")
+                size = file_info.get("size_bytes", 0)
+                is_lfs = file_info.get("is_lfs", False)
+
+                # Format size
+                if size < 1024:
+                    size_str = f"{size} B"
+                elif size < 1024 * 1024:
+                    size_str = f"{size / 1024:.1f} KB"
+                else:
+                    size_str = f"{size / (1024 * 1024):.1f} MB"
+
+                # Change type icon
+                type_icon = {
+                    "added": "+ ",
+                    "removed": "- ",
+                    "changed": "M ",
+                }.get(change_type, "  ")
+
+                table.add_row(
+                    type_icon + change_type,
+                    path,
+                    size_str,
+                    "Yes" if is_lfs else "No",
+                )
+
+            console.print(table)
+            console.print(f"\n[dim]Total: {len(files)} file(s) changed[/dim]")
+
+            # Show diffs if requested
+            if show_diff:
+                console.print("\n[bold]Diffs:[/bold]\n")
+                for file_info in files:
+                    if file_info.get("diff"):
+                        console.print(f"[cyan]File:[/cyan] {file_info['path']}")
+                        console.print(file_info["diff"])
+                        console.print()
+    except Exception as e:
+        handle_error(e, ctx)
+
+
 # ========== Organization Commands ==========
 
 
@@ -798,13 +1023,13 @@ def update_user(ctx, email):
         handle_error(e, ctx)
 
 
-@settings.group()
-def repo():
+@settings.group(name="repo")
+def repo_settings():
     """Repository settings management."""
     pass
 
 
-@repo.command("update")
+@repo_settings.command("update")
 @click.argument("repo_id")
 @click.option(
     "--type",
@@ -840,7 +1065,7 @@ def update_repo(ctx, repo_id, repo_type, private, gated):
         handle_error(e, ctx)
 
 
-@repo.command("move")
+@repo_settings.command("move")
 @click.argument("from_repo")
 @click.argument("to_repo")
 @click.option(
@@ -869,7 +1094,41 @@ def move_repo(ctx, from_repo, to_repo, repo_type):
         handle_error(e, ctx)
 
 
-@repo.group()
+@repo_settings.command("squash")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.confirmation_option(
+    prompt="This will clear all commit history. Are you sure you want to squash this repository?"
+)
+@click.pass_context
+def squash_repo_cmd(ctx, repo_id, repo_type):
+    """Squash repository to clear all commit history.
+
+    This operation removes all commit history while preserving the current
+    state of the repository. This can help reduce storage usage.
+
+    REPO_ID format: namespace/name
+
+    WARNING: This operation is irreversible!
+    """
+    client = ctx.obj["client"]
+    try:
+        console.print(
+            "[yellow]Squashing repository (this may take a while)...[/yellow]"
+        )
+        result = client.squash_repo(repo_id, repo_type=repo_type)
+        output_result(ctx, result, f"Repository {repo_id} squashed successfully")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo_settings.group()
 def branch():
     """Branch management."""
     pass
@@ -934,7 +1193,7 @@ def delete_branch(ctx, repo_id, branch, repo_type):
         handle_error(e, ctx)
 
 
-@repo.group()
+@repo_settings.group()
 def tag():
     """Tag management."""
     pass
@@ -1192,7 +1451,7 @@ def clear_history(ctx):
 # ========== File Upload/Download Commands ==========
 
 
-@repo.command("upload")
+@repo_settings.command("upload")
 @click.argument("repo_id")
 @click.argument("local_path")
 @click.option(
@@ -1240,7 +1499,7 @@ def upload_file(ctx, repo_id, local_path, repo_path, repo_type, branch, message)
         handle_error(e, ctx)
 
 
-@repo.command("download")
+@repo_settings.command("download")
 @click.argument("repo_id")
 @click.argument("repo_path")
 @click.option(
@@ -1292,7 +1551,7 @@ def download_file(ctx, repo_id, repo_path, local_path, repo_type, revision):
 # ========== Commit History Commands ==========
 
 
-@repo.command("commits")
+@repo_settings.command("commits")
 @click.argument("repo_id")
 @click.option(
     "--type",
@@ -1349,6 +1608,170 @@ def list_repo_commits(ctx, repo_id, repo_type, branch, limit):
                 )
             else:
                 console.print(f"\n[dim]Total: {len(commits)} commits[/dim]")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo_settings.command("commit")
+@click.argument("repo_id")
+@click.argument("commit_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.pass_context
+def get_commit_info(ctx, repo_id, commit_id, repo_type):
+    """Show detailed information about a specific commit.
+
+    REPO_ID format: namespace/name
+    COMMIT_ID: Full or short commit SHA
+    """
+    client = ctx.obj["client"]
+    try:
+        commit = client.get_commit_detail(repo_id, commit_id, repo_type=repo_type)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, commit)
+        else:
+            from rich.panel import Panel
+            from rich.text import Text
+
+            info_text = Text()
+
+            # Commit header
+            info_text.append(
+                f"Commit {commit.get('oid', commit_id)}\n", style="bold yellow"
+            )
+            info_text.append("─" * 60 + "\n", style="dim")
+
+            # Commit info
+            info_text.append("Author:  ", style="bold")
+            info_text.append(f"{commit.get('author', 'unknown')}\n")
+
+            info_text.append("Date:    ", style="bold")
+            info_text.append(f"{commit.get('date', 'N/A')}\n")
+
+            if commit.get("parents"):
+                info_text.append("Parents: ", style="bold")
+                parents_str = ", ".join([p[:8] for p in commit["parents"]])
+                info_text.append(f"{parents_str}\n")
+
+            # Message
+            info_text.append("\n", style="bold")
+            info_text.append(commit.get("message", "No message") + "\n")
+
+            # Description if available
+            if commit.get("description"):
+                info_text.append("\n")
+                info_text.append(commit["description"] + "\n", style="dim")
+
+            # Metadata
+            if commit.get("metadata"):
+                info_text.append("\n")
+                info_text.append("Metadata:\n", style="bold")
+                for key, value in commit["metadata"].items():
+                    info_text.append(f"  {key}: {value}\n", style="dim")
+
+            panel = Panel(
+                info_text,
+                title=f"[bold]Commit Details[/bold]",
+                border_style="blue",
+                padding=(1, 2),
+            )
+            console.print(panel)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo_settings.command("commit-diff")
+@click.argument("repo_id")
+@click.argument("commit_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--show-diff", is_flag=True, help="Show actual diff content")
+@click.pass_context
+def get_commit_diff_cmd(ctx, repo_id, commit_id, repo_type, show_diff):
+    """Show files changed in a commit.
+
+    REPO_ID format: namespace/name
+    COMMIT_ID: Full or short commit SHA
+    """
+    client = ctx.obj["client"]
+    try:
+        diff_result = client.get_commit_diff(repo_id, commit_id, repo_type=repo_type)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, diff_result)
+        else:
+            # Header
+            console.print(
+                f"\n[bold]Commit:[/bold] {diff_result.get('commit_id', commit_id)}"
+            )
+            console.print(
+                f"[bold]Author:[/bold] {diff_result.get('author', 'unknown')}"
+            )
+            console.print(f"[bold]Date:[/bold] {diff_result.get('date', 'N/A')}")
+            console.print(f"[bold]Message:[/bold] {diff_result.get('message', '')}\n")
+
+            files = diff_result.get("files", [])
+            if not files:
+                console.print("[yellow]No files changed[/yellow]")
+                return
+
+            # Summary table
+            table = Table(title="Files Changed")
+            table.add_column("Type", style="cyan")
+            table.add_column("Path", style="green")
+            table.add_column("Size", style="yellow")
+            table.add_column("LFS", style="magenta")
+
+            for file_info in files:
+                change_type = file_info.get("type", "unknown")
+                path = file_info.get("path", "")
+                size = file_info.get("size_bytes", 0)
+                is_lfs = file_info.get("is_lfs", False)
+
+                # Format size
+                if size < 1024:
+                    size_str = f"{size} B"
+                elif size < 1024 * 1024:
+                    size_str = f"{size / 1024:.1f} KB"
+                else:
+                    size_str = f"{size / (1024 * 1024):.1f} MB"
+
+                # Change type icon
+                type_icon = {
+                    "added": "+ ",
+                    "removed": "- ",
+                    "changed": "M ",
+                }.get(change_type, "  ")
+
+                table.add_row(
+                    type_icon + change_type,
+                    path,
+                    size_str,
+                    "Yes" if is_lfs else "No",
+                )
+
+            console.print(table)
+            console.print(f"\n[dim]Total: {len(files)} file(s) changed[/dim]")
+
+            # Show diffs if requested
+            if show_diff:
+                console.print("\n[bold]Diffs:[/bold]\n")
+                for file_info in files:
+                    if file_info.get("diff"):
+                        console.print(f"[cyan]File:[/cyan] {file_info['path']}")
+                        console.print(file_info["diff"])
+                        console.print()
     except Exception as e:
         handle_error(e, ctx)
 

@@ -46,7 +46,7 @@ dev = [
 
 
 [project.scripts]
-kohub-cli = "kohub_cli.cli:main"
+kohub-cli = "kohub_cli.cli:cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

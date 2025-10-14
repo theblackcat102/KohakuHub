@@ -451,6 +451,41 @@ class KohubClient:
         )
         return response.json()
 
+    def squash_repo(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+    ) -> dict[str, Any]:
+        """Squash repository to clear all commit history.
+
+        This operation removes all commit history while preserving the current
+        state of the repository. This can help reduce storage usage.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            Success message
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        response = self._request(
+            "POST",
+            "/api/repos/squash",
+            json={
+                "repo": repo_id,
+                "type": repo_type,
+            },
+        )
+        return response.json()
+
     def repo_info(
         self,
         repo_id: str,
@@ -952,6 +987,66 @@ class KohubClient:
             "GET",
             f"/api/{repo_type}s/{namespace}/{name}/commits/{branch}",
             params=params,
+        )
+        return response.json()
+
+    def get_commit_detail(
+        self,
+        repo_id: str,
+        commit_id: str,
+        repo_type: RepoType = "model",
+    ) -> dict[str, Any]:
+        """Get detailed information about a specific commit.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            commit_id: Commit ID (SHA)
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            Commit details including author, message, metadata
+
+        Raises:
+            NotFoundError: If repository or commit not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        response = self._request(
+            "GET",
+            f"/api/{repo_type}s/{namespace}/{name}/commit/{commit_id}",
+        )
+        return response.json()
+
+    def get_commit_diff(
+        self,
+        repo_id: str,
+        commit_id: str,
+        repo_type: RepoType = "model",
+    ) -> dict[str, Any]:
+        """Get diff of files changed in a commit.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            commit_id: Commit ID (SHA)
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            Dict with commit info and list of files changed with diffs
+
+        Raises:
+            NotFoundError: If repository or commit not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        response = self._request(
+            "GET",
+            f"/api/{repo_type}s/{namespace}/{name}/commit/{commit_id}/diff",
         )
         return response.json()
 

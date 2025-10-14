@@ -24,8 +24,41 @@ from .errors import (
 _STYLE_SUCCESS = "bold green"
 
 
+class UserCancelled(Exception):
+    """Exception raised when user cancels an operation (Ctrl+C)."""
+
+    pass
+
+
+def safe_ask(question, default_on_cancel=None):
+    """Wrapper for questionary that catches Ctrl+C and returns to menu.
+
+    Args:
+        question: Questionary question object
+        default_on_cancel: Value to return on cancellation (None means raise UserCancelled)
+
+    Returns:
+        User's answer or default_on_cancel
+
+    Raises:
+        UserCancelled: If user pressed Ctrl+C and default_on_cancel is None
+    """
+    try:
+        result = question.ask()
+        # If user cancels (Ctrl+C), result is None
+        if result is None:
+            if default_on_cancel is not None:
+                return default_on_cancel
+            raise UserCancelled()
+        return result
+    except KeyboardInterrupt:
+        if default_on_cancel is not None:
+            return default_on_cancel
+        raise UserCancelled()
+
+
 class InteractiveState:
-    """State management for interactive CLI mode."""
+    """State management for interactive CLI mode with context navigation."""
 
     def __init__(self):
         """Initialize interactive state with KohubClient."""
@@ -39,6 +72,12 @@ class InteractiveState:
         self.client = KohubClient(endpoint=endpoint, token=token, config=self.config)
         self.username = None
 
+        # Context tracking (website-like navigation)
+        self.current_context = None  # "repo", "user", "org", or None
+        self.current_repo = None  # {repo_id, repo_type, info}
+        self.current_user = None  # {username, info}
+        self.current_org = None  # {org_name, info}
+
         # Try to get current user if token exists
         if token:
             try:
@@ -50,8 +89,59 @@ class InteractiveState:
                     "[yellow]Stored token is invalid, please login again[/yellow]"
                 )
 
+    def get_breadcrumb(self) -> str:
+        """Get breadcrumb navigation string."""
+        parts = ["KohakuHub"]
+
+        if self.current_context == "repo" and self.current_repo:
+            parts.append(self.current_repo["repo_type"].capitalize() + "s")
+            parts.append(self.current_repo["repo_id"])
+        elif self.current_context == "user" and self.current_user:
+            parts.append("Users")
+            parts.append(self.current_user["username"])
+        elif self.current_context == "org" and self.current_org:
+            parts.append("Organizations")
+            parts.append(self.current_org["org_name"])
+
+        return " > ".join(parts)
+
+    def enter_repo_context(self, repo_id: str, repo_type: str = "model"):
+        """Enter repository context for operations."""
+        self.current_context = "repo"
+        self.current_repo = {
+            "repo_id": repo_id,
+            "repo_type": repo_type,
+            "info": None,  # Will be fetched on demand
+        }
+
+    def enter_user_context(self, username: str):
+        """Enter user profile context."""
+        self.current_context = "user"
+        self.current_user = {
+            "username": username,
+            "info": None,
+        }
+
+    def enter_org_context(self, org_name: str):
+        """Enter organization context."""
+        self.current_context = "org"
+        self.current_org = {
+            "org_name": org_name,
+            "info": None,
+        }
+
+    def exit_context(self):
+        """Exit current context and return to main menu."""
+        self.current_context = None
+        self.current_repo = None
+        self.current_user = None
+        self.current_org = None
+
     def render_header(self):
-        """Render status header showing connection and user info."""
+        """Render status header showing connection, user info, and navigation breadcrumb."""
+        # Breadcrumb navigation
+        breadcrumb = self.get_breadcrumb()
+
         # Connection status
         conn_text = Text()
         conn_text.append("🌐 ", style="bold blue")
@@ -73,7 +163,7 @@ class InteractiveState:
 
         panel = Panel(
             status,
-            title="[bold]KohakuHub CLI[/bold]",
+            title=f"[bold]{breadcrumb}[/bold]",
             border_style="blue",
             padding=(0, 2),
         )
@@ -124,17 +214,28 @@ def main_menu(state: InteractiveState):
         state.console.clear()
         state.render_header()
 
-        choice = questionary.select(
-            "What would you like to do?",
-            choices=[
-                questionary.Choice("🔐 Authentication & User", value="auth"),
-                questionary.Choice("📦 Repositories", value="repo"),
-                questionary.Choice("👥 Organizations", value="org"),
-                questionary.Choice("⚙️  Settings", value="settings"),
-                questionary.Separator(),
-                questionary.Choice("🚪 Exit", value="exit"),
-            ],
-        ).ask()
+        # Show tip about Ctrl+C
+        state.console.print(
+            "[dim]💡 Tip: Press Ctrl+C at any prompt to go back[/dim]\n"
+        )
+
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "What would you like to do?",
+                    choices=[
+                        questionary.Choice("🔐 Authentication & User", value="auth"),
+                        questionary.Choice("📦 Repositories", value="repo"),
+                        questionary.Choice("👥 Organizations", value="org"),
+                        questionary.Choice("⚙️  Settings", value="settings"),
+                        questionary.Separator(),
+                        questionary.Choice("🚪 Exit", value="exit"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            # Ctrl+C on main menu = exit
+            break
 
         match choice:
             case "auth":
@@ -162,23 +263,28 @@ def auth_menu(state: InteractiveState):
         if state.username:
             state.console.print(f"[dim]Logged in as {state.username}[/dim]\n")
 
-        choice = questionary.select(
-            "Authentication & User Management",
-            choices=[
-                questionary.Choice("🔑 Login", value="login"),
-                questionary.Choice("📝 Register", value="register"),
-                questionary.Choice("ℹ️  Who Am I", value="whoami"),
-                questionary.Separator("─── API Tokens ───"),
-                questionary.Choice("➕ Create Token", value="create_token"),
-                questionary.Choice("📋 List Tokens", value="list_tokens"),
-                questionary.Choice("🗑️  Delete Token", value="delete_token"),
-                questionary.Separator("─── Organizations ───"),
-                questionary.Choice("👥 My Organizations", value="my_orgs"),
-                questionary.Separator(),
-                questionary.Choice("🚪 Logout", value="logout"),
-                questionary.Choice("⬅️  Back", value="back"),
-            ],
-        ).ask()
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "Authentication & User Management",
+                    choices=[
+                        questionary.Choice("🔑 Login", value="login"),
+                        questionary.Choice("📝 Register", value="register"),
+                        questionary.Choice("ℹ️  Who Am I", value="whoami"),
+                        questionary.Separator("─── API Tokens ───"),
+                        questionary.Choice("➕ Create Token", value="create_token"),
+                        questionary.Choice("📋 List Tokens", value="list_tokens"),
+                        questionary.Choice("🗑️  Delete Token", value="delete_token"),
+                        questionary.Separator("─── Organizations ───"),
+                        questionary.Choice("👥 My Organizations", value="my_orgs"),
+                        questionary.Separator(),
+                        questionary.Choice("🚪 Logout", value="logout"),
+                        questionary.Choice("⬅️  Back", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            break
 
         match choice:
             case "login":
@@ -205,13 +311,24 @@ def login(state: InteractiveState):
     """Login with improved UX."""
     state.console.print("[bold]Login to KohakuHub[/bold]\n")
 
-    username = questionary.text(
-        "Username:", validate=lambda x: len(x) > 0 or "Username required"
-    ).ask()
+    try:
+        username = safe_ask(
+            questionary.text(
+                "Username (or Ctrl+C to cancel):",
+                validate=lambda x: len(x) > 0 or "Username required",
+            )
+        )
 
-    password = questionary.password(
-        "Password:", validate=lambda x: len(x) > 0 or "Password required"
-    ).ask()
+        password = safe_ask(
+            questionary.password(
+                "Password (or Ctrl+C to cancel):",
+                validate=lambda x: len(x) > 0 or "Password required",
+            )
+        )
+    except UserCancelled:
+        state.console.print("\n[yellow]Login cancelled[/yellow]")
+        input("\nPress Enter to continue...")
+        return
 
     # Login with progress
     with state.console.status(f"[{_STYLE_SUCCESS}]Logging in..."):
@@ -225,30 +342,37 @@ def login(state: InteractiveState):
     state.console.print(f"\n✓ Logged in as {username}", style=_STYLE_SUCCESS)
 
     # Offer to create and save token
-    if questionary.confirm(
-        "\nCreate API token for future use? (Recommended)", default=True
-    ).ask():
-        token_name = questionary.text(
-            "Token name:",
-            default=f"cli-{os.uname().nodename if hasattr(os, 'uname') else 'windows'}",
-        ).ask()
-
-        try:
-            with state.console.status(f"[{_STYLE_SUCCESS}]Creating token..."):
-                token_result = state.client.create_token(token_name)
-
-            token_value = token_result["token"]
-
-            # Save token to config
-            state.config.token = token_value
-            state.client.token = token_value
-
-            state.console.print(
-                "\n✓ Token created and saved to config", style=_STYLE_SUCCESS
+    try:
+        if safe_ask(
+            questionary.confirm(
+                "\nCreate API token for future use? (Recommended)", default=True
             )
-            state.console.print("[dim]You won't need to enter password again[/dim]")
-        except Exception as e:
-            state.console.print(f"\n[yellow]Token creation failed: {e}[/yellow]")
+        ):
+            token_name = safe_ask(
+                questionary.text(
+                    "Token name:",
+                    default=f"cli-{os.uname().nodename if hasattr(os, 'uname') else 'windows'}",
+                )
+            )
+
+            try:
+                with state.console.status(f"[{_STYLE_SUCCESS}]Creating token..."):
+                    token_result = state.client.create_token(token_name)
+
+                token_value = token_result["token"]
+
+                # Save token to config
+                state.config.token = token_value
+                state.client.token = token_value
+
+                state.console.print(
+                    "\n✓ Token created and saved to config", style=_STYLE_SUCCESS
+                )
+                state.console.print("[dim]You won't need to enter password again[/dim]")
+            except Exception as e:
+                state.console.print(f"\n[yellow]Token creation failed: {e}[/yellow]")
+    except UserCancelled:
+        pass
 
     input("\nPress Enter to continue...")
 
@@ -575,21 +699,28 @@ def org_menu(state: InteractiveState):
             except Exception:
                 pass
 
-        choice = questionary.select(
-            "Organization Management",
-            choices=[
-                questionary.Choice("➕ Create Organization", value="create"),
-                questionary.Choice("📋 List My Organizations", value="list"),
-                questionary.Choice("ℹ️  Organization Info", value="info"),
-                questionary.Separator("─── Members ───"),
-                questionary.Choice("👥 List Members", value="list_members"),
-                questionary.Choice("➕ Add Member", value="add"),
-                questionary.Choice("➖ Remove Member", value="remove"),
-                questionary.Choice("🔄 Update Member Role", value="update_role"),
-                questionary.Separator(),
-                questionary.Choice("⬅️  Back", value="back"),
-            ],
-        ).ask()
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "Organization Management",
+                    choices=[
+                        questionary.Choice("➕ Create Organization", value="create"),
+                        questionary.Choice("📋 List My Organizations", value="list"),
+                        questionary.Choice("ℹ️  Organization Info", value="info"),
+                        questionary.Separator("─── Members ───"),
+                        questionary.Choice("👥 List Members", value="list_members"),
+                        questionary.Choice("➕ Add Member", value="add"),
+                        questionary.Choice("➖ Remove Member", value="remove"),
+                        questionary.Choice(
+                            "🔄 Update Member Role", value="update_role"
+                        ),
+                        questionary.Separator(),
+                        questionary.Choice("⬅️  Back", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            break
 
         match choice:
             case "create":
@@ -818,42 +949,823 @@ def update_member_role(state: InteractiveState):
 
 
 def repo_menu(state: InteractiveState):
-    """Repository management menu."""
+    """Repository management menu with navigation support."""
     while True:
         state.console.clear()
         state.render_header()
 
-        choice = questionary.select(
-            "Repository Management",
-            choices=[
-                questionary.Choice("➕ Create Repository", value="create"),
-                questionary.Choice("📋 List Repositories", value="list"),
-                questionary.Choice("ℹ️  Repository Info", value="info"),
-                questionary.Choice("📂 Browse Files", value="files"),
-                questionary.Separator("─── Management ───"),
-                questionary.Choice("⚙️  Repository Settings", value="settings"),
-                questionary.Choice("🔄 Move/Rename", value="move"),
-                questionary.Choice("🗑️  Delete Repository", value="delete"),
-                questionary.Separator(),
-                questionary.Choice("⬅️  Back", value="back"),
-            ],
-        ).ask()
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "Repository Management",
+                    choices=[
+                        questionary.Choice(
+                            "🔍 Browse & Select Repository", value="browse"
+                        ),
+                        questionary.Choice("➕ Create Repository", value="create"),
+                        questionary.Separator("─── Quick Actions ───"),
+                        questionary.Choice("📋 List Repositories", value="list"),
+                        questionary.Choice("ℹ️  Quick Info Lookup", value="info"),
+                        questionary.Choice("🔄 Move/Rename", value="move"),
+                        questionary.Choice("🗑️  Delete Repository", value="delete"),
+                        questionary.Separator(),
+                        questionary.Choice("⬅️  Back", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            break
 
         match choice:
+            case "browse":
+                browse_and_select_repo(state)
             case "create":
                 create_repo(state)
             case "list":
                 list_repos(state)
             case "info":
                 repo_info(state)
-            case "files":
-                repo_tree(state)
-            case "settings":
-                repo_settings(state)
             case "move":
                 move_repo(state)
             case "delete":
                 delete_repo(state)
+            case "back":
+                break
+
+
+def browse_and_select_repo(state: InteractiveState):
+    """Browse repositories and select one to enter its context."""
+    try:
+        repo_type = safe_ask(
+            questionary.select(
+                "Repository type:",
+                choices=["model", "dataset", "space"],
+                default="model",
+            )
+        )
+
+        author = safe_ask(
+            questionary.text(
+                "Filter by author (leave blank for all, or press Ctrl+C to cancel):",
+                default=state.username or "",
+            )
+        )
+    except UserCancelled:
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching repositories..."):
+        try:
+            repos = state.client.list_repos(
+                repo_type=repo_type, author=author or None, limit=100
+            )
+        except Exception as e:
+            state.handle_error(e, "List repositories")
+            return
+
+    if not repos:
+        state.console.print("[yellow]No repositories found[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    # Let user select a repository
+    choices = []
+    for r in repos:
+        visibility = "🔒" if r.get("private") else "🌐"
+        label = f"{visibility} {r.get('id')} [dim]({r.get('author')})[/dim]"
+        choices.append(questionary.Choice(label, value=r.get("id")))
+
+    choices.append(questionary.Choice("⬅️  Cancel", value=None))
+
+    try:
+        selected = safe_ask(
+            questionary.select(
+                f"Select {repo_type} to view (or press Ctrl+C to cancel):",
+                choices=choices,
+                use_shortcuts=True,
+            )
+        )
+    except UserCancelled:
+        return
+
+    if selected is None:
+        return
+
+    # Enter repository context
+    state.enter_repo_context(selected, repo_type)
+    repo_context_menu(state)
+
+
+def repo_context_menu(state: InteractiveState):
+    """Context menu for a specific repository - all operations on current repo."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    while True:
+        state.console.clear()
+        state.render_header()
+
+        # Show quick repo info if available
+        if state.current_repo.get("info"):
+            info = state.current_repo["info"]
+            visibility = "🔒 Private" if info.get("private") else "🌐 Public"
+            state.console.print(
+                f"[dim]{visibility} | Last modified: {info.get('lastModified', 'N/A')}[/dim]\n"
+            )
+
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    f"What would you like to do with {repo_id}?",
+                    choices=[
+                        questionary.Choice("ℹ️  View Repository Info", value="info"),
+                        questionary.Choice("📂 Browse Files", value="files"),
+                        questionary.Choice("📜 View Commits", value="commits"),
+                        questionary.Choice(
+                            "🔍 View Commit Details", value="commit_detail"
+                        ),
+                        questionary.Choice("📊 View Commit Diff", value="commit_diff"),
+                        questionary.Separator("─── Management ───"),
+                        questionary.Choice("⚙️  Repository Settings", value="settings"),
+                        questionary.Choice("🌿 Branch Management", value="branch_mgmt"),
+                        questionary.Choice("🏷️  Tag Management", value="tag_mgmt"),
+                        questionary.Choice("🔄 Move/Rename", value="move"),
+                        questionary.Choice("📦 Squash History", value="squash"),
+                        questionary.Choice("🗑️  Delete Repository", value="delete"),
+                        questionary.Separator(),
+                        questionary.Choice("⬅️  Back to Repository List", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            # Ctrl+C in repo context = go back to repo menu
+            break
+
+        match choice:
+            case "info":
+                repo_info_context(state)
+            case "files":
+                repo_tree_context(state)
+            case "commits":
+                list_commits_context(state)
+            case "commit_detail":
+                view_commit_detail(state)
+            case "commit_diff":
+                view_commit_diff(state)
+            case "settings":
+                repo_settings_context(state)
+            case "branch_mgmt":
+                branch_management_menu(state)
+            case "tag_mgmt":
+                tag_management_menu(state)
+            case "move":
+                move_repo_context(state)
+            case "squash":
+                squash_repo_context(state)
+            case "delete":
+                if delete_repo_context(state):
+                    # Repository deleted, exit context
+                    break
+            case "back":
+                break
+
+    # Exit context when leaving
+    state.exit_context()
+
+
+def repo_info_context(state: InteractiveState):
+    """Show repository info (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching repository info..."):
+        try:
+            info = state.client.repo_info(repo_id, repo_type=repo_type)
+            # Cache it
+            state.current_repo["info"] = info
+        except Exception as e:
+            state.handle_error(e, "Get repository info")
+            return
+
+    # Display
+    info_text = Text()
+    info_text.append("📦 ", style="bold")
+    info_text.append(f"{info.get('id')}\n\n", style="bold cyan")
+
+    info_text.append("Author: ", style="bold")
+    info_text.append(f"{info.get('author')}\n")
+
+    info_text.append("Type: ", style="bold")
+    info_text.append(f"{repo_type}\n")
+
+    info_text.append("Visibility: ", style="bold")
+    visibility = "🔒 Private" if info.get("private") else "🌐 Public"
+    info_text.append(f"{visibility}\n")
+
+    info_text.append("Created: ", style="bold")
+    info_text.append(f"{info.get('createdAt', 'N/A')}\n")
+
+    if info.get("lastModified"):
+        info_text.append("Last Modified: ", style="bold")
+        info_text.append(f"{info.get('lastModified')}\n")
+
+    if info.get("sha"):
+        info_text.append("\nCommit SHA: ", style="bold")
+        info_text.append(f"{info.get('sha')}\n", style="yellow")
+
+    panel = Panel(
+        info_text,
+        title=f"[bold]{repo_type.capitalize()} Repository[/bold]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+
+    state.console.print(panel)
+    input("\nPress Enter to continue...")
+
+
+def repo_tree_context(state: InteractiveState):
+    """Browse repository files (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    try:
+        revision = safe_ask(
+            questionary.text("Revision/branch (or Ctrl+C to cancel):", default="main")
+        )
+        path = safe_ask(questionary.text("Path (leave blank for root):", default=""))
+        recursive = safe_ask(questionary.confirm("List recursively?", default=True))
+    except UserCancelled:
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching file tree..."):
+        try:
+            files = state.client.list_repo_tree(
+                repo_id,
+                repo_type=repo_type,
+                revision=revision,
+                path=path,
+                recursive=recursive,
+            )
+        except Exception as e:
+            state.handle_error(e, "List files")
+            return
+
+    if not files:
+        state.console.print("[yellow]No files found[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    # Display as tree
+    from rich.tree import Tree
+
+    def format_size(size_bytes):
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        else:
+            return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+    tree_root = Tree(
+        f"[bold cyan]{repo_id}[/bold cyan] [dim]({revision}/{path or 'root'})[/dim]",
+        guide_style="blue",
+    )
+
+    for item in sorted(
+        files, key=lambda x: (x.get("type") != "directory", x.get("path", ""))
+    ):
+        item_path = item.get("path", "")
+        item_type = item.get("type", "")
+        item_size = item.get("size", 0)
+
+        if item_type == "directory":
+            tree_root.add(f"[bold blue]📁 {item_path}[/bold blue]")
+        else:
+            size_str = format_size(item_size)
+            lfs_indicator = " [yellow](LFS)[/yellow]" if item.get("lfs") else ""
+            tree_root.add(
+                f"[green]📄 {item_path}[/green] [dim]({size_str})[/dim]{lfs_indicator}"
+            )
+
+    state.console.print(tree_root)
+    state.console.print(f"\n[dim]Total: {len(files)} items[/dim]")
+    input("\nPress Enter to continue...")
+
+
+def list_commits_context(state: InteractiveState):
+    """List commits for current repository."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    try:
+        branch = safe_ask(
+            questionary.text("Branch name (or Ctrl+C to cancel):", default="main")
+        )
+        limit = safe_ask(questionary.text("Number of commits:", default="20"))
+
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 20
+    except UserCancelled:
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching commits..."):
+        try:
+            result = state.client.list_commits(
+                repo_id, branch=branch, repo_type=repo_type, limit=limit
+            )
+        except Exception as e:
+            state.handle_error(e, "List commits")
+            return
+
+    commits = result.get("commits", [])
+    if not commits:
+        state.console.print("[yellow]No commits found[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    # Display in table
+    from rich.table import Table
+
+    table = Table(title=f"Commits for {repo_id} ({branch})")
+    table.add_column("SHA", style="yellow", no_wrap=True)
+    table.add_column("Message", style="cyan")
+    table.add_column("Author", style="green")
+    table.add_column("Date", style="blue")
+
+    for c in commits:
+        sha_short = c.get("oid", "")[:8]
+        message = c.get("title", c.get("message", ""))
+        if len(message) > 60:
+            message = message[:57] + "..."
+        author = c.get("author", "unknown")
+        date = c.get("date", "")
+
+        table.add_row(sha_short, message, author, date)
+
+    state.console.print(table)
+
+    if result.get("hasMore"):
+        state.console.print(
+            f"\n[dim]Showing {len(commits)} commits. Use larger limit to see more.[/dim]"
+        )
+    else:
+        state.console.print(f"\n[dim]Total: {len(commits)} commits[/dim]")
+
+    input("\nPress Enter to continue...")
+
+
+def view_commit_detail(state: InteractiveState):
+    """View specific commit detail (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    try:
+        commit_id = safe_ask(
+            questionary.text(
+                "Commit ID (full or short SHA, or Ctrl+C to cancel):",
+                validate=lambda x: len(x) >= 6 or "Commit ID too short",
+            )
+        )
+    except UserCancelled:
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching commit details..."):
+        try:
+            commit = state.client.get_commit_detail(
+                repo_id, commit_id, repo_type=repo_type
+            )
+        except Exception as e:
+            state.handle_error(e, "Get commit detail")
+            return
+
+    # Display
+    info_text = Text()
+    info_text.append(f"Commit {commit.get('oid', commit_id)}\n", style="bold yellow")
+    info_text.append("─" * 60 + "\n", style="dim")
+
+    info_text.append("Author:  ", style="bold")
+    info_text.append(f"{commit.get('author', 'unknown')}\n")
+
+    info_text.append("Date:    ", style="bold")
+    info_text.append(f"{commit.get('date', 'N/A')}\n")
+
+    if commit.get("parents"):
+        info_text.append("Parents: ", style="bold")
+        parents_str = ", ".join([p[:8] for p in commit["parents"]])
+        info_text.append(f"{parents_str}\n")
+
+    info_text.append("\n", style="bold")
+    info_text.append(commit.get("message", "No message") + "\n")
+
+    if commit.get("description"):
+        info_text.append("\n")
+        info_text.append(commit["description"] + "\n", style="dim")
+
+    panel = Panel(
+        info_text,
+        title="[bold]Commit Details[/bold]",
+        border_style="blue",
+        padding=(1, 2),
+    )
+
+    state.console.print(panel)
+    input("\nPress Enter to continue...")
+
+
+def view_commit_diff(state: InteractiveState):
+    """View commit diff (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    try:
+        commit_id = safe_ask(
+            questionary.text(
+                "Commit ID (full or short SHA, or Ctrl+C to cancel):",
+                validate=lambda x: len(x) >= 6 or "Commit ID too short",
+            )
+        )
+    except UserCancelled:
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Fetching commit diff..."):
+        try:
+            diff_result = state.client.get_commit_diff(
+                repo_id, commit_id, repo_type=repo_type
+            )
+        except Exception as e:
+            state.handle_error(e, "Get commit diff")
+            return
+
+    # Header
+    state.console.print(
+        f"\n[bold]Commit:[/bold] {diff_result.get('commit_id', commit_id)}"
+    )
+    state.console.print(f"[bold]Author:[/bold] {diff_result.get('author', 'unknown')}")
+    state.console.print(f"[bold]Date:[/bold] {diff_result.get('date', 'N/A')}")
+    state.console.print(f"[bold]Message:[/bold] {diff_result.get('message', '')}\n")
+
+    files = diff_result.get("files", [])
+    if not files:
+        state.console.print("[yellow]No files changed[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    # Summary table
+    from rich.table import Table
+
+    table = Table(title="Files Changed")
+    table.add_column("Type", style="cyan")
+    table.add_column("Path", style="green")
+    table.add_column("Size", style="yellow")
+
+    for file_info in files:
+        change_type = file_info.get("type", "unknown")
+        path = file_info.get("path", "")
+        size = file_info.get("size_bytes", 0)
+
+        if size < 1024:
+            size_str = f"{size} B"
+        elif size < 1024 * 1024:
+            size_str = f"{size / 1024:.1f} KB"
+        else:
+            size_str = f"{size / (1024 * 1024):.1f} MB"
+
+        type_icon = {
+            "added": "+ ",
+            "removed": "- ",
+            "changed": "M ",
+        }.get(change_type, "  ")
+
+        table.add_row(type_icon + change_type, path, size_str)
+
+    state.console.print(table)
+    state.console.print(f"\n[dim]Total: {len(files)} file(s) changed[/dim]")
+    input("\nPress Enter to continue...")
+
+
+def repo_settings_context(state: InteractiveState):
+    """Update repository settings (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    # Get current settings
+    try:
+        info = state.client.repo_info(repo_id, repo_type=repo_type)
+        current_private = info.get("private", False)
+    except Exception:
+        current_private = False
+
+    state.console.print(
+        f"\n[dim]Current visibility: {'Private' if current_private else 'Public'}[/dim]\n"
+    )
+
+    private = questionary.select(
+        "Visibility:",
+        choices=[
+            questionary.Choice("🌐 Public", value=False),
+            questionary.Choice("🔒 Private", value=True),
+        ],
+        default=current_private,
+    ).ask()
+
+    if not questionary.confirm("Update settings?", default=True).ask():
+        state.console.print("[yellow]Cancelled[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Updating settings..."):
+        try:
+            state.client.update_repo_settings(
+                repo_id, repo_type=repo_type, private=private
+            )
+            # Invalidate cached info
+            state.current_repo["info"] = None
+        except Exception as e:
+            state.handle_error(e, "Update settings")
+            return
+
+    state.console.print("\n✓ Settings updated", style=_STYLE_SUCCESS)
+    input("\nPress Enter to continue...")
+
+
+def move_repo_context(state: InteractiveState):
+    """Move/rename repository (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    state.console.print(f"[bold]Move/Rename Repository[/bold]\n")
+    state.console.print(f"[dim]Current: {repo_id}[/dim]\n")
+
+    to_repo = questionary.text(
+        "New repository ID (namespace/name):",
+        validate=lambda x: "/" in x or "Format: namespace/name",
+    ).ask()
+
+    if not questionary.confirm(f"\nMove {repo_id} to {to_repo}?", default=False).ask():
+        state.console.print("[yellow]Cancelled[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    with state.console.status(f"[{_STYLE_SUCCESS}]Moving repository..."):
+        try:
+            result = state.client.move_repo(
+                from_repo=repo_id, to_repo=to_repo, repo_type=repo_type
+            )
+        except Exception as e:
+            state.handle_error(e, "Move repository")
+            return
+
+    state.console.print(
+        f"\n✓ Repository moved: {result.get('url')}", style=_STYLE_SUCCESS
+    )
+
+    # Update context to new repo ID
+    state.current_repo["repo_id"] = to_repo
+    state.current_repo["info"] = None
+
+    input("\nPress Enter to continue...")
+
+
+def squash_repo_context(state: InteractiveState):
+    """Squash repository history (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    state.console.print(f"[bold yellow]Squash Repository History[/bold yellow]\n")
+    state.console.print(f"[dim]Repository: {repo_id}[/dim]\n")
+    state.console.print("[yellow]⚠️  This will clear ALL commit history![/yellow]")
+    state.console.print("[dim]Only the current state will be preserved.[/dim]\n")
+
+    if not questionary.confirm(
+        "Are you sure you want to squash this repository?", default=False
+    ).ask():
+        state.console.print("[yellow]Cancelled[/yellow]")
+        input("\nPress Enter to continue...")
+        return
+
+    with state.console.status(
+        "[yellow]Squashing repository (this may take a while)..."
+    ):
+        try:
+            result = state.client.squash_repo(repo_id, repo_type=repo_type)
+        except Exception as e:
+            state.handle_error(e, "Squash repository")
+            return
+
+    state.console.print(f"\n✓ Repository squashed successfully", style=_STYLE_SUCCESS)
+    state.current_repo["info"] = None  # Invalidate cache
+    input("\nPress Enter to continue...")
+
+
+def delete_repo_context(state: InteractiveState) -> bool:
+    """Delete repository (uses current context). Returns True if deleted."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    state.console.print("[bold red]Delete Repository[/bold red]\n")
+    state.console.print(f"[dim]Repository: {repo_id}[/dim]\n")
+    state.console.print("[yellow]⚠️  This action is IRREVERSIBLE![/yellow]\n")
+
+    # Double confirmation
+    if not questionary.confirm(
+        f"⚠️  Delete {repo_id}? This CANNOT be undone!", default=False
+    ).ask():
+        state.console.print("[yellow]Cancelled[/yellow]")
+        input("\nPress Enter to continue...")
+        return False
+
+    # Type repo name to confirm
+    repo_name = repo_id.split("/")[1]
+    confirmation = questionary.text(
+        f"Type the repository name '{repo_name}' to confirm:",
+    ).ask()
+
+    if confirmation != repo_name:
+        state.console.print(
+            "\n✗ Repository name doesn't match. Deletion cancelled.",
+            style="bold red",
+        )
+        input("\nPress Enter to continue...")
+        return False
+
+    # Delete with progress
+    with state.console.status("[bold red]Deleting repository..."):
+        try:
+            state.client.delete_repo(repo_id, repo_type=repo_type)
+        except Exception as e:
+            state.handle_error(e, "Repository deletion")
+            return False
+
+    state.console.print(f"\n✓ Repository {repo_id} deleted", style=_STYLE_SUCCESS)
+    input("\nPress Enter to continue...")
+    return True
+
+
+def branch_management_menu(state: InteractiveState):
+    """Branch management submenu (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    while True:
+        state.console.clear()
+        state.render_header()
+
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "Branch Management",
+                    choices=[
+                        questionary.Choice("➕ Create Branch", value="create"),
+                        questionary.Choice("🗑️  Delete Branch", value="delete"),
+                        questionary.Choice("⬅️  Back", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            break
+
+        match choice:
+            case "create":
+                branch_name = questionary.text(
+                    "New branch name:",
+                    validate=lambda x: len(x) > 0 or "Branch name required",
+                ).ask()
+
+                revision = questionary.text(
+                    "Source revision (leave blank for main):", default=""
+                ).ask()
+
+                with state.console.status(f"[{_STYLE_SUCCESS}]Creating branch..."):
+                    try:
+                        state.client.create_branch(
+                            repo_id,
+                            branch=branch_name,
+                            repo_type=repo_type,
+                            revision=revision or None,
+                        )
+                    except Exception as e:
+                        state.handle_error(e, "Create branch")
+                        continue
+
+                state.console.print(
+                    f"\n✓ Branch '{branch_name}' created", style=_STYLE_SUCCESS
+                )
+                input("\nPress Enter to continue...")
+
+            case "delete":
+                branch_name = questionary.text(
+                    "Branch name to delete:",
+                    validate=lambda x: (
+                        x != "main" and len(x) > 0 or "Cannot delete main branch"
+                    ),
+                ).ask()
+
+                if not questionary.confirm(
+                    f"Delete branch '{branch_name}'?", default=False
+                ).ask():
+                    continue
+
+                with state.console.status(f"[{_STYLE_SUCCESS}]Deleting branch..."):
+                    try:
+                        state.client.delete_branch(
+                            repo_id, branch=branch_name, repo_type=repo_type
+                        )
+                    except Exception as e:
+                        state.handle_error(e, "Delete branch")
+                        continue
+
+                state.console.print(
+                    f"\n✓ Branch '{branch_name}' deleted", style=_STYLE_SUCCESS
+                )
+                input("\nPress Enter to continue...")
+
+            case "back":
+                break
+
+
+def tag_management_menu(state: InteractiveState):
+    """Tag management submenu (uses current context)."""
+    repo_id = state.current_repo["repo_id"]
+    repo_type = state.current_repo["repo_type"]
+
+    while True:
+        state.console.clear()
+        state.render_header()
+
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "Tag Management",
+                    choices=[
+                        questionary.Choice("➕ Create Tag", value="create"),
+                        questionary.Choice("🗑️  Delete Tag", value="delete"),
+                        questionary.Choice("⬅️  Back", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            break
+
+        match choice:
+            case "create":
+                tag_name = questionary.text(
+                    "New tag name:",
+                    validate=lambda x: len(x) > 0 or "Tag name required",
+                ).ask()
+
+                revision = questionary.text(
+                    "Source revision (leave blank for main):", default=""
+                ).ask()
+
+                message = questionary.text("Tag message (optional):", default="").ask()
+
+                with state.console.status(f"[{_STYLE_SUCCESS}]Creating tag..."):
+                    try:
+                        state.client.create_tag(
+                            repo_id,
+                            tag=tag_name,
+                            repo_type=repo_type,
+                            revision=revision or None,
+                            message=message or None,
+                        )
+                    except Exception as e:
+                        state.handle_error(e, "Create tag")
+                        continue
+
+                state.console.print(
+                    f"\n✓ Tag '{tag_name}' created", style=_STYLE_SUCCESS
+                )
+                input("\nPress Enter to continue...")
+
+            case "delete":
+                tag_name = questionary.text(
+                    "Tag name to delete:",
+                    validate=lambda x: len(x) > 0 or "Tag name required",
+                ).ask()
+
+                if not questionary.confirm(
+                    f"Delete tag '{tag_name}'?", default=False
+                ).ask():
+                    continue
+
+                with state.console.status(f"[{_STYLE_SUCCESS}]Deleting tag..."):
+                    try:
+                        state.client.delete_tag(
+                            repo_id, tag=tag_name, repo_type=repo_type
+                        )
+                    except Exception as e:
+                        state.handle_error(e, "Delete tag")
+                        continue
+
+                state.console.print(
+                    f"\n✓ Tag '{tag_name}' deleted", style=_STYLE_SUCCESS
+                )
+                input("\nPress Enter to continue...")
+
             case "back":
                 break
 
@@ -1259,17 +2171,22 @@ def settings_menu(state: InteractiveState):
 
         state.console.print(f"[dim]Config: {state.client.config.config_file}[/dim]\n")
 
-        choice = questionary.select(
-            "Settings & Configuration",
-            choices=[
-                questionary.Choice("🌐 Set Endpoint URL", value="endpoint"),
-                questionary.Choice("🔑 Set API Token", value="token"),
-                questionary.Choice("📋 Show All Config", value="show"),
-                questionary.Choice("🗑️  Clear Config", value="clear"),
-                questionary.Separator(),
-                questionary.Choice("⬅️  Back", value="back"),
-            ],
-        ).ask()
+        try:
+            choice = safe_ask(
+                questionary.select(
+                    "Settings & Configuration",
+                    choices=[
+                        questionary.Choice("🌐 Set Endpoint URL", value="endpoint"),
+                        questionary.Choice("🔑 Set API Token", value="token"),
+                        questionary.Choice("📋 Show All Config", value="show"),
+                        questionary.Choice("🗑️  Clear Config", value="clear"),
+                        questionary.Separator(),
+                        questionary.Choice("⬅️  Back", value="back"),
+                    ],
+                )
+            )
+        except UserCancelled:
+            break
 
         match choice:
             case "endpoint":
