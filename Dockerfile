@@ -10,6 +10,7 @@ WORKDIR /app
 
 COPY ./pyproject.toml .
 COPY ./src/kohakuhub ./src/kohakuhub
+COPY ./scripts ./scripts
 COPY ./docker/startup.py /app/startup.py
 RUN chmod +x /app/startup.py
 

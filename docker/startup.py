@@ -81,6 +81,35 @@ def load_credentials():
     print(f"[startup] Loaded credentials from {CRED_FILE}")
 
 
+def run_migrations():
+    """Run database migrations before starting server."""
+    migrations_script = Path(__file__).parent / "scripts" / "run_migrations.py"
+
+    if not migrations_script.exists():
+        print("[startup] No migration script found, skipping migrations")
+        return
+
+    print("[startup] Running database migrations...")
+    result = subprocess.run(
+        [sys.executable, str(migrations_script)],
+        env=os.environ,
+        capture_output=True,
+        text=True,
+    )
+
+    # Print migration output
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+
+    if result.returncode != 0:
+        print("[startup] ✗ Migrations failed! Exiting...")
+        sys.exit(1)
+
+    print("[startup] ✓ Migrations completed successfully\n")
+
+
 def main():
     wait_for_lakefs()
 
@@ -104,6 +133,9 @@ def main():
                 print(f"[startup] Setup failed: {e}")
             os.environ["KOHAKU_HUB_LAKEFS_ACCESS_KEY"] = access_key
             os.environ["KOHAKU_HUB_LAKEFS_SECRET_KEY"] = secret_key
+
+    # Run database migrations
+    run_migrations()
 
     # Get worker count from environment
     workers = int(os.getenv("KOHAKU_HUB_WORKERS", "4"))
