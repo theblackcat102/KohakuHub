@@ -301,10 +301,15 @@
                 class="w-12 h-12 rounded-full object-cover border-2 border-gray-300 dark:border-gray-600"
                 @error="hasAvatar = false"
               />
-              <div v-else class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+              <div
+                v-else
+                class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center"
+              >
                 <div class="i-carbon-user-avatar text-2xl text-gray-400" />
               </div>
-              <div class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              <div
+                class="text-sm font-semibold text-gray-700 dark:text-gray-300"
+              >
                 {{ username }}
               </div>
             </div>

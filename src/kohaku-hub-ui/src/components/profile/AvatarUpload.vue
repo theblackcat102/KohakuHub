@@ -16,7 +16,9 @@
           class="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center border-2 border-gray-300 dark:border-gray-600"
         >
           <div
-            :class="entityType === 'org' ? 'i-carbon-group' : 'i-carbon-user-avatar'"
+            :class="
+              entityType === 'org' ? 'i-carbon-group' : 'i-carbon-user-avatar'
+            "
             class="text-4xl text-gray-400"
           />
         </div>
@@ -87,7 +89,10 @@
           >
             <cropper-grid role="grid" covered></cropper-grid>
             <cropper-crosshair centered></cropper-crosshair>
-            <cropper-handle action="move" theme-color="rgba(255, 255, 255, 0.5)"></cropper-handle>
+            <cropper-handle
+              action="move"
+              theme-color="rgba(255, 255, 255, 0.5)"
+            ></cropper-handle>
             <cropper-handle action="n-resize"></cropper-handle>
             <cropper-handle action="e-resize"></cropper-handle>
             <cropper-handle action="s-resize"></cropper-handle>
@@ -163,7 +168,9 @@ async function handleFileSelect(event) {
   if (!file) return;
 
   // Validate file type
-  if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
+  if (
+    !["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)
+  ) {
     ElMessage.error("Only JPEG, PNG, and WebP images are supported");
     return;
   }
@@ -215,7 +222,7 @@ async function handleCrop() {
           }
         },
         "image/jpeg",
-        0.95
+        0.95,
       );
     });
 
@@ -247,7 +254,7 @@ async function handleDelete() {
         confirmButtonText: "Delete",
         cancelButtonText: "Cancel",
         type: "warning",
-      }
+      },
     );
 
     await props.deleteFunction(props.entityName);

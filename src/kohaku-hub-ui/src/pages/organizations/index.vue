@@ -46,9 +46,17 @@
               :src="`/api/organizations/${org.name}/avatar?t=${Date.now()}`"
               :alt="`${org.name} avatar`"
               class="w-16 h-16 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 flex-shrink-0"
-              @error="(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }"
+              @error="
+                (e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextElementSibling.style.display = 'flex';
+                }
+              "
             />
-            <div class="i-carbon-group text-4xl text-blue-500 flex-shrink-0" style="display: none" />
+            <div
+              class="i-carbon-group text-4xl text-blue-500 flex-shrink-0"
+              style="display: none"
+            />
             <div class="flex-1 min-w-0">
               <h3
                 class="text-lg font-semibold text-blue-600 dark:text-blue-400 truncate"

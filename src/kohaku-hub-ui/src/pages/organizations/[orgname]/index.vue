@@ -112,9 +112,17 @@
                 :src="`/api/users/${member.user}/avatar?t=${Date.now()}`"
                 :alt="`${member.user} avatar`"
                 class="w-8 h-8 rounded-full object-cover border border-gray-300 dark:border-gray-600"
-                @error="(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }"
+                @error="
+                  (e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'block';
+                  }
+                "
               />
-              <div class="i-carbon-user-avatar text-2xl text-gray-400" style="display: none" />
+              <div
+                class="i-carbon-user-avatar text-2xl text-gray-400"
+                style="display: none"
+              />
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium truncate">
                   {{ member.user }}

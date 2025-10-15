@@ -44,7 +44,9 @@ def process_avatar_image(image_bytes: bytes) -> bytes:
             # Create white background for transparency
             background = Image.new("RGB", img.size, (255, 255, 255))
             if img.mode == "RGBA" or img.mode == "P":
-                background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+                background.paste(
+                    img, mask=img.split()[-1] if img.mode == "RGBA" else None
+                )
             else:
                 background.paste(img)
             img = background
@@ -73,7 +75,9 @@ def process_avatar_image(image_bytes: bytes) -> bytes:
 
     except Exception as e:
         logger.error(f"Failed to process avatar image: {e}")
-        raise HTTPException(400, detail="Failed to process image. Ensure it's a valid image file.")
+        raise HTTPException(
+            400, detail="Failed to process image. Ensure it's a valid image file."
+        )
 
 
 # ===== User Avatar Endpoints =====
@@ -120,7 +124,8 @@ async def upload_user_avatar(
     # Validate size
     if len(content) > AVATAR_MAX_INPUT_SIZE:
         raise HTTPException(
-            400, detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1024 // 1024}MB"
+            400,
+            detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1024 // 1024}MB",
         )
 
     # Process image (resize, crop, convert to JPEG)
@@ -137,7 +142,9 @@ async def upload_user_avatar(
     target_user.avatar_updated_at = datetime.now(timezone.utc)
     target_user.save()
 
-    logger.success(f"Avatar uploaded for user: {username} (size={len(processed_jpeg)} bytes)")
+    logger.success(
+        f"Avatar uploaded for user: {username} (size={len(processed_jpeg)} bytes)"
+    )
 
     return {
         "success": True,
@@ -147,7 +154,9 @@ async def upload_user_avatar(
 
 
 @router.get("/users/{username}/avatar")
-async def get_user_avatar(username: str, _user: User | None = Depends(get_optional_user)):
+async def get_user_avatar(
+    username: str, _user: User | None = Depends(get_optional_user)
+):
     """Get user avatar image.
 
     Args:
@@ -173,9 +182,11 @@ async def get_user_avatar(username: str, _user: User | None = Depends(get_option
         media_type="image/jpeg",
         headers={
             "Cache-Control": "public, max-age=86400",  # 24 hour cache
-            "Last-Modified": user.avatar_updated_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
-            if user.avatar_updated_at
-            else "",
+            "Last-Modified": (
+                user.avatar_updated_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
+                if user.avatar_updated_at
+                else ""
+            ),
         },
     )
 
@@ -259,7 +270,8 @@ async def upload_org_avatar(
     # Validate size
     if len(content) > AVATAR_MAX_INPUT_SIZE:
         raise HTTPException(
-            400, detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1024 // 1024}MB"
+            400,
+            detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1024 // 1024}MB",
         )
 
     # Process image
@@ -276,7 +288,9 @@ async def upload_org_avatar(
     org.avatar_updated_at = datetime.now(timezone.utc)
     org.save()
 
-    logger.success(f"Avatar uploaded for org: {org_name} (size={len(processed_jpeg)} bytes)")
+    logger.success(
+        f"Avatar uploaded for org: {org_name} (size={len(processed_jpeg)} bytes)"
+    )
 
     return {
         "success": True,
@@ -286,7 +300,9 @@ async def upload_org_avatar(
 
 
 @router.get("/organizations/{org_name}/avatar")
-async def get_org_avatar(org_name: str, _user: User | None = Depends(get_optional_user)):
+async def get_org_avatar(
+    org_name: str, _user: User | None = Depends(get_optional_user)
+):
     """Get organization avatar image.
 
     Args:
@@ -312,9 +328,11 @@ async def get_org_avatar(org_name: str, _user: User | None = Depends(get_optiona
         media_type="image/jpeg",
         headers={
             "Cache-Control": "public, max-age=86400",  # 24 hour cache
-            "Last-Modified": org.avatar_updated_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
-            if org.avatar_updated_at
-            else "",
+            "Last-Modified": (
+                org.avatar_updated_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
+                if org.avatar_updated_at
+                else ""
+            ),
         },
     )
 
