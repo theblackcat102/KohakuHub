@@ -9,6 +9,7 @@ from kohakuhub.db import (
     Commit,
     EmailVerification,
     File,
+    Invitation,
     LFSObjectHistory,
     Organization,
     Repository,
@@ -500,3 +501,151 @@ def create_staging_upload(
 def delete_staging_upload(staging: StagingUpload) -> None:
     """Delete a staging upload record."""
     staging.delete_instance()
+
+
+# Invitation operations
+def create_invitation(
+    token: str,
+    action: str,
+    parameters: str,
+    created_by: int,
+    expires_at,
+    max_usage: int | None = None,
+) -> Invitation:
+    """Create a new invitation.
+
+    Args:
+        token: Unique invitation token (UUID)
+        action: Action type (e.g., "join_org", "register_account")
+        parameters: JSON string with action-specific data
+        created_by: User ID who created the invitation
+        expires_at: Expiration datetime
+        max_usage: Maximum usage count (None=one-time, -1=unlimited, N=max N uses)
+
+    Returns:
+        Created invitation
+
+    Note: Wrap in db.atomic() if checking existence first.
+    """
+    return Invitation.create(
+        token=token,
+        action=action,
+        parameters=parameters,
+        created_by=created_by,
+        expires_at=expires_at,
+        max_usage=max_usage,
+        usage_count=0,
+    )
+
+
+def get_invitation(token: str) -> Invitation | None:
+    """Get invitation by token."""
+    return Invitation.get_or_none(Invitation.token == token)
+
+
+def get_invitation_by_id(invitation_id: int) -> Invitation | None:
+    """Get invitation by ID."""
+    return Invitation.get_or_none(Invitation.id == invitation_id)
+
+
+def mark_invitation_used(invitation: Invitation, user_id: int) -> None:
+    """Mark invitation as used by a user.
+
+    For multi-use invitations, this increments usage_count.
+    For single-use invitations, it also sets used_at and used_by.
+    """
+    from datetime import datetime, timezone
+
+    # Increment usage count
+    invitation.usage_count += 1
+
+    # For first use, set used_at and used_by (legacy fields)
+    if invitation.used_at is None:
+        invitation.used_at = datetime.now(timezone.utc)
+        invitation.used_by = user_id
+
+    invitation.save()
+
+
+def check_invitation_available(invitation: Invitation) -> tuple[bool, str | None]:
+    """Check if invitation can still be used.
+
+    Args:
+        invitation: Invitation to check
+
+    Returns:
+        Tuple of (is_available, error_message)
+    """
+    from datetime import datetime, timezone
+
+    # Check expiration
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at <= datetime.now(timezone.utc):
+        return False, "Invitation has expired"
+
+    # Check usage limit
+    if invitation.max_usage is None:
+        # One-time use (legacy)
+        if invitation.used_at is not None:
+            return False, "Invitation has already been used"
+    elif invitation.max_usage == -1:
+        # Unlimited use
+        return True, None
+    else:
+        # Limited use (check count)
+        if invitation.usage_count >= invitation.max_usage:
+            return False, f"Invitation has reached maximum usage limit ({invitation.max_usage})"
+
+    return True, None
+
+
+def delete_invitation(invitation: Invitation) -> None:
+    """Delete an invitation."""
+    invitation.delete_instance()
+
+
+def list_org_invitations(org_id: int) -> list[Invitation]:
+    """List all invitations for an organization.
+
+    Args:
+        org_id: Organization ID
+
+    Returns:
+        List of invitations (both pending and used)
+    """
+    import json
+
+    # Get all invitations with action "join_org" and matching org_id in parameters
+    invitations = []
+    all_invites = Invitation.select().where(Invitation.action == "join_org")
+
+    for invite in all_invites:
+        try:
+            params = json.loads(invite.parameters)
+            if params.get("org_id") == org_id:
+                invitations.append(invite)
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    return invitations
+
+
+def delete_expired_invitations() -> int:
+    """Delete all expired invitations.
+
+    Returns:
+        Number of invitations deleted
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    deleted = (
+        Invitation.delete()
+        .where(Invitation.expires_at < now, Invitation.used_at.is_null())
+        .execute()
+    )
+
+    return deleted

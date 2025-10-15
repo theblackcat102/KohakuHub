@@ -39,6 +39,7 @@ class SMTPConfig(BaseModel):
 
 class AuthConfig(BaseModel):
     require_email_verification: bool = False
+    invitation_only: bool = False  # Disable public registration, require invitation
     session_secret: str = "change-me-in-production"
     session_expire_hours: int = 168  # 7 days
     token_expire_days: int = 365
@@ -176,6 +177,8 @@ def load_config(path: str = None) -> Config:
             require_email_verification=os.environ.get(
                 "KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION", "false"
             ).lower()
+            == "true",
+            invitation_only=os.environ.get("KOHAKU_HUB_INVITATION_ONLY", "false").lower()
             == "true",
             session_secret=os.environ.get(
                 "KOHAKU_HUB_SESSION_SECRET", "change-me-in-production"

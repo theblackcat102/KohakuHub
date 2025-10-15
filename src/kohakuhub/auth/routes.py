@@ -61,8 +61,39 @@ class CreateTokenRequest(BaseModel):
 
 
 @router.post("/register")
-async def register(req: RegisterRequest):
-    """Register new user."""
+async def register(req: RegisterRequest, invitation_token: str | None = None):
+    """Register new user.
+
+    Args:
+        req: Registration request data
+        invitation_token: Optional invitation token (required if invitation_only mode)
+
+    Returns:
+        Success response
+    """
+    # Check if registration requires invitation
+    if cfg.auth.invitation_only:
+        if not invitation_token:
+            raise HTTPException(
+                403,
+                detail="Registration is invitation-only. Please use an invitation link or contact the administrator.",
+            )
+
+        # Validate invitation token
+        from kohakuhub.db_operations import check_invitation_available, get_invitation
+
+        invitation = get_invitation(invitation_token)
+        if not invitation:
+            raise HTTPException(400, detail="Invalid invitation token")
+
+        # Check if invitation is for registration
+        if invitation.action != "register_account":
+            raise HTTPException(400, detail="Invalid invitation type for registration")
+
+        # Check if invitation is available
+        is_available, error_msg = check_invitation_available(invitation)
+        if not is_available:
+            raise HTTPException(400, detail=error_msg)
 
     logger.info(f"Registration attempt for username: {req.username}")
 
@@ -114,6 +145,32 @@ async def register(req: RegisterRequest):
         )
 
     logger.success(f"User registered: {user.username} (id={user.id})")
+
+    # If registration used an invitation, mark it and add to org if specified
+    if cfg.auth.invitation_only and invitation_token:
+        from kohakuhub.db_operations import get_invitation, mark_invitation_used
+        import json
+
+        invitation = get_invitation(invitation_token)
+        if invitation:
+            try:
+                params = json.loads(invitation.parameters)
+                org_id = params.get("org_id")
+
+                with db.atomic():
+                    mark_invitation_used(invitation, user.id)
+
+                    # Add user to organization if specified
+                    if org_id:
+                        from kohakuhub.db_operations import create_user_organization
+
+                        role = params.get("role", "member")
+                        create_user_organization(user.id, org_id, role)
+                        logger.success(
+                            f"User {user.username} added to org (id={org_id}) as {role}"
+                        )
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"Failed to process invitation on registration: {e}")
 
     # Send verification email if required
     if cfg.auth.require_email_verification:

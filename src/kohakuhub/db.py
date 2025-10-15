@@ -68,6 +68,13 @@ class User(BaseModel):
     public_quota_bytes = BigIntegerField(null=True)  # NULL = unlimited
     private_used_bytes = BigIntegerField(default=0)
     public_used_bytes = BigIntegerField(default=0)
+    # Profile fields
+    full_name = CharField(null=True)
+    bio = TextField(null=True)
+    website = CharField(null=True)
+    social_media = TextField(
+        null=True
+    )  # JSON: {twitter_x, threads, github, huggingface}
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
@@ -154,6 +161,12 @@ class Organization(BaseModel):
     public_quota_bytes = BigIntegerField(null=True)  # NULL = unlimited
     private_used_bytes = BigIntegerField(default=0)
     public_used_bytes = BigIntegerField(default=0)
+    # Profile fields
+    bio = TextField(null=True)
+    website = CharField(null=True)
+    social_media = TextField(
+        null=True
+    )  # JSON: {twitter_x, threads, github, huggingface}
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
@@ -235,6 +248,34 @@ class SSHKey(BaseModel):
         indexes = ((("user_id", "fingerprint"), True),)  # Unique per user
 
 
+class Invitation(BaseModel):
+    """Generic invitation system for various actions (org invites, account registration, etc.)."""
+
+    id = AutoField()
+    token = CharField(unique=True, index=True)  # UUID for invitation link
+    action = CharField(index=True)  # "join_org", "register_account", etc.
+    parameters = (
+        TextField()
+    )  # JSON string for action-specific data (org_id, role, etc.)
+    created_by = IntegerField(index=True)  # User ID who created invitation
+    expires_at = DateTimeField()
+    # Multi-use support
+    max_usage = IntegerField(null=True)  # NULL=one-time, -1=unlimited, N=max N uses
+    usage_count = IntegerField(default=0)  # Track how many times used
+    # Legacy fields (kept for single-use compatibility)
+    used_at = DateTimeField(null=True)  # First use timestamp
+    used_by = IntegerField(null=True)  # First user who used it
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = (
+            (
+                ("action", "created_by"),
+                False,
+            ),  # Query invitations by action and creator
+        )
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
@@ -251,6 +292,7 @@ def init_db():
             Commit,
             LFSObjectHistory,
             SSHKey,
+            Invitation,
         ],
         safe=True,
     )

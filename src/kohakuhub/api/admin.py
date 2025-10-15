@@ -22,9 +22,13 @@ from kohakuhub.db import (
     User,
 )
 from kohakuhub.db_operations import (
+    check_invitation_available,
+    create_invitation,
     create_user,
+    delete_invitation,
     delete_repository,
     delete_user,
+    get_invitation,
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.s3 import get_s3_client
@@ -118,6 +122,15 @@ class SetQuotaRequest(BaseModel):
 
     private_quota_bytes: int | None = None
     public_quota_bytes: int | None = None
+
+
+class CreateRegisterInvitationRequest(BaseModel):
+    """Request to create registration invitation."""
+
+    org_id: int | None = None  # Optional organization to join after registration
+    role: str = "member"  # Role in organization (if org_id provided)
+    max_usage: int | None = None  # None=one-time, -1=unlimited, N=max uses
+    expires_days: int = 7  # Days until expiration
 
 
 # ===== User Management Endpoints =====
@@ -360,6 +373,180 @@ async def set_email_verification(
         "email": user.email,
         "email_verified": user.email_verified,
     }
+
+
+# ===== Invitation Management Endpoints =====
+
+
+@router.post("/invitations/register")
+async def create_register_invitation_admin(
+    request: CreateRegisterInvitationRequest,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Create registration invitation (admin only).
+
+    Allows admin to generate invitations for user registration.
+    If invitation_only mode is enabled, this is the only way users can register.
+
+    Args:
+        request: Invitation creation request
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        Created invitation token and link
+    """
+    import json
+
+    # Validate role if org_id provided
+    if request.org_id:
+        if request.role not in ["visitor", "member", "admin"]:
+            raise HTTPException(
+                400, detail={"error": "Invalid role. Must be visitor, member, or admin"}
+            )
+
+        # Verify organization exists
+        org = Organization.get_or_none(Organization.id == request.org_id)
+        if not org:
+            raise HTTPException(404, detail={"error": f"Organization not found: {request.org_id}"})
+
+        org_name = org.name
+    else:
+        org_name = None
+
+    # Generate invitation token
+    token = secrets.token_urlsafe(32)
+
+    # Set expiration
+    expires_at = datetime.now(timezone.utc) + timedelta(days=request.expires_days)
+
+    # Create parameters
+    parameters = json.dumps(
+        {
+            "org_id": request.org_id,
+            "org_name": org_name,
+            "role": request.role if request.org_id else None,
+        }
+    )
+
+    # Create invitation (no created_by for admin-generated invitations, use system user ID 1)
+    invitation = create_invitation(
+        token=token,
+        action="register_account",
+        parameters=parameters,
+        created_by=1,  # System/Admin user
+        expires_at=expires_at,
+        max_usage=request.max_usage,
+    )
+
+    invitation_link = f"{cfg.app.base_url}/register?invitation={token}"
+
+    logger.success(
+        f"Admin created registration invitation (max_usage={request.max_usage}, expires={request.expires_days}d)"
+    )
+
+    return {
+        "success": True,
+        "token": token,
+        "invitation_link": invitation_link,
+        "expires_at": expires_at.isoformat(),
+        "max_usage": request.max_usage,
+        "is_reusable": request.max_usage is not None,
+        "action": "register_account",
+    }
+
+
+@router.get("/invitations")
+async def list_invitations_admin(
+    action: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """List all invitations (admin only).
+
+    Args:
+        action: Filter by action type (join_org, register_account)
+        limit: Maximum number to return
+        offset: Offset for pagination
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        List of invitations with details
+    """
+    from kohakuhub.db import Invitation
+
+    query = Invitation.select()
+
+    if action:
+        query = query.where(Invitation.action == action)
+
+    query = query.order_by(Invitation.created_at.desc()).limit(limit).offset(offset)
+
+    invitations = []
+    for inv in query:
+        # Get creator username
+        creator = User.get_or_none(User.id == inv.created_by)
+        creator_username = creator.username if creator else "System"
+
+        # Parse parameters
+        try:
+            params = json.loads(inv.parameters)
+        except json.JSONDecodeError:
+            params = {}
+
+        # Check availability
+        is_available, error_msg = check_invitation_available(inv)
+
+        invitations.append(
+            {
+                "id": inv.id,
+                "token": inv.token,
+                "action": inv.action,
+                "org_id": params.get("org_id"),
+                "org_name": params.get("org_name"),
+                "role": params.get("role"),
+                "email": params.get("email"),
+                "created_by": inv.created_by,
+                "creator_username": creator_username,
+                "created_at": inv.created_at.isoformat(),
+                "expires_at": inv.expires_at.isoformat(),
+                "max_usage": inv.max_usage,
+                "usage_count": inv.usage_count,
+                "is_reusable": inv.max_usage is not None,
+                "is_available": is_available,
+                "error_message": error_msg,
+                "used_at": inv.used_at.isoformat() if inv.used_at else None,
+                "used_by": inv.used_by,
+            }
+        )
+
+    return {"invitations": invitations, "limit": limit, "offset": offset}
+
+
+@router.delete("/invitations/{token}")
+async def delete_invitation_admin(
+    token: str,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Delete invitation (admin only).
+
+    Args:
+        token: Invitation token
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        Success message
+    """
+    invitation = get_invitation(token)
+
+    if not invitation:
+        raise HTTPException(404, detail={"error": "Invitation not found"})
+
+    delete_invitation(invitation)
+
+    logger.info(f"Admin deleted invitation: {token[:8]}... (action={invitation.action})")
+
+    return {"success": True, "message": "Invitation deleted successfully"}
 
 
 # ===== Quota Management Endpoints =====

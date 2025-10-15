@@ -9,6 +9,7 @@ from kohakuhub.db import Organization, Repository, User, UserOrganization
 from kohakuhub.db_operations import (
     get_organization,
     get_repository,
+    get_user_by_username,
     get_user_organization,
 )
 from kohakuhub.logger import get_logger
@@ -30,7 +31,10 @@ router = APIRouter()
 
 class UpdateUserSettingsRequest(BaseModel):
     email: Optional[EmailStr] = None
-    fullname: Optional[str] = None
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    website: Optional[str] = None
+    social_media: Optional[dict] = None  # {twitter_x, threads, github, huggingface}
 
 
 @router.put("/users/{username}/settings")
@@ -54,18 +58,75 @@ async def update_user_settings(
         raise HTTPException(403, detail="Not authorized to update this user's settings")
 
     # Update fields if provided
+    update_fields = {}
+
     if req.email is not None:
         # Check if email is already taken by another user
         existing = User.get_or_none((User.email == req.email) & (User.id != user.id))
         if existing:
             raise HTTPException(400, detail="Email already in use")
-
-        User.update(email=req.email, email_verified=False).where(
-            User.id == user.id
-        ).execute()
+        update_fields["email"] = req.email
+        update_fields["email_verified"] = False
         # TODO: Send new verification email
 
+    if req.full_name is not None:
+        update_fields["full_name"] = req.full_name
+
+    if req.bio is not None:
+        update_fields["bio"] = req.bio
+
+    if req.website is not None:
+        update_fields["website"] = req.website
+
+    if req.social_media is not None:
+        import json
+
+        # Validate social_media structure
+        if not isinstance(req.social_media, dict):
+            raise HTTPException(400, detail="social_media must be a dictionary")
+
+        # Store as JSON string
+        update_fields["social_media"] = json.dumps(req.social_media)
+
+    # Execute update if there are fields to update
+    if update_fields:
+        User.update(**update_fields).where(User.id == user.id).execute()
+
     return {"success": True, "message": "User settings updated successfully"}
+
+
+@router.get("/users/{username}/profile")
+async def get_user_profile(username: str):
+    """Get user public profile information.
+
+    Args:
+        username: Username to query
+
+    Returns:
+        Public profile data
+    """
+    user = get_user_by_username(username)
+    if not user:
+        raise HTTPException(404, detail="User not found")
+
+    import json
+
+    # Parse social_media JSON if exists
+    social_media = None
+    if user.social_media:
+        try:
+            social_media = json.loads(user.social_media)
+        except json.JSONDecodeError:
+            social_media = None
+
+    return {
+        "username": user.username,
+        "full_name": user.full_name,
+        "bio": user.bio,
+        "website": user.website,
+        "social_media": social_media,
+        "created_at": user.created_at.isoformat(),
+    }
 
 
 # ============================================================================
@@ -75,6 +136,9 @@ async def update_user_settings(
 
 class UpdateOrganizationSettingsRequest(BaseModel):
     description: Optional[str] = None
+    bio: Optional[str] = None
+    website: Optional[str] = None
+    social_media: Optional[dict] = None  # {twitter_x, threads, github, huggingface}
 
 
 @router.put("/organizations/{org_name}/settings")
@@ -105,12 +169,73 @@ async def update_organization_settings(
         )
 
     # Update fields if provided
+    update_fields = {}
+
     if req.description is not None:
-        Organization.update(description=req.description).where(
-            Organization.id == org.id
-        ).execute()
+        update_fields["description"] = req.description
+
+    if req.bio is not None:
+        update_fields["bio"] = req.bio
+
+    if req.website is not None:
+        update_fields["website"] = req.website
+
+    if req.social_media is not None:
+        import json
+
+        # Validate social_media structure
+        if not isinstance(req.social_media, dict):
+            raise HTTPException(400, detail="social_media must be a dictionary")
+
+        # Store as JSON string
+        update_fields["social_media"] = json.dumps(req.social_media)
+
+    # Execute update if there are fields to update
+    if update_fields:
+        Organization.update(**update_fields).where(Organization.id == org.id).execute()
 
     return {"success": True, "message": "Organization settings updated successfully"}
+
+
+@router.get("/organizations/{org_name}/profile")
+async def get_organization_profile(org_name: str):
+    """Get organization public profile information.
+
+    Args:
+        org_name: Organization name
+
+    Returns:
+        Public profile data
+    """
+    org = get_organization(org_name)
+    if not org:
+        raise HTTPException(404, detail="Organization not found")
+
+    import json
+
+    # Parse social_media JSON if exists
+    social_media = None
+    if org.social_media:
+        try:
+            social_media = json.loads(org.social_media)
+        except json.JSONDecodeError:
+            social_media = None
+
+    # Count members
+    from kohakuhub.db_operations import list_organization_members
+
+    members = list_organization_members(org.id)
+    member_count = len(members)
+
+    return {
+        "name": org.name,
+        "description": org.description,
+        "bio": org.bio,
+        "website": org.website,
+        "social_media": social_media,
+        "member_count": member_count,
+        "created_at": org.created_at.isoformat(),
+    }
 
 
 # ============================================================================

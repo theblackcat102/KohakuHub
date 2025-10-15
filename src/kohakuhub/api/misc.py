@@ -34,6 +34,22 @@ def get_version():
     }
 
 
+@router.get("/site-config")
+def get_site_config():
+    """Get public site configuration.
+
+    Returns public configuration settings that affect frontend behavior.
+
+    Returns:
+        Public site configuration
+    """
+    return {
+        "site_name": cfg.app.site_name,
+        "invitation_only": cfg.auth.invitation_only,
+        "require_email_verification": cfg.auth.require_email_verification,
+    }
+
+
 class ValidateYamlPayload(BaseModel):
     """Payload for YAML validation endpoint."""
 
