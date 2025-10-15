@@ -253,7 +253,9 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md#project-status) for full roadmap and [do
 
 ## License
 
-AGPL-3.0 (may change to more permissive license later)
+AGPL-3.0
+**NOTE**: We may release some new features under non-commercial license.
+**Commercial Exemption**: If you need any commercial exemption licenses (to not fully open source your system built upon KohakuHub), please contact kohaku@kblueleaf.net
 
 ## Support
 
