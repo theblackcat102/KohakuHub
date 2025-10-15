@@ -2,10 +2,7 @@
 <template>
   <div class="container-main">
     <!-- Header with Settings Button -->
-    <div
-      v-if="isAdmin"
-      class="flex items-center justify-end mb-4"
-    >
+    <div v-if="isAdmin" class="flex items-center justify-end mb-4">
       <el-button
         type="primary"
         size="small"

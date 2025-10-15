@@ -212,7 +212,9 @@ onMounted(() => {
           <span class="font-semibold">Filter by Type:</span>
           <el-radio-group v-model="filterAction" @change="loadInvitations">
             <el-radio-button label="all">All Invitations</el-radio-button>
-            <el-radio-button label="register_account">Registration</el-radio-button>
+            <el-radio-button label="register_account"
+              >Registration</el-radio-button
+            >
             <el-radio-button label="join_org">Organization</el-radio-button>
           </el-radio-group>
         </div>
@@ -242,7 +244,12 @@ onMounted(() => {
         >
           <el-table-column prop="action" label="Type" width="150">
             <template #default="{ row }">
-              <el-tag :type="row.action === 'register_account' ? 'success' : 'primary'" size="small">
+              <el-tag
+                :type="
+                  row.action === 'register_account' ? 'success' : 'primary'
+                "
+                size="small"
+              >
                 {{ getActionLabel(row.action) }}
               </el-tag>
             </template>
@@ -265,7 +272,11 @@ onMounted(() => {
             </template>
           </el-table-column>
 
-          <el-table-column prop="creator_username" label="Created By" width="120" />
+          <el-table-column
+            prop="creator_username"
+            label="Created By"
+            width="120"
+          />
 
           <el-table-column prop="created_at" label="Created" width="160">
             <template #default="{ row }">
@@ -330,22 +341,37 @@ onMounted(() => {
             automatically upon registration.
           </p>
 
-          <div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800">
+          <div
+            class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800"
+          >
             <div class="font-semibold text-blue-800 dark:text-blue-200 mb-1">
               Invitation-Only Mode
             </div>
             <div class="text-blue-700 dark:text-blue-300">
-              Set <code class="px-1 py-0.5 bg-blue-100 dark:bg-blue-900 rounded">KOHAKU_HUB_INVITATION_ONLY=true</code>
+              Set
+              <code class="px-1 py-0.5 bg-blue-100 dark:bg-blue-900 rounded"
+                >KOHAKU_HUB_INVITATION_ONLY=true</code
+              >
               to disable public registration and require invitations.
             </div>
           </div>
 
           <div class="pt-2">
             <div class="font-semibold mb-2">Invitation Types:</div>
-            <ul class="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300">
-              <li><strong>One-time:</strong> Can be used once (max_usage not set)</li>
-              <li><strong>Limited:</strong> Can be used N times (max_usage = 1-100)</li>
-              <li><strong>Unlimited:</strong> Can be used infinitely (max_usage = -1)</li>
+            <ul
+              class="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300"
+            >
+              <li>
+                <strong>One-time:</strong> Can be used once (max_usage not set)
+              </li>
+              <li>
+                <strong>Limited:</strong> Can be used N times (max_usage =
+                1-100)
+              </li>
+              <li>
+                <strong>Unlimited:</strong> Can be used infinitely (max_usage =
+                -1)
+              </li>
             </ul>
           </div>
         </div>
@@ -403,10 +429,7 @@ onMounted(() => {
             </div>
           </el-form-item>
 
-          <el-form-item
-            v-if="createForm.org_id"
-            label="Role in Organization"
-          >
+          <el-form-item v-if="createForm.org_id" label="Role in Organization">
             <el-select v-model="createForm.role" style="width: 100%">
               <el-option label="Visitor (Read-only)" value="visitor" />
               <el-option label="Member" value="member" />
@@ -419,11 +442,7 @@ onMounted(() => {
 
           <!-- Generated Link Display -->
           <el-form-item v-if="generatedLink" label="Invitation Link">
-            <el-input
-              :value="generatedLink"
-              readonly
-              class="font-mono text-sm"
-            >
+            <el-input :value="generatedLink" readonly class="font-mono text-sm">
               <template #append>
                 <el-button @click="handleCopyLink">
                   <div class="i-carbon-copy" />

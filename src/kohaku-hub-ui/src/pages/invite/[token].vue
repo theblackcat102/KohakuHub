@@ -21,7 +21,9 @@
       <div v-else-if="invitation" class="card">
         <!-- Header -->
         <div class="text-center mb-6">
-          <div class="i-carbon-email text-6xl text-blue-500 mb-4 inline-block" />
+          <div
+            class="i-carbon-email text-6xl text-blue-500 mb-4 inline-block"
+          />
           <h1 class="text-3xl font-bold mb-2">Organization Invitation</h1>
           <p class="text-gray-600 dark:text-gray-400">
             You've been invited to join an organization
@@ -32,8 +34,12 @@
         <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 mb-6">
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-gray-600 dark:text-gray-400">Organization:</span>
-              <span class="font-semibold text-lg">{{ invitation.org_name }}</span>
+              <span class="text-gray-600 dark:text-gray-400"
+                >Organization:</span
+              >
+              <span class="font-semibold text-lg">{{
+                invitation.org_name
+              }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-gray-600 dark:text-gray-400">Role:</span>
@@ -85,7 +91,10 @@
                 Invitation Unavailable
               </h3>
               <p class="text-sm text-yellow-700 dark:text-yellow-300">
-                {{ invitation.error_message || "This invitation is no longer available." }}
+                {{
+                  invitation.error_message ||
+                  "This invitation is no longer available."
+                }}
               </p>
             </div>
           </div>
@@ -220,7 +229,8 @@ async function loadInvitation() {
   } catch (err) {
     console.error("Failed to load invitation:", err);
     if (err.response?.status === 404) {
-      error.value = "Invitation not found. It may have been deleted or is invalid.";
+      error.value =
+        "Invitation not found. It may have been deleted or is invalid.";
     } else {
       error.value = "Failed to load invitation details.";
     }

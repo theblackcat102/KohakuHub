@@ -2,7 +2,10 @@
 <template>
   <div class="container-main">
     <div class="mb-6">
-      <router-link :to="`/organizations/${$route.params.org}`" class="text-blue-600 hover:underline">
+      <router-link
+        :to="`/organizations/${$route.params.org}`"
+        class="text-blue-600 hover:underline"
+      >
         ← Back to {{ $route.params.org }}
       </router-link>
     </div>
@@ -272,20 +275,18 @@
     >
       <el-form label-position="top">
         <el-form-item>
-          <el-radio-group v-model="inviteForm.type" @change="generatedLink = ''">
+          <el-radio-group
+            v-model="inviteForm.type"
+            @change="generatedLink = ''"
+          >
             <el-radio-button label="single">
               Single-Use (Email)
             </el-radio-button>
-            <el-radio-button label="reusable">
-              Reusable Link
-            </el-radio-button>
+            <el-radio-button label="reusable"> Reusable Link </el-radio-button>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item
-          v-if="inviteForm.type === 'single'"
-          label="Email Address"
-        >
+        <el-form-item v-if="inviteForm.type === 'single'" label="Email Address">
           <el-input
             v-model="inviteForm.email"
             placeholder="member@example.com"
@@ -327,11 +328,7 @@
 
           <!-- Generated Link Display -->
           <el-form-item v-if="generatedLink" label="Invitation Link">
-            <el-input
-              :value="generatedLink"
-              readonly
-              class="font-mono text-sm"
-            >
+            <el-input :value="generatedLink" readonly class="font-mono text-sm">
               <template #append>
                 <el-button @click="copyGeneratedLink">
                   <div class="i-carbon-copy" />
@@ -340,7 +337,9 @@
             </el-input>
             <div class="text-sm text-gray-500 mt-1">
               Share this link anywhere. Usage: 0 /
-              {{ inviteForm.max_usage === -1 ? "Unlimited" : inviteForm.max_usage }}
+              {{
+                inviteForm.max_usage === -1 ? "Unlimited" : inviteForm.max_usage
+              }}
             </div>
           </el-form-item>
         </div>
@@ -357,9 +356,7 @@
           :loading="inviting"
         >
           {{
-            inviteForm.type === "reusable"
-              ? "Generate Link"
-              : "Send Invitation"
+            inviteForm.type === "reusable" ? "Generate Link" : "Send Invitation"
           }}
         </el-button>
       </template>
@@ -521,7 +518,7 @@ async function removeMember(username) {
     await ElMessageBox.confirm(
       `Remove ${username} from this organization?`,
       "Confirm",
-      { type: "warning" }
+      { type: "warning" },
     );
 
     await orgAPI.removeMember(route.params.org, username);
@@ -563,7 +560,9 @@ async function copyGeneratedLink() {
 async function sendInvitation() {
   // Validate based on invitation type
   if (inviteForm.value.type === "single" && !inviteForm.value.email) {
-    ElMessage.warning("Please enter an email address for single-use invitation");
+    ElMessage.warning(
+      "Please enter an email address for single-use invitation",
+    );
     return;
   }
 
@@ -597,9 +596,7 @@ async function sendInvitation() {
     await loadInvitations();
   } catch (err) {
     console.error("Failed to send invitation:", err);
-    ElMessage.error(
-      err.response?.data?.detail || "Failed to send invitation"
-    );
+    ElMessage.error(err.response?.data?.detail || "Failed to send invitation");
   } finally {
     inviting.value = false;
   }
@@ -630,11 +627,9 @@ async function copyInvitationLink(token) {
 
 async function deleteInvitation(token) {
   try {
-    await ElMessageBox.confirm(
-      "Delete this invitation?",
-      "Confirm",
-      { type: "warning" }
-    );
+    await ElMessageBox.confirm("Delete this invitation?", "Confirm", {
+      type: "warning",
+    });
 
     await invitationAPI.delete(token);
     ElMessage.success("Invitation deleted");
