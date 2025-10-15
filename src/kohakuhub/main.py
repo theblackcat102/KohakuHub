@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from kohakuhub.api import admin, branches, files, misc, settings, validation
+from kohakuhub.api import admin, avatar, branches, files, misc, settings, validation
 from kohakuhub.api.invitation import router as invitation
 from kohakuhub.auth import router as auth_router
 from kohakuhub.config import cfg
@@ -73,6 +73,7 @@ app.include_router(commit_history.router, prefix=cfg.app.api_base, tags=["commit
 app.include_router(lfs.router, tags=["lfs"])
 app.include_router(branches.router, prefix=cfg.app.api_base, tags=["branches"])
 app.include_router(settings.router, prefix=cfg.app.api_base, tags=["settings"])
+app.include_router(avatar.router, prefix=cfg.app.api_base, tags=["avatars"])
 app.include_router(invitation, prefix=cfg.app.api_base, tags=["invitations"])
 app.include_router(quota, tags=["quota"])
 app.include_router(admin.router, prefix="/admin/api", tags=["admin"])

@@ -6,6 +6,7 @@ from functools import partial
 from peewee import (
     AutoField,
     BigIntegerField,
+    BlobField,
     BooleanField,
     CharField,
     DateTimeField,
@@ -75,6 +76,9 @@ class User(BaseModel):
     social_media = TextField(
         null=True
     )  # JSON: {twitter_x, threads, github, huggingface}
+    # Avatar (1024x1024 JPEG stored as binary)
+    avatar = BlobField(null=True)  # Binary JPEG data
+    avatar_updated_at = DateTimeField(null=True)  # Track updates for cache busting
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
@@ -167,6 +171,9 @@ class Organization(BaseModel):
     social_media = TextField(
         null=True
     )  # JSON: {twitter_x, threads, github, huggingface}
+    # Avatar (1024x1024 JPEG stored as binary)
+    avatar = BlobField(null=True)  # Binary JPEG data
+    avatar_updated_at = DateTimeField(null=True)  # Track updates for cache busting
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
