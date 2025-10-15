@@ -507,11 +507,18 @@ onMounted(() => {
 - **Discord:** https://discord.gg/xWYrkyvJ2s
 - **GitHub Issues:** https://github.com/KohakuBlueleaf/KohakuHub/issues
 
-## License
+## License and Copyright
 
-By contributing, you agree that your contributions will be licensed under AGPL-3.0 or specialized non-commercial license (under specific modules).
+By contributing, you agree to the following:
 
-You agree that the owner of this project (KohakuBlueLeaf) has the rights to provide commercial exemption licenses to ANY possible customers.
+1. **License Grant**: Your contributions will be licensed under AGPL-3.0 for the main project, or under a non-commercial license for specific modules as designated by the project maintainer.
+
+2. **Commercial Licensing Rights**: You grant KohakuBlueLeaf (the project owner) perpetual, irrevocable rights to:
+   - Relicense your contributions under commercial terms
+   - Include your contributions in commercial exemption licenses sold to third parties
+   - Use your contributions in any way necessary for the commercial operation of this project
+
+3. **Copyright**: You retain copyright to your contributions, but grant the above license rights to the project.
 
 ---
 
