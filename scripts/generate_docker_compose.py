@@ -278,6 +278,7 @@ def generate_hub_api_service(config: dict) -> str:
 
       ## ===== Auth & SMTP Configuration =====
       - KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
+      - KOHAKU_HUB_INVITATION_ONLY=false # Set to true to require invitation for registration
       - KOHAKU_HUB_SESSION_EXPIRE_HOURS=168
       - KOHAKU_HUB_TOKEN_EXPIRE_DAYS=365
       - KOHAKU_HUB_ADMIN_ENABLED=true
