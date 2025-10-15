@@ -30,6 +30,7 @@ dependencies = [
     "rich",
     "toml",
     "uvicorn",
+    "pillow",
 ]
 urls = { "Homepage" = "https://kblueleaf.net/Kohaku-Hub" }
 
