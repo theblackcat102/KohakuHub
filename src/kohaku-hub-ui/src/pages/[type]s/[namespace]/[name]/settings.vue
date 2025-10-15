@@ -252,13 +252,136 @@
           </div>
         </div>
       </el-tab-pane>
+
+      <!-- Storage & Quota -->
+      <el-tab-pane label="Storage & Quota" name="quota">
+        <div class="max-w-2xl space-y-6">
+          <!-- Storage Usage Card -->
+          <div class="card">
+            <h2 class="text-xl font-semibold mb-4">Storage Usage</h2>
+            <div v-if="quotaInfo" class="space-y-4">
+              <div>
+                <div class="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Current Usage
+                </div>
+                <div class="text-3xl font-bold">
+                  {{ formatSize(quotaInfo.used_bytes) }}
+                </div>
+                <div
+                  v-if="quotaInfo.effective_quota_bytes"
+                  class="text-sm text-gray-500 dark:text-gray-400 mt-1"
+                >
+                  of {{ formatSize(quotaInfo.effective_quota_bytes) }}
+                </div>
+              </div>
+
+              <div
+                v-if="
+                  quotaInfo.percentage_used !== null &&
+                  quotaInfo.percentage_used !== undefined
+                "
+              >
+                <el-progress
+                  :percentage="
+                    Math.min(
+                      100,
+                      Math.round(quotaInfo.percentage_used * 100) / 100,
+                    )
+                  "
+                  :color="getProgressColor(quotaInfo.percentage_used)"
+                  :stroke-width="8"
+                  :format="(percentage) => `${percentage.toFixed(2)}%`"
+                />
+              </div>
+
+              <el-button
+                @click="handleRecalculateStorage"
+                :loading="recalculating"
+              >
+                <div class="i-carbon-renew inline-block mr-1" />
+                Recalculate Storage
+              </el-button>
+            </div>
+            <div v-else class="text-center py-8">
+              <el-icon class="is-loading" :size="40">
+                <div class="i-carbon-loading" />
+              </el-icon>
+              <p class="mt-4 text-gray-500 dark:text-gray-400">
+                Loading storage info...
+              </p>
+            </div>
+          </div>
+
+          <!-- Repository Quota Card -->
+          <div class="card">
+            <h2 class="text-xl font-semibold mb-4">Repository Quota</h2>
+            <div v-if="quotaInfo" class="space-y-4">
+              <el-form label-position="top">
+                <el-form-item label="Storage Limit">
+                  <el-radio-group v-model="quotaSettings.mode">
+                    <div class="space-y-2">
+                      <el-radio label="inherit">
+                        Inherit from {{ route.params.namespace }}
+                        <span
+                          v-if="quotaInfo.namespace_quota_bytes"
+                          class="text-sm text-gray-500"
+                        >
+                          ({{ formatSize(quotaInfo.namespace_quota_bytes) }})
+                        </span>
+                        <span v-else class="text-sm text-gray-500">
+                          (unlimited)
+                        </span>
+                      </el-radio>
+                      <el-radio label="custom">Custom Limit</el-radio>
+                    </div>
+                  </el-radio-group>
+                </el-form-item>
+
+                <el-form-item
+                  v-if="quotaSettings.mode === 'custom'"
+                  label="Custom Limit (GB)"
+                >
+                  <el-input-number
+                    v-model="quotaSettings.quota_gb"
+                    :min="0"
+                    :max="maxQuotaGB"
+                    :step="0.1"
+                    :precision="2"
+                  />
+                  <div
+                    v-if="quotaInfo.namespace_available_bytes !== null"
+                    class="text-sm text-gray-500 dark:text-gray-400 mt-1"
+                  >
+                    Maximum available: {{ formatSize(maxQuotaBytes) }} (from
+                    namespace)
+                  </div>
+                  <div
+                    v-else
+                    class="text-sm text-gray-500 dark:text-gray-400 mt-1"
+                  >
+                    Namespace has unlimited quota
+                  </div>
+                </el-form-item>
+
+                <el-button
+                  type="primary"
+                  @click="saveQuotaSettings"
+                  :loading="savingQuota"
+                >
+                  Save Quota Settings
+                </el-button>
+              </el-form>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
 
 <script setup>
 import { useRoute, useRouter } from "vue-router";
-import { repoAPI, settingsAPI, validationAPI } from "@/utils/api";
+import { repoAPI, settingsAPI, validationAPI, quotaAPI } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useAuthStore } from "@/stores/auth";
 
@@ -285,9 +408,34 @@ const newTag = ref({
   revision: "",
   message: "",
 });
+const quotaInfo = ref(null);
+const quotaSettings = ref({
+  mode: "inherit", // "inherit" or "custom"
+  quota_gb: 0,
+});
+const recalculating = ref(false);
+const savingQuota = ref(false);
 
 const repoId = computed(() => `${route.params.namespace}/${route.params.name}`);
 const repoType = computed(() => route.params.type);
+
+const maxQuotaBytes = computed(() => {
+  if (!quotaInfo.value) return 0;
+  // If namespace has unlimited quota, allow any value
+  if (quotaInfo.value.namespace_available_bytes === null) {
+    return Number.MAX_SAFE_INTEGER / 1000 ** 3; // Very large GB value
+  }
+  // Add back current repo quota if it exists (we're replacing it)
+  let available = quotaInfo.value.namespace_available_bytes;
+  if (quotaInfo.value.quota_bytes !== null) {
+    available += quotaInfo.value.quota_bytes;
+  }
+  return available;
+});
+
+const maxQuotaGB = computed(() => {
+  return Math.floor((maxQuotaBytes.value / 1000 ** 3) * 100) / 100;
+});
 
 async function loadRepoInfo() {
   try {
@@ -588,6 +736,101 @@ async function handleCreateTag() {
   }
 }
 
+async function loadQuotaInfo() {
+  try {
+    const { data } = await quotaAPI.getRepoQuota(
+      repoType.value,
+      route.params.namespace,
+      route.params.name,
+    );
+    quotaInfo.value = data;
+
+    // Set initial quota settings based on current quota
+    if (data.quota_bytes === null) {
+      quotaSettings.value.mode = "inherit";
+      quotaSettings.value.quota_gb = 0;
+    } else {
+      quotaSettings.value.mode = "custom";
+      quotaSettings.value.quota_gb =
+        Math.round((data.quota_bytes / 1000 ** 3) * 100) / 100;
+    }
+  } catch (err) {
+    console.error("Failed to load quota info:", err);
+    ElMessage.error("Failed to load quota information");
+  }
+}
+
+async function handleRecalculateStorage() {
+  recalculating.value = true;
+  try {
+    const { data } = await quotaAPI.recalculateRepoStorage(
+      repoType.value,
+      route.params.namespace,
+      route.params.name,
+    );
+    quotaInfo.value = data;
+    ElMessage.success("Storage recalculated successfully");
+  } catch (err) {
+    console.error("Failed to recalculate storage:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to recalculate storage";
+    ElMessage.error(errorMsg);
+  } finally {
+    recalculating.value = false;
+  }
+}
+
+async function saveQuotaSettings() {
+  savingQuota.value = true;
+  try {
+    const quota_bytes =
+      quotaSettings.value.mode === "inherit"
+        ? null
+        : Math.floor(quotaSettings.value.quota_gb * 1000 ** 3);
+
+    const { data } = await quotaAPI.setRepoQuota(
+      repoType.value,
+      route.params.namespace,
+      route.params.name,
+      { quota_bytes },
+    );
+
+    quotaInfo.value = data;
+    ElMessage.success("Quota settings saved successfully");
+  } catch (err) {
+    console.error("Failed to save quota settings:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to save quota settings";
+    ElMessage.error(errorMsg);
+  } finally {
+    savingQuota.value = false;
+  }
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return "0 B";
+  if (bytes < 1000) return bytes + " B";
+  if (bytes < 1000 * 1000) return (bytes / 1000).toFixed(1) + " KB";
+  if (bytes < 1000 * 1000 * 1000)
+    return (bytes / (1000 * 1000)).toFixed(1) + " MB";
+  return (bytes / (1000 * 1000 * 1000)).toFixed(2) + " GB";
+}
+
+function getProgressColor(percentage) {
+  if (percentage >= 90) return "#f56c6c"; // Red
+  if (percentage >= 75) return "#e6a23c"; // Orange
+  return "#67c23a"; // Green
+}
+
+watch(
+  () => activeTab.value,
+  (newTab) => {
+    if (newTab === "quota" && !quotaInfo.value) {
+      loadQuotaInfo();
+    }
+  },
+);
+
 onMounted(() => {
   if (!authStore.isAuthenticated) {
     ElMessage.error("You must be logged in to access settings");
@@ -595,6 +838,10 @@ onMounted(() => {
     return;
   }
   loadRepoInfo();
+  // Load quota info if starting on quota tab
+  if (activeTab.value === "quota") {
+    loadQuotaInfo();
+  }
 });
 </script>
 

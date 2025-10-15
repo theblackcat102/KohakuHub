@@ -105,6 +105,11 @@ class Repository(BaseModel):
     full_id = CharField(index=True)  # Not unique - same full_id can exist across types
     private = BooleanField(default=False)
     owner_id = IntegerField(index=True, default=1)
+    # Repository-specific quota (NULL = inherit from namespace)
+    quota_bytes = BigIntegerField(
+        null=True
+    )  # NULL = no specific limit, inherit from namespace
+    used_bytes = BigIntegerField(default=0)
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
     class Meta:

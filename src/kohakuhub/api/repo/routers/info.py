@@ -16,7 +16,10 @@ from kohakuhub.db_operations import (
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
-from kohakuhub.auth.permissions import check_repo_read_permission
+from kohakuhub.auth.permissions import (
+    check_repo_read_permission,
+    check_repo_write_permission,
+)
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
@@ -24,6 +27,7 @@ from kohakuhub.api.repo.utils.hf import (
     hf_error_response,
     hf_repo_not_found,
 )
+from kohakuhub.api.quota.util import get_repo_storage_info
 
 logger = get_logger("REPO")
 router = APIRouter()
@@ -198,8 +202,25 @@ async def get_repo_info(
     # Format created_at
     created_at = format_hf_datetime(repo_row.created_at)
 
+    # Get storage info if user has read permission (already checked above)
+    storage_info = None
+    try:
+        if user:  # Only include storage info for authenticated users
+            storage_data = get_repo_storage_info(repo_row)
+            storage_info = {
+                "quota_bytes": storage_data["quota_bytes"],
+                "used_bytes": storage_data["used_bytes"],
+                "available_bytes": storage_data["available_bytes"],
+                "percentage_used": storage_data["percentage_used"],
+                "effective_quota_bytes": storage_data["effective_quota_bytes"],
+                "is_inheriting": storage_data["is_inheriting"],
+            }
+    except Exception as e:
+        logger.warning(f"Failed to get storage info for {repo_id}: {e}")
+        # Continue without storage info if it fails
+
     # Return repository info in HuggingFace format
-    return {
+    response = {
         "_id": repo_row.id,
         "id": repo_id,
         "modelId": repo_id if repo_type == "model" else None,
@@ -220,6 +241,12 @@ async def get_repo_info(
         "models": [],
         "datasets": [],
     }
+
+    # Add storage info if available
+    if storage_info:
+        response["storage"] = storage_info
+
+    return response
 
 
 def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = None):

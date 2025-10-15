@@ -3,13 +3,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from kohakuhub.db import Organization, User, UserOrganization
+from kohakuhub.db import Organization, Repository, User, UserOrganization
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
+from kohakuhub.auth.permissions import (
+    check_repo_read_permission,
+    check_repo_write_permission,
+)
 from kohakuhub.api.quota.util import (
     get_storage_info,
     set_quota,
     update_namespace_storage,
+    get_repo_storage_info,
+    set_repo_quota,
+    update_repository_storage,
 )
 
 logger = get_logger("QUOTA")
@@ -52,6 +59,49 @@ class SetQuotaRequest(BaseModel):
     """Request to set storage quota."""
 
     quota_bytes: int | None  # None = unlimited
+
+
+class RepoQuotaInfo(BaseModel):
+    """Repository storage quota information."""
+
+    repo_id: str
+    repo_type: str
+    namespace: str
+    # Repository-specific
+    quota_bytes: int | None
+    used_bytes: int
+    available_bytes: int | None
+    percentage_used: float | None
+    # Effective quota (what's actually enforced)
+    effective_quota_bytes: int | None
+    # Namespace context
+    namespace_quota_bytes: int | None
+    namespace_used_bytes: int
+    namespace_available_bytes: int | None
+    is_inheriting: bool
+
+
+class RepoStorageItem(BaseModel):
+    """Storage information for a single repository."""
+
+    repo_id: str
+    repo_type: str
+    name: str
+    private: bool
+    quota_bytes: int | None
+    used_bytes: int
+    percentage_used: float | None
+    is_inheriting: bool
+    created_at: str
+
+
+class RepoStorageListResponse(BaseModel):
+    """List of repositories with storage information."""
+
+    namespace: str
+    is_organization: bool
+    total_repos: int
+    repositories: list[RepoStorageItem]
 
 
 @router.get("/api/quota/{namespace}")
@@ -307,3 +357,273 @@ async def get_public_quota(
         response_data["total_used_bytes"] = info["public_used_bytes"]
 
     return PublicQuotaInfo(**response_data)
+
+
+# ============================================================================
+# Repository-specific quota endpoints
+# ============================================================================
+
+
+@router.get("/api/quota/repo/{repo_type}/{namespace}/{name}")
+async def get_repo_quota(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    user: User | None = Depends(get_optional_user),
+):
+    """Get storage quota information for a repository.
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace (user or organization)
+        name: Repository name
+        user: Current authenticated user (optional)
+
+    Returns:
+        Repository quota information
+
+    Raises:
+        HTTPException: If repository not found or not authorized
+    """
+    # Get repository
+    repo = Repository.get_or_none(
+        (Repository.repo_type == repo_type)
+        & (Repository.namespace == namespace)
+        & (Repository.name == name)
+    )
+
+    if not repo:
+        raise HTTPException(
+            404, detail={"error": f"Repository not found: {namespace}/{name}"}
+        )
+
+    # Check read permission
+    check_repo_read_permission(repo, user)
+
+    # Get storage info
+    info = get_repo_storage_info(repo)
+
+    return RepoQuotaInfo(
+        repo_id=repo.full_id,
+        repo_type=repo.repo_type,
+        namespace=repo.namespace,
+        quota_bytes=info["quota_bytes"],
+        used_bytes=info["used_bytes"],
+        available_bytes=info["available_bytes"],
+        percentage_used=info["percentage_used"],
+        effective_quota_bytes=info["effective_quota_bytes"],
+        namespace_quota_bytes=info["namespace_quota_bytes"],
+        namespace_used_bytes=info["namespace_used_bytes"],
+        namespace_available_bytes=info["namespace_available_bytes"],
+        is_inheriting=info["is_inheriting"],
+    )
+
+
+@router.put("/api/quota/repo/{repo_type}/{namespace}/{name}")
+async def update_repo_quota(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    request: SetQuotaRequest,
+    user: User = Depends(get_current_user),
+):
+    """Set storage quota for a repository.
+
+    Only users with write permission can set repository quotas.
+    Repository quota cannot exceed namespace available quota.
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace (user or organization)
+        name: Repository name
+        request: Quota settings
+        user: Current authenticated user
+
+    Returns:
+        Updated quota information
+
+    Raises:
+        HTTPException: If not authorized, repository not found, or quota exceeds limits
+    """
+    # Get repository
+    repo = Repository.get_or_none(
+        (Repository.repo_type == repo_type)
+        & (Repository.namespace == namespace)
+        & (Repository.name == name)
+    )
+
+    if not repo:
+        raise HTTPException(
+            404, detail={"error": f"Repository not found: {namespace}/{name}"}
+        )
+
+    # Check write permission
+    check_repo_write_permission(repo, user)
+
+    # Set quota with validation
+    try:
+        info = set_repo_quota(repo, request.quota_bytes)
+    except ValueError as e:
+        raise HTTPException(400, detail={"error": str(e)})
+
+    return RepoQuotaInfo(
+        repo_id=repo.full_id,
+        repo_type=repo.repo_type,
+        namespace=repo.namespace,
+        quota_bytes=info["quota_bytes"],
+        used_bytes=info["used_bytes"],
+        available_bytes=info["available_bytes"],
+        percentage_used=info["percentage_used"],
+        effective_quota_bytes=info["effective_quota_bytes"],
+        namespace_quota_bytes=info["namespace_quota_bytes"],
+        namespace_used_bytes=info["namespace_used_bytes"],
+        namespace_available_bytes=info["namespace_available_bytes"],
+        is_inheriting=info["is_inheriting"],
+    )
+
+
+@router.post("/api/quota/repo/{repo_type}/{namespace}/{name}/recalculate")
+async def recalculate_repo_storage(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    user: User = Depends(get_current_user),
+):
+    """Recalculate storage usage for a repository.
+
+    This can be useful if storage tracking gets out of sync.
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace (user or organization)
+        name: Repository name
+        user: Current authenticated user
+
+    Returns:
+        Updated quota information
+
+    Raises:
+        HTTPException: If not authorized or repository not found
+    """
+    # Get repository
+    repo = Repository.get_or_none(
+        (Repository.repo_type == repo_type)
+        & (Repository.namespace == namespace)
+        & (Repository.name == name)
+    )
+
+    if not repo:
+        raise HTTPException(
+            404, detail={"error": f"Repository not found: {namespace}/{name}"}
+        )
+
+    # Check write permission
+    check_repo_write_permission(repo, user)
+
+    # Recalculate storage
+    logger.info(f"Recalculating storage for repository {repo.full_id}")
+    await update_repository_storage(repo)
+
+    # Get updated info
+    info = get_repo_storage_info(repo)
+
+    return RepoQuotaInfo(
+        repo_id=repo.full_id,
+        repo_type=repo.repo_type,
+        namespace=repo.namespace,
+        quota_bytes=info["quota_bytes"],
+        used_bytes=info["used_bytes"],
+        available_bytes=info["available_bytes"],
+        percentage_used=info["percentage_used"],
+        effective_quota_bytes=info["effective_quota_bytes"],
+        namespace_quota_bytes=info["namespace_quota_bytes"],
+        namespace_used_bytes=info["namespace_used_bytes"],
+        namespace_available_bytes=info["namespace_available_bytes"],
+        is_inheriting=info["is_inheriting"],
+    )
+
+
+@router.get("/api/quota/{namespace}/repos")
+async def list_namespace_repo_storage(
+    namespace: str,
+    user: User = Depends(get_current_user),
+):
+    """Get detailed storage breakdown for all repositories in a namespace.
+
+    This endpoint requires write permission to the namespace as it includes
+    private repositories and detailed storage information.
+
+    Args:
+        namespace: Username or organization name
+        user: Current authenticated user
+
+    Returns:
+        List of all repositories with storage information
+
+    Raises:
+        HTTPException: If not authorized or namespace not found
+    """
+    # Check if namespace is organization
+    org = Organization.get_or_none(Organization.name == namespace)
+    is_org = org is not None
+
+    # Check if namespace exists
+    if not is_org:
+        target_user = User.get_or_none(User.username == namespace)
+        if not target_user:
+            raise HTTPException(
+                404, detail={"error": f"User or organization not found: {namespace}"}
+            )
+
+    # Authorization check - requires write permission (to see private repos)
+    if is_org:
+        # For orgs, must be a member (any role can view storage breakdown)
+        member = UserOrganization.get_or_none(
+            (UserOrganization.user == user.id)
+            & (UserOrganization.organization == org.id)
+        )
+        if not member:
+            raise HTTPException(
+                403,
+                detail={
+                    "error": "Only organization members can view detailed storage breakdown"
+                },
+            )
+    else:
+        # For users, must be themselves
+        if user.username != namespace:
+            raise HTTPException(
+                403, detail={"error": "You can only view your own storage breakdown"}
+            )
+
+    # Get all repositories for this namespace
+    repos = list(Repository.select().where(Repository.namespace == namespace))
+
+    # Build repository storage list
+    repo_storage_list = []
+    for repo in repos:
+        info = get_repo_storage_info(repo)
+
+        repo_storage_list.append(
+            RepoStorageItem(
+                repo_id=repo.full_id,
+                repo_type=repo.repo_type,
+                name=repo.name,
+                private=repo.private,
+                quota_bytes=info["quota_bytes"],
+                used_bytes=info["used_bytes"],
+                percentage_used=info["percentage_used"],
+                is_inheriting=info["is_inheriting"],
+                created_at=repo.created_at.isoformat() if repo.created_at else "",
+            )
+        )
+
+    # Sort by used_bytes descending (largest first)
+    repo_storage_list.sort(key=lambda x: x.used_bytes, reverse=True)
+
+    return RepoStorageListResponse(
+        namespace=namespace,
+        is_organization=is_org,
+        total_repos=len(repo_storage_list),
+        repositories=repo_storage_list,
+    )

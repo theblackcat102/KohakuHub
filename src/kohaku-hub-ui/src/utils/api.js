@@ -493,3 +493,47 @@ export const validationAPI = {
    */
   checkName: (data) => api.post("/api/validate/check-name", data),
 };
+
+/**
+ * Quota API
+ */
+export const quotaAPI = {
+  /**
+   * Get repository quota information
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - Repository quota info
+   */
+  getRepoQuota: (repoType, namespace, name) =>
+    api.get(`/api/quota/repo/${repoType}/${namespace}/${name}`),
+
+  /**
+   * Set repository quota
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {Object} data - { quota_bytes: number | null }
+   * @returns {Promise} - Updated quota info
+   */
+  setRepoQuota: (repoType, namespace, name, data) =>
+    api.put(`/api/quota/repo/${repoType}/${namespace}/${name}`, data),
+
+  /**
+   * Recalculate repository storage usage
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - Updated quota info
+   */
+  recalculateRepoStorage: (repoType, namespace, name) =>
+    api.post(`/api/quota/repo/${repoType}/${namespace}/${name}/recalculate`),
+
+  /**
+   * Get detailed storage breakdown for all repos in a namespace
+   * @param {string} namespace - Username or organization name
+   * @returns {Promise} - List of repositories with storage info
+   */
+  getNamespaceRepoStorage: (namespace) =>
+    api.get(`/api/quota/${namespace}/repos`),
+};

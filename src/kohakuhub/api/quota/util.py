@@ -251,8 +251,8 @@ def check_quota(
     new_usage = used_bytes + additional_bytes
 
     if new_usage > quota_bytes:
-        quota_gb = quota_bytes / (1024**3)
-        new_usage_gb = new_usage / (1024**3)
+        quota_gb = quota_bytes / (1000**3)
+        new_usage_gb = new_usage / (1000**3)
         return (
             False,
             f"{quota_type.capitalize()} storage quota exceeded: {new_usage_gb:.2f}GB would exceed limit of {quota_gb:.2f}GB",
@@ -407,3 +407,166 @@ def set_quota(
     )
 
     return get_storage_info(namespace, is_org)  # No await - it's sync now
+
+
+# ============================================================================
+# Repository-specific quota management
+# ============================================================================
+
+
+def get_repo_storage_info(repo: Repository) -> dict[str, int | float | None]:
+    """Get storage quota and usage information for a specific repository.
+
+    Args:
+        repo: Repository model instance
+
+    Returns:
+        Dict with quota information including namespace context
+    """
+    # Get namespace quota info for context
+    org = Organization.get_or_none(Organization.name == repo.namespace)
+    is_org = org is not None
+
+    if is_org:
+        namespace_quota = (
+            org.private_quota_bytes if repo.private else org.public_quota_bytes
+        )
+        namespace_used = (
+            org.private_used_bytes if repo.private else org.public_used_bytes
+        )
+    else:
+        user = User.get_or_none(User.username == repo.namespace)
+        if user:
+            namespace_quota = (
+                user.private_quota_bytes if repo.private else user.public_quota_bytes
+            )
+            namespace_used = (
+                user.private_used_bytes if repo.private else user.public_used_bytes
+            )
+        else:
+            namespace_quota = None
+            namespace_used = 0
+
+    # Calculate namespace available quota
+    namespace_available = (
+        None if namespace_quota is None else max(0, namespace_quota - namespace_used)
+    )
+
+    # Repository quota and usage
+    repo_quota = repo.quota_bytes
+    repo_used = repo.used_bytes
+
+    # Calculate effective quota (repo quota or namespace quota)
+    effective_quota = repo_quota if repo_quota is not None else namespace_quota
+
+    # Calculate availability
+    available = None if effective_quota is None else max(0, effective_quota - repo_used)
+
+    # Calculate percentage
+    percentage = (
+        None
+        if effective_quota is None or effective_quota == 0
+        else (repo_used / effective_quota * 100)
+    )
+
+    return {
+        # Repository-specific
+        "quota_bytes": repo_quota,
+        "used_bytes": repo_used,
+        "available_bytes": available,
+        "percentage_used": percentage,
+        # Effective quota (what's actually enforced)
+        "effective_quota_bytes": effective_quota,
+        # Namespace context
+        "namespace_quota_bytes": namespace_quota,
+        "namespace_used_bytes": namespace_used,
+        "namespace_available_bytes": namespace_available,
+        "is_inheriting": repo_quota is None,
+    }
+
+
+def set_repo_quota(
+    repo: Repository, quota_bytes: int | None
+) -> dict[str, int | float | None]:
+    """Set storage quota for a repository with validation.
+
+    Args:
+        repo: Repository model instance
+        quota_bytes: Quota in bytes (None = inherit from namespace)
+
+    Returns:
+        Updated storage info dict
+
+    Raises:
+        ValueError: If quota exceeds namespace available quota
+    """
+    # If setting a specific quota (not NULL), validate against namespace
+    if quota_bytes is not None:
+        # Get namespace available quota
+        org = Organization.get_or_none(Organization.name == repo.namespace)
+        is_org = org is not None
+
+        if is_org:
+            namespace_quota = (
+                org.private_quota_bytes if repo.private else org.public_quota_bytes
+            )
+            namespace_used = (
+                org.private_used_bytes if repo.private else org.public_used_bytes
+            )
+        else:
+            user = User.get_or_none(User.username == repo.namespace)
+            if user:
+                namespace_quota = (
+                    user.private_quota_bytes
+                    if repo.private
+                    else user.public_quota_bytes
+                )
+                namespace_used = (
+                    user.private_used_bytes if repo.private else user.public_used_bytes
+                )
+            else:
+                namespace_quota = None
+                namespace_used = 0
+
+        # Validate: repository quota cannot exceed namespace available
+        if namespace_quota is not None:
+            namespace_available = max(0, namespace_quota - namespace_used)
+
+            # Add back current repo quota if it was set (we're replacing it)
+            if repo.quota_bytes is not None:
+                namespace_available += repo.quota_bytes
+
+            if quota_bytes > namespace_available:
+                raise ValueError(
+                    f"Repository quota ({quota_bytes / (1000**3):.2f}GB) exceeds "
+                    f"namespace available quota ({namespace_available / (1000**3):.2f}GB)"
+                )
+
+    # Update repository quota
+    repo.quota_bytes = quota_bytes
+    repo.save()
+
+    logger.info(f"Set quota for repository {repo.full_id}: quota={quota_bytes} bytes")
+
+    return get_repo_storage_info(repo)
+
+
+async def update_repository_storage(repo: Repository) -> dict[str, int]:
+    """Recalculate and update storage usage for a repository.
+
+    Args:
+        repo: Repository model instance
+
+    Returns:
+        Dict with updated storage usage
+    """
+    storage = await calculate_repository_storage(repo)
+    total_bytes = storage["total_bytes"]
+
+    # Update repository used_bytes
+    repo.used_bytes = total_bytes
+    repo.save()
+
+    logger.info(f"Updated storage for repository {repo.full_id}: {total_bytes:,} bytes")
+
+    return {"used_bytes": total_bytes, "total_bytes": total_bytes}

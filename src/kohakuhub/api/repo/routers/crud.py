@@ -38,6 +38,7 @@ from kohakuhub.api.quota.util import (
     calculate_repository_storage,
     check_quota,
     increment_storage,
+    update_repository_storage,
 )
 from kohakuhub.api.repo.utils.gc import cleanup_repository_storage
 from kohakuhub.api.validation import normalize_name
@@ -453,6 +454,7 @@ def _update_repository_database_records(
     to_name: str,
     moving_namespace: bool,
     repo_size: int,
+    preserve_quota: bool = True,
 ) -> None:
     """Update database records for repository move (must be called within db.atomic()).
 
@@ -465,12 +467,26 @@ def _update_repository_database_records(
         to_name: Target repository name
         moving_namespace: Whether namespace is changing
         repo_size: Repository size in bytes
+        preserve_quota: Whether to preserve repository quota settings (default: True)
     """
+    # Preserve current quota settings before update
+    # NOTE: When moving to different namespace, reset quota to inherit from new namespace
+    # When staying in same namespace (rename/squash), preserve quota settings
+    if preserve_quota and not moving_namespace:
+        current_quota_bytes = repo_row.quota_bytes
+        current_used_bytes = repo_row.used_bytes
+    else:
+        # Reset quota when moving to different namespace
+        current_quota_bytes = None
+        current_used_bytes = repo_row.used_bytes  # Keep usage tracking
+
     # Update repository record
     Repository.update(
         namespace=to_namespace,
         name=to_name,
         full_id=to_id,
+        quota_bytes=current_quota_bytes,
+        used_bytes=current_used_bytes,
     ).where(Repository.id == repo_row.id).execute()
 
     # Update related file records
@@ -803,6 +819,19 @@ async def squash_repo(
             logger.warning(
                 f"Temp repository {temp_lakefs_repo} still exists after cleanup"
             )
+
+        # Step 3: Recalculate repository storage after squashing
+        # Storage might have changed after clearing history
+        final_repo = get_repository(repo_type, namespace, name)
+        if final_repo:
+            logger.info(f"Recalculating storage for squashed repository {repo_id}")
+            try:
+                await update_repository_storage(final_repo)
+                logger.info(
+                    f"Storage recalculated for {repo_id}: {final_repo.used_bytes:,} bytes"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to recalculate storage for {repo_id}: {e}")
 
         logger.success(f"Repository squashed successfully: {repo_id}")
 

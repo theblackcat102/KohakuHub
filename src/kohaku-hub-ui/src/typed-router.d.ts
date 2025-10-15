@@ -31,6 +31,7 @@ declare module 'vue-router/auto-routes' {
     '/[type]s/[namespace]/[name]/upload/[branch]': RouteRecordInfo<'/[type]s/[namespace]/[name]/upload/[branch]', '/:type()s/:namespace/:name/upload/:branch', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false> }>,
     '/[username]/': RouteRecordInfo<'/[username]/', '/:username', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/[username]/[type]': RouteRecordInfo<'/[username]/[type]', '/:username/:type', { username: ParamValue<true>, type: ParamValue<true> }, { username: ParamValue<false>, type: ParamValue<false> }>,
+    '/[username]/storage': RouteRecordInfo<'/[username]/storage', '/:username/storage', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/about': RouteRecordInfo<'/about', '/about', Record<never, never>, Record<never, never>>,
     '/contributing': RouteRecordInfo<'/contributing', '/contributing', Record<never, never>, Record<never, never>>,
     '/docs/': RouteRecordInfo<'/docs/', '/docs', Record<never, never>, Record<never, never>>,
@@ -49,6 +50,7 @@ declare module 'vue-router/auto-routes' {
     '/organizations/[orgname]/': RouteRecordInfo<'/organizations/[orgname]/', '/organizations/:orgname', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
     '/organizations/[orgname]/[type]': RouteRecordInfo<'/organizations/[orgname]/[type]', '/organizations/:orgname/:type', { orgname: ParamValue<true>, type: ParamValue<true> }, { orgname: ParamValue<false>, type: ParamValue<false> }>,
     '/organizations/[orgname]/settings': RouteRecordInfo<'/organizations/[orgname]/settings', '/organizations/:orgname/settings', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
+    '/organizations/[orgname]/storage': RouteRecordInfo<'/organizations/[orgname]/storage', '/organizations/:orgname/storage', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
     '/organizations/new': RouteRecordInfo<'/organizations/new', '/organizations/new', Record<never, never>, Record<never, never>>,
     '/privacy': RouteRecordInfo<'/privacy', '/privacy', Record<never, never>, Record<never, never>>,
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
@@ -118,6 +120,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/[username]/[type].vue': {
       routes: '/[username]/[type]'
+      views: never
+    }
+    'src/pages/[username]/storage.vue': {
+      routes: '/[username]/storage'
       views: never
     }
     'src/pages/about.vue': {
@@ -190,6 +196,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/organizations/[orgname]/settings.vue': {
       routes: '/organizations/[orgname]/settings'
+      views: never
+    }
+    'src/pages/organizations/[orgname]/storage.vue': {
+      routes: '/organizations/[orgname]/storage'
       views: never
     }
     'src/pages/organizations/new.vue': {

@@ -117,6 +117,18 @@
               </span>
             </div>
           </div>
+
+          <!-- View Details Button (only for users with write permission) -->
+          <div v-if="quotaInfo.can_see_private" class="mt-4">
+            <el-button
+              size="small"
+              @click="$router.push(`/${username}/storage`)"
+              class="w-full"
+            >
+              <div class="i-carbon-chart-bar inline-block mr-1" />
+              View Details
+            </el-button>
+          </div>
         </div>
 
         <!-- Stats Summary / Tab Navigation -->

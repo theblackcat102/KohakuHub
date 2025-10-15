@@ -490,6 +490,56 @@
             </div>
           </div>
         </div>
+
+        <!-- Storage -->
+        <div v-if="repoInfo?.storage" class="card">
+          <h3 class="font-semibold mb-3">Storage</h3>
+          <div class="space-y-3 text-sm">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-gray-600 dark:text-gray-400">Usage:</span>
+                <span class="font-medium">{{
+                  formatSize(repoInfo.storage.used_bytes)
+                }}</span>
+              </div>
+              <div
+                v-if="repoInfo.storage.effective_quota_bytes"
+                class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400"
+              >
+                <span>Limit:</span>
+                <span>{{
+                  formatSize(repoInfo.storage.effective_quota_bytes)
+                }}</span>
+              </div>
+              <div
+                v-if="
+                  repoInfo.storage.percentage_used !== null &&
+                  repoInfo.storage.percentage_used !== undefined
+                "
+                class="mt-2"
+              >
+                <el-progress
+                  :percentage="
+                    Math.min(
+                      100,
+                      Math.round(repoInfo.storage.percentage_used * 100) / 100,
+                    )
+                  "
+                  :color="getProgressColor(repoInfo.storage.percentage_used)"
+                  :stroke-width="6"
+                  :format="(percentage) => `${percentage.toFixed(2)}%`"
+                />
+              </div>
+              <div
+                v-if="repoInfo.storage.is_inheriting"
+                class="mt-2 text-xs text-gray-500 dark:text-gray-400"
+              >
+                <div class="i-carbon-information inline-block mr-1" />
+                Inheriting from {{ namespace }} quota
+              </div>
+            </div>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -698,11 +748,11 @@ function formatDate(date) {
 
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return "-";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  if (bytes < 1024 * 1024 * 1024)
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+  if (bytes < 1000) return bytes + " B";
+  if (bytes < 1000 * 1000) return (bytes / 1000).toFixed(1) + " KB";
+  if (bytes < 1000 * 1000 * 1000)
+    return (bytes / (1000 * 1000)).toFixed(1) + " MB";
+  return (bytes / (1000 * 1000 * 1000)).toFixed(1) + " GB";
 }
 
 function formatLastModified(dateString) {
@@ -899,6 +949,12 @@ function downloadRepo() {
 function formatCommitDate(timestamp) {
   if (!timestamp) return "Unknown";
   return dayjs.unix(timestamp).fromNow();
+}
+
+function getProgressColor(percentage) {
+  if (percentage >= 90) return "#f56c6c"; // Red
+  if (percentage >= 75) return "#e6a23c"; // Orange
+  return "#67c23a"; // Green
 }
 
 async function createReadme() {
