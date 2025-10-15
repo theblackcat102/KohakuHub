@@ -509,7 +509,9 @@ onMounted(() => {
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under AGPL-3.0.
+By contributing, you agree that your contributions will be licensed under AGPL-3.0 or specialized non-commercial license (under specific modules).
+
+You agree that the owner of this project (KohakuBlueLeaf) has the rights to provide commercial exemption licenses to ANY possible customers.
 
 ---
 
