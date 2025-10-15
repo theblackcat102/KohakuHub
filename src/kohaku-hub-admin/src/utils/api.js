@@ -363,3 +363,53 @@ export async function recalculateAllRepoStorage(
   });
   return response.data;
 }
+
+// ===== Invitation Management =====
+
+/**
+ * Create registration invitation
+ * @param {string} token - Admin token
+ * @param {Object} invitationData - Invitation data
+ * @param {number|null} invitationData.org_id - Optional organization ID to join
+ * @param {string} invitationData.role - Role in organization (if org_id provided)
+ * @param {number|null} invitationData.max_usage - Max usage (null=one-time, -1=unlimited, N=max)
+ * @param {number} invitationData.expires_days - Days until expiration
+ * @returns {Promise<Object>} Created invitation
+ */
+export async function createRegisterInvitation(token, invitationData) {
+  const client = createAdminClient(token);
+  const response = await client.post("/invitations/register", invitationData);
+  return response.data;
+}
+
+/**
+ * List all invitations
+ * @param {string} token - Admin token
+ * @param {Object} params - Query parameters
+ * @param {string} params.action - Filter by action type
+ * @param {number} params.limit - Maximum number to return
+ * @param {number} params.offset - Offset for pagination
+ * @returns {Promise<Object>} Invitations list
+ */
+export async function listInvitations(
+  token,
+  { action, limit = 100, offset = 0 } = {},
+) {
+  const client = createAdminClient(token);
+  const response = await client.get("/invitations", {
+    params: { action, limit, offset },
+  });
+  return response.data;
+}
+
+/**
+ * Delete invitation
+ * @param {string} token - Admin token
+ * @param {string} invitationToken - Invitation token to delete
+ * @returns {Promise<Object>} Deletion result
+ */
+export async function deleteInvitation(token, invitationToken) {
+  const client = createAdminClient(token);
+  const response = await client.delete(`/invitations/${invitationToken}`);
+  return response.data;
+}

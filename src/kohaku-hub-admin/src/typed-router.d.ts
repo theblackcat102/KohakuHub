@@ -20,6 +20,7 @@ declare module 'vue-router/auto-routes' {
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
     '/commits': RouteRecordInfo<'/commits', '/commits', Record<never, never>, Record<never, never>>,
+    '/invitations': RouteRecordInfo<'/invitations', '/invitations', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/quotas': RouteRecordInfo<'/quotas', '/quotas', Record<never, never>, Record<never, never>>,
     '/repositories': RouteRecordInfo<'/repositories', '/repositories', Record<never, never>, Record<never, never>>,
@@ -44,6 +45,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/commits.vue': {
       routes: '/commits'
+      views: never
+    }
+    'src/pages/invitations.vue': {
+      routes: '/invitations'
       views: never
     }
     'src/pages/login.vue': {

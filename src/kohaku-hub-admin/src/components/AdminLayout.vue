@@ -18,6 +18,7 @@ function handleLogout() {
 const menuItems = [
   { path: "/", label: "Dashboard", icon: "i-carbon-dashboard" },
   { path: "/users", label: "Users", icon: "i-carbon-user-multiple" },
+  { path: "/invitations", label: "Invitations", icon: "i-carbon-email" },
   { path: "/repositories", label: "Repositories", icon: "i-carbon-data-base" },
   { path: "/commits", label: "Commits", icon: "i-carbon-version" },
   { path: "/storage", label: "Storage", icon: "i-carbon-data-volume" },
