@@ -16,6 +16,19 @@
       <!-- General Settings Tab -->
       <el-tab-pane label="General" name="general">
         <div class="max-w-2xl">
+          <!-- Avatar Section -->
+          <div class="card mb-4">
+            <h2 class="text-xl font-semibold mb-4">Organization Avatar</h2>
+            <AvatarUpload
+              entity-type="org"
+              :entity-name="$route.params.org"
+              :upload-function="settingsAPI.uploadOrgAvatar"
+              :delete-function="settingsAPI.deleteOrgAvatar"
+              @uploaded="avatarKey++"
+              @deleted="avatarKey++"
+            />
+          </div>
+
           <div class="card">
             <h2 class="text-xl font-semibold mb-4">Organization Profile</h2>
             <el-form label-position="top">
@@ -370,6 +383,7 @@ import { orgAPI, invitationAPI, settingsAPI } from "@/utils/api";
 import { copyToClipboard } from "@/utils/clipboard";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
+import AvatarUpload from "@/components/profile/AvatarUpload.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -380,6 +394,7 @@ const loadingMembers = ref(false);
 const loadingInvitations = ref(false);
 const inviting = ref(false);
 const showInviteDialog = ref(false);
+const avatarKey = ref(0); // Force re-render avatar
 
 const originalProfile = ref(null);
 const generalForm = ref({

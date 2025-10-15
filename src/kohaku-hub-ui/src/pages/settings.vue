@@ -7,6 +7,19 @@
       <!-- Profile -->
       <el-tab-pane label="Profile" name="profile">
         <div class="max-w-2xl">
+          <!-- Avatar Section -->
+          <div class="card mb-4">
+            <h2 class="text-xl font-semibold mb-4">Avatar</h2>
+            <AvatarUpload
+              entity-type="user"
+              :entity-name="user?.username"
+              :upload-function="settingsAPI.uploadUserAvatar"
+              :delete-function="settingsAPI.deleteUserAvatar"
+              @uploaded="avatarKey++"
+              @deleted="avatarKey++"
+            />
+          </div>
+
           <div class="card">
             <h2 class="text-xl font-semibold mb-4">Profile Information</h2>
             <el-form label-position="top">
@@ -199,6 +212,7 @@ import { authAPI, settingsAPI } from "@/utils/api";
 import { copyToClipboard } from "@/utils/clipboard";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
+import AvatarUpload from "@/components/profile/AvatarUpload.vue";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -209,6 +223,7 @@ const newTokenName = ref("");
 const newToken = ref("");
 const tokens = ref([]);
 const userOrgs = ref([]);
+const avatarKey = ref(0); // Force re-render avatar on upload/delete
 const profileForm = ref({
   email: "",
   full_name: "",

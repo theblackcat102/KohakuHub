@@ -18,7 +18,14 @@ export default defineConfig({
       exclude: ['**/components/**']
     }),
 
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          // Treat cropper custom elements as custom elements, not Vue components
+          isCustomElement: (tag) => tag.startsWith('cropper-')
+        }
+      }
+    }),
 
     // Auto import APIs
     AutoImport({

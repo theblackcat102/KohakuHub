@@ -100,7 +100,15 @@
           <!-- User Dropdown -->
           <el-dropdown>
             <div class="flex items-center gap-2 cursor-pointer">
-              <div class="i-carbon-user-avatar text-2xl" />
+              <!-- User Avatar -->
+              <img
+                v-if="hasAvatar"
+                :src="`/api/users/${username}/avatar?t=${Date.now()}`"
+                :alt="`${username} avatar`"
+                class="w-8 h-8 rounded-full object-cover border border-gray-300 dark:border-gray-600"
+                @error="hasAvatar = false"
+              />
+              <div v-else class="i-carbon-user-avatar text-2xl" />
               <span>{{ username }}</span>
               <div class="i-carbon-chevron-down" />
             </div>
@@ -284,8 +292,21 @@
 
           <!-- User Options -->
           <div class="px-4">
-            <div class="px-4 text-xs text-gray-500 dark:text-gray-400 mb-2">
-              {{ username }}
+            <div class="flex items-center gap-2 px-4 mb-4">
+              <!-- User Avatar in Mobile Menu -->
+              <img
+                v-if="hasAvatar"
+                :src="`/api/users/${username}/avatar?t=${Date.now()}`"
+                :alt="`${username} avatar`"
+                class="w-12 h-12 rounded-full object-cover border-2 border-gray-300 dark:border-gray-600"
+                @error="hasAvatar = false"
+              />
+              <div v-else class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                <div class="i-carbon-user-avatar text-2xl text-gray-400" />
+              </div>
+              <div class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                {{ username }}
+              </div>
             </div>
             <div
               @click="
@@ -371,6 +392,7 @@ const themeStore = useThemeStore();
 const { isAuthenticated, username } = storeToRefs(authStore);
 const router = useRouter();
 const mobileMenuOpen = ref(false);
+const hasAvatar = ref(true);
 
 function createNew(type) {
   router.push({

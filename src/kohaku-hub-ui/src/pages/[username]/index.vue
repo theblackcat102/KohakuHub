@@ -24,7 +24,16 @@
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div class="card">
           <div class="flex items-center gap-3 mb-4">
-            <div class="i-carbon-user-avatar text-5xl text-gray-400" />
+            <!-- Avatar -->
+            <img
+              v-if="hasAvatar"
+              :src="`/api/users/${username}/avatar?t=${Date.now()}`"
+              :alt="`${username} avatar`"
+              class="w-20 h-20 rounded-full object-cover"
+              @error="hasAvatar = false"
+            />
+            <div v-else class="i-carbon-user-avatar text-5xl text-gray-400" />
+
             <div>
               <h2 class="text-xl font-bold">{{ username }}</h2>
               <p class="text-sm text-gray-600 dark:text-gray-400">
@@ -522,6 +531,7 @@ const repos = ref({ models: [], datasets: [], spaces: [] });
 const userCard = ref("");
 const userNotFound = ref(false);
 const quotaInfo = ref(null);
+const hasAvatar = ref(true); // Assume avatar exists, will be set to false on error
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 

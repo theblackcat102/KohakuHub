@@ -438,6 +438,49 @@ export const settingsAPI = {
   getOrgProfile: (orgName) => api.get(`/api/organizations/${orgName}/profile`),
 
   /**
+   * Upload user avatar
+   * @param {string} username - Username
+   * @param {File} file - Image file
+   * @returns {Promise} - { success: boolean, message: string, size_bytes: number }
+   */
+  uploadUserAvatar: (username, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/api/users/${username}/avatar`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  /**
+   * Delete user avatar
+   * @param {string} username - Username
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  deleteUserAvatar: (username) => api.delete(`/api/users/${username}/avatar`),
+
+  /**
+   * Upload organization avatar
+   * @param {string} orgName - Organization name
+   * @param {File} file - Image file
+   * @returns {Promise} - { success: boolean, message: string, size_bytes: number }
+   */
+  uploadOrgAvatar: (orgName, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/api/organizations/${orgName}/avatar`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  /**
+   * Delete organization avatar
+   * @param {string} orgName - Organization name
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  deleteOrgAvatar: (orgName) =>
+    api.delete(`/api/organizations/${orgName}/avatar`),
+
+  /**
    * Update repository settings
    * @param {string} repoType - Repository type (model/dataset/space)
    * @param {string} namespace - Repository namespace

@@ -18,7 +18,16 @@
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div class="card">
           <div class="flex items-center gap-3 mb-4">
-            <div class="i-carbon-group text-5xl text-gray-400" />
+            <!-- Avatar -->
+            <img
+              v-if="hasAvatar"
+              :src="`/api/organizations/${orgname}/avatar?t=${Date.now()}`"
+              :alt="`${orgname} avatar`"
+              class="w-20 h-20 rounded-full object-cover"
+              @error="hasAvatar = false"
+            />
+            <div v-else class="i-carbon-group text-5xl text-gray-400" />
+
             <div>
               <h2 class="text-xl font-bold">{{ orgname }}</h2>
               <p class="text-sm text-gray-600 dark:text-gray-400">
@@ -98,7 +107,14 @@
               class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               @click="goToUser(member.user)"
             >
-              <div class="i-carbon-user-avatar text-2xl text-gray-400" />
+              <!-- Member Avatar -->
+              <img
+                :src="`/api/users/${member.user}/avatar?t=${Date.now()}`"
+                :alt="`${member.user} avatar`"
+                class="w-8 h-8 rounded-full object-cover border border-gray-300 dark:border-gray-600"
+                @error="(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }"
+              />
+              <div class="i-carbon-user-avatar text-2xl text-gray-400" style="display: none" />
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium truncate">
                   {{ member.user }}
@@ -570,6 +586,7 @@ const repos = ref({ model: [], dataset: [], space: [] });
 const orgCard = ref("");
 const quotaInfo = ref(null);
 const userRole = ref(null);
+const hasAvatar = ref(true); // Assume avatar exists, will be set to false on error
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 
