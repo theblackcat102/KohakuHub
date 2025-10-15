@@ -70,7 +70,10 @@ def migrate_sqlite():
 
     # Invitation multi-use fields
     for column, sql in [
-        ("max_usage", "ALTER TABLE invitation ADD COLUMN max_usage INTEGER DEFAULT NULL"),
+        (
+            "max_usage",
+            "ALTER TABLE invitation ADD COLUMN max_usage INTEGER DEFAULT NULL",
+        ),
         (
             "usage_count",
             "ALTER TABLE invitation ADD COLUMN usage_count INTEGER DEFAULT 0",
@@ -109,7 +112,10 @@ def migrate_postgres():
 
     # Invitation multi-use fields
     for column, sql in [
-        ("max_usage", "ALTER TABLE invitation ADD COLUMN max_usage INTEGER DEFAULT NULL"),
+        (
+            "max_usage",
+            "ALTER TABLE invitation ADD COLUMN max_usage INTEGER DEFAULT NULL",
+        ),
         (
             "usage_count",
             "ALTER TABLE invitation ADD COLUMN usage_count INTEGER DEFAULT 0",

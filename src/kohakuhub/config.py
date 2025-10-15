@@ -178,7 +178,9 @@ def load_config(path: str = None) -> Config:
                 "KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION", "false"
             ).lower()
             == "true",
-            invitation_only=os.environ.get("KOHAKU_HUB_INVITATION_ONLY", "false").lower()
+            invitation_only=os.environ.get(
+                "KOHAKU_HUB_INVITATION_ONLY", "false"
+            ).lower()
             == "true",
             session_secret=os.environ.get(
                 "KOHAKU_HUB_SESSION_SECRET", "change-me-in-production"

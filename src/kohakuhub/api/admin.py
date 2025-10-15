@@ -407,7 +407,9 @@ async def create_register_invitation_admin(
         # Verify organization exists
         org = Organization.get_or_none(Organization.id == request.org_id)
         if not org:
-            raise HTTPException(404, detail={"error": f"Organization not found: {request.org_id}"})
+            raise HTTPException(
+                404, detail={"error": f"Organization not found: {request.org_id}"}
+            )
 
         org_name = org.name
     else:
@@ -544,7 +546,9 @@ async def delete_invitation_admin(
 
     delete_invitation(invitation)
 
-    logger.info(f"Admin deleted invitation: {token[:8]}... (action={invitation.action})")
+    logger.info(
+        f"Admin deleted invitation: {token[:8]}... (action={invitation.action})"
+    )
 
     return {"success": True, "message": "Invitation deleted successfully"}
 

@@ -127,7 +127,12 @@ async def create_org_invitation(
     # Send email if SMTP enabled and email provided (async)
     if req.email:
         await asyncio.to_thread(
-            send_org_invitation_email, req.email, org.name, user.username, token, req.role
+            send_org_invitation_email,
+            req.email,
+            org.name,
+            user.username,
+            token,
+            req.role,
         )
 
     # Determine invitation type for logging

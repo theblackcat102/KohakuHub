@@ -597,7 +597,10 @@ def check_invitation_available(invitation: Invitation) -> tuple[bool, str | None
     else:
         # Limited use (check count)
         if invitation.usage_count >= invitation.max_usage:
-            return False, f"Invitation has reached maximum usage limit ({invitation.max_usage})"
+            return (
+                False,
+                f"Invitation has reached maximum usage limit ({invitation.max_usage})",
+            )
 
     return True, None
 
