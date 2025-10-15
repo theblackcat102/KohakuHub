@@ -40,7 +40,10 @@
         </el-button>
       </el-form>
 
-      <div class="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+      <div
+        v-if="!siteConfig?.invitation_only"
+        class="mt-4 text-center text-sm text-gray-600 dark:text-gray-400"
+      >
         Don't have an account?
         <RouterLink
           to="/register"
@@ -49,18 +52,32 @@
           Sign up
         </RouterLink>
       </div>
+
+      <!-- Invitation-only message -->
+      <div
+        v-else
+        class="mt-4 text-center text-sm text-gray-600 dark:text-gray-400"
+      >
+        <div class="i-carbon-locked inline-block mr-1" />
+        Registration is invitation-only. Contact the administrator if you don't
+        have an account.
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { useAuthStore } from "@/stores/auth";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import axios from "axios";
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const formRef = ref(null);
 const loading = ref(false);
+const siteConfig = ref(null);
 
 const form = reactive({
   username: "",
@@ -76,6 +93,15 @@ const rules = {
   ],
 };
 
+async function loadSiteConfig() {
+  try {
+    const { data } = await axios.get("/api/site-config");
+    siteConfig.value = data;
+  } catch (err) {
+    console.error("Failed to load site config:", err);
+  }
+}
+
 async function handleSubmit() {
   if (!formRef.value) return;
 
@@ -86,7 +112,14 @@ async function handleSubmit() {
     try {
       await authStore.login(form);
       ElMessage.success("Login successful");
-      router.push("/");
+
+      // Check for return URL query parameter
+      const returnUrl = route.query.return;
+      if (returnUrl) {
+        router.push(decodeURIComponent(returnUrl));
+      } else {
+        router.push("/");
+      }
     } catch (err) {
       ElMessage.error(err.response?.data?.detail || "Login failed");
     } finally {
@@ -94,4 +127,8 @@ async function handleSubmit() {
     }
   });
 }
+
+onMounted(() => {
+  loadSiteConfig();
+});
 </script>

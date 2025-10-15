@@ -44,9 +44,11 @@ declare module 'vue-router/auto-routes' {
     '/docs/ports': RouteRecordInfo<'/docs/ports', '/docs/ports', Record<never, never>, Record<never, never>>,
     '/docs/setup': RouteRecordInfo<'/docs/setup', '/docs/setup', Record<never, never>, Record<never, never>>,
     '/get-started': RouteRecordInfo<'/get-started', '/get-started', Record<never, never>, Record<never, never>>,
+    '/invite/[token]': RouteRecordInfo<'/invite/[token]', '/invite/:token', { token: ParamValue<true> }, { token: ParamValue<false> }>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
     '/organizations/': RouteRecordInfo<'/organizations/', '/organizations', Record<never, never>, Record<never, never>>,
+    '/organizations/[org]/settings': RouteRecordInfo<'/organizations/[org]/settings', '/organizations/:org/settings', { org: ParamValue<true> }, { org: ParamValue<false> }>,
     '/organizations/[orgname]/': RouteRecordInfo<'/organizations/[orgname]/', '/organizations/:orgname', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
     '/organizations/[orgname]/[type]': RouteRecordInfo<'/organizations/[orgname]/[type]', '/organizations/:orgname/:type', { orgname: ParamValue<true>, type: ParamValue<true> }, { orgname: ParamValue<false>, type: ParamValue<false> }>,
     '/organizations/[orgname]/settings': RouteRecordInfo<'/organizations/[orgname]/settings', '/organizations/:orgname/settings', { orgname: ParamValue<true> }, { orgname: ParamValue<false> }>,
@@ -174,6 +176,10 @@ declare module 'vue-router/auto-routes' {
       routes: '/get-started'
       views: never
     }
+    'src/pages/invite/[token].vue': {
+      routes: '/invite/[token]'
+      views: never
+    }
     'src/pages/login.vue': {
       routes: '/login'
       views: never
@@ -184,6 +190,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/organizations/index.vue': {
       routes: '/organizations/'
+      views: never
+    }
+    'src/pages/organizations/[org]/settings.vue': {
+      routes: '/organizations/[org]/settings'
       views: never
     }
     'src/pages/organizations/[orgname]/index.vue': {

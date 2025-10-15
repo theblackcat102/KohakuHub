@@ -27,6 +27,60 @@
                   Not verified
                 </div>
               </el-form-item>
+              <el-form-item label="Full Name">
+                <el-input
+                  v-model="profileForm.full_name"
+                  placeholder="Your full name"
+                />
+              </el-form-item>
+              <el-form-item label="Bio">
+                <el-input
+                  v-model="profileForm.bio"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="A short bio about yourself"
+                  maxlength="500"
+                  show-word-limit
+                />
+              </el-form-item>
+              <el-form-item label="Website">
+                <el-input
+                  v-model="profileForm.website"
+                  placeholder="https://example.com"
+                />
+              </el-form-item>
+              <el-form-item label="Social Media">
+                <div class="space-y-2">
+                  <el-input
+                    v-model="profileForm.social_media.twitter_x"
+                    placeholder="Twitter/X username"
+                  >
+                    <template #prepend>
+                      <div class="i-carbon-logo-x w-4 h-4" />
+                    </template>
+                  </el-input>
+                  <el-input
+                    v-model="profileForm.social_media.threads"
+                    placeholder="Threads username"
+                  >
+                    <template #prepend>Threads</template>
+                  </el-input>
+                  <el-input
+                    v-model="profileForm.social_media.github"
+                    placeholder="GitHub username"
+                  >
+                    <template #prepend>
+                      <div class="i-carbon-logo-github w-4 h-4" />
+                    </template>
+                  </el-input>
+                  <el-input
+                    v-model="profileForm.social_media.huggingface"
+                    placeholder="HuggingFace username"
+                  >
+                    <template #prepend>🤗</template>
+                  </el-input>
+                </div>
+              </el-form-item>
               <el-button
                 type="primary"
                 @click="updateProfile"
@@ -138,6 +192,7 @@
 </template>
 
 <script setup>
+import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/auth";
 import { useRouter } from "vue-router";
 import { authAPI, settingsAPI } from "@/utils/api";
@@ -156,10 +211,27 @@ const tokens = ref([]);
 const userOrgs = ref([]);
 const profileForm = ref({
   email: "",
+  full_name: "",
+  bio: "",
+  website: "",
+  social_media: {
+    twitter_x: "",
+    threads: "",
+    github: "",
+    huggingface: "",
+  },
 });
 
 const hasProfileChanges = computed(() => {
-  return profileForm.value.email !== user.value?.email;
+  if (!user.value) return false;
+  return (
+    profileForm.value.email !== user.value.email ||
+    profileForm.value.full_name !== (user.value.full_name || "") ||
+    profileForm.value.bio !== (user.value.bio || "") ||
+    profileForm.value.website !== (user.value.website || "") ||
+    JSON.stringify(profileForm.value.social_media) !==
+      JSON.stringify(user.value.social_media || {})
+  );
 });
 
 function formatDate(date) {
@@ -188,14 +260,39 @@ async function updateProfile() {
   try {
     await settingsAPI.updateUserSettings(user.value.username, {
       email: profileForm.value.email,
+      full_name: profileForm.value.full_name || null,
+      bio: profileForm.value.bio || null,
+      website: profileForm.value.website || null,
+      social_media: profileForm.value.social_media,
     });
     ElMessage.success("Profile updated successfully");
     // Refresh user data
     await authStore.fetchUserInfo();
-    profileForm.value.email = user.value.email;
+    // Update form with latest data
+    loadUserProfile();
   } catch (err) {
     console.error("Failed to update profile:", err);
-    ElMessage.error("Failed to update profile");
+    ElMessage.error(err.response?.data?.detail || "Failed to update profile");
+  }
+}
+
+async function loadUserProfile() {
+  if (!user.value) return;
+
+  try {
+    const { data } = await settingsAPI.getUserProfile(user.value.username);
+    profileForm.value.email = user.value.email;
+    profileForm.value.full_name = data.full_name || "";
+    profileForm.value.bio = data.bio || "";
+    profileForm.value.website = data.website || "";
+    profileForm.value.social_media = data.social_media || {
+      twitter_x: "",
+      threads: "",
+      github: "",
+      huggingface: "",
+    };
+  } catch (err) {
+    console.error("Failed to load user profile:", err);
   }
 }
 
@@ -248,16 +345,14 @@ async function copyToken() {
 }
 
 onMounted(() => {
-  if (user.value) {
-    profileForm.value.email = user.value.email;
-  }
+  loadUserProfile();
   loadTokens();
   loadUserOrgs();
 });
 
 watch(user, (newUser) => {
   if (newUser) {
-    profileForm.value.email = newUser.email;
+    loadUserProfile();
   }
 });
 </script>

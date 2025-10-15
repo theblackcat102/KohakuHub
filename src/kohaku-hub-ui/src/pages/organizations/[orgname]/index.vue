@@ -1,6 +1,21 @@
 <!-- src/pages/organizations/[orgname]/index.vue -->
 <template>
   <div class="container-main">
+    <!-- Header with Settings Button -->
+    <div
+      v-if="isAdmin"
+      class="flex items-center justify-end mb-4"
+    >
+      <el-button
+        type="primary"
+        size="small"
+        @click="$router.push(`/organizations/${orgname}/settings`)"
+      >
+        <div class="i-carbon-settings mr-1" />
+        Organization Settings
+      </el-button>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       <!-- Sidebar with members -->
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
@@ -15,15 +30,57 @@
             </div>
           </div>
 
-          <div v-if="orgInfo" class="space-y-2 text-sm">
-            <div class="text-gray-600 dark:text-gray-400">
-              {{ orgInfo.description || "No description" }}
+          <div v-if="profileInfo" class="space-y-3 text-sm">
+            <!-- Description -->
+            <p
+              v-if="profileInfo.description"
+              class="text-gray-700 dark:text-gray-300"
+            >
+              {{ profileInfo.description }}
+            </p>
+
+            <!-- Bio -->
+            <p
+              v-if="profileInfo.bio"
+              class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"
+            >
+              {{ profileInfo.bio }}
+            </p>
+
+            <!-- Website -->
+            <a
+              v-if="profileInfo.website"
+              :href="profileInfo.website"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <div class="i-carbon-link" />
+              {{ profileInfo.website.replace(/^https?:\/\//, "") }}
+            </a>
+
+            <!-- Social Media -->
+            <SocialLinks
+              v-if="profileInfo.social_media"
+              :social-media="profileInfo.social_media"
+            />
+
+            <!-- Created Date -->
+            <div
+              class="flex items-center gap-2 text-gray-600 dark:text-gray-400 pt-2 border-t"
+            >
+              <div class="i-carbon-calendar" />
+              Created {{ formatDate(profileInfo.created_at) }}
             </div>
+
+            <!-- Member Count -->
             <div
               class="flex items-center gap-2 text-gray-600 dark:text-gray-400"
             >
-              <div class="i-carbon-calendar" />
-              Created {{ formatDate(orgInfo.created_at) }}
+              <div class="i-carbon-user-multiple" />
+              {{ profileInfo.member_count || members.length }} member{{
+                (profileInfo.member_count || members.length) !== 1 ? "s" : ""
+              }}
             </div>
           </div>
         </div>
@@ -496,10 +553,11 @@
 </template>
 
 <script setup>
-import { repoAPI, orgAPI } from "@/utils/api";
+import { repoAPI, orgAPI, settingsAPI } from "@/utils/api";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
+import SocialLinks from "@/components/profile/SocialLinks.vue";
 import axios from "axios";
 
 dayjs.extend(relativeTime);
@@ -509,12 +567,18 @@ const router = useRouter();
 const orgname = computed(() => route.params.orgname);
 
 const orgInfo = ref(null);
+const profileInfo = ref(null);
 const members = ref([]);
 const repos = ref({ model: [], dataset: [], space: [] });
 const orgCard = ref("");
 const quotaInfo = ref(null);
+const userRole = ref(null);
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
+
+const isAdmin = computed(() => {
+  return userRole.value && ["admin", "super-admin"].includes(userRole.value);
+});
 
 function getCount(type) {
   return repos.value[type]?.length || 0;
@@ -618,8 +682,32 @@ async function loadQuotaInfo() {
   }
 }
 
+async function loadProfileInfo() {
+  try {
+    const { data } = await settingsAPI.getOrgProfile(orgname.value);
+    profileInfo.value = data;
+  } catch (err) {
+    console.error("Failed to load profile info:", err);
+    // Profile info is optional
+    profileInfo.value = null;
+  }
+}
+
+async function checkUserRole() {
+  try {
+    const { data } = await settingsAPI.whoamiV2();
+    const org = data.orgs?.find((o) => o.name === orgname.value);
+    userRole.value = org?.roleInOrg || org?.role || null;
+  } catch (err) {
+    // Not logged in or error - user is not a member
+    userRole.value = null;
+  }
+}
+
 onMounted(() => {
+  checkUserRole();
   loadOrgInfo();
+  loadProfileInfo();
   loadMembers();
   loadRepos();
   loadOrgCard();

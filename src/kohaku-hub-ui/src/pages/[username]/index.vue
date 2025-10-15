@@ -27,16 +27,45 @@
             <div class="i-carbon-user-avatar text-5xl text-gray-400" />
             <div>
               <h2 class="text-xl font-bold">{{ username }}</h2>
-              <p class="text-sm text-gray-600 dark:text-gray-400">User</p>
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                {{ profileInfo?.full_name || "User" }}
+              </p>
             </div>
           </div>
 
-          <div class="space-y-2 text-sm">
+          <div v-if="profileInfo" class="space-y-3 text-sm">
+            <!-- Bio -->
+            <p
+              v-if="profileInfo.bio"
+              class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"
+            >
+              {{ profileInfo.bio }}
+            </p>
+
+            <!-- Website -->
+            <a
+              v-if="profileInfo.website"
+              :href="profileInfo.website"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <div class="i-carbon-link" />
+              {{ profileInfo.website.replace(/^https?:\/\//, "") }}
+            </a>
+
+            <!-- Social Media -->
+            <SocialLinks
+              v-if="profileInfo.social_media"
+              :social-media="profileInfo.social_media"
+            />
+
+            <!-- Joined Date -->
             <div
-              class="flex items-center gap-2 text-gray-600 dark:text-gray-400"
+              class="flex items-center gap-2 text-gray-600 dark:text-gray-400 pt-2 border-t"
             >
               <div class="i-carbon-calendar" />
-              Joined {{ formatDate(userInfo?.created_at) }}
+              Joined {{ formatDate(profileInfo.created_at) }}
             </div>
           </div>
         </div>
@@ -474,8 +503,9 @@
 </template>
 
 <script setup>
-import { repoAPI, orgAPI } from "@/utils/api";
+import { repoAPI, orgAPI, settingsAPI } from "@/utils/api";
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
+import SocialLinks from "@/components/profile/SocialLinks.vue";
 import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -487,6 +517,7 @@ const router = useRouter();
 const username = computed(() => route.params.username);
 
 const userInfo = ref(null);
+const profileInfo = ref(null);
 const repos = ref({ models: [], datasets: [], spaces: [] });
 const userCard = ref("");
 const userNotFound = ref(false);
@@ -592,6 +623,17 @@ async function loadQuotaInfo() {
   }
 }
 
+async function loadProfileInfo() {
+  try {
+    const { data } = await settingsAPI.getUserProfile(username.value);
+    profileInfo.value = data;
+  } catch (err) {
+    console.error("Failed to load profile info:", err);
+    // Profile info is optional
+    profileInfo.value = null;
+  }
+}
+
 onMounted(async () => {
   // Check if this is actually an organization
   const isOrg = await checkIfOrganization();
@@ -604,8 +646,9 @@ onMounted(async () => {
     return;
   }
 
-  // Load user card and quota info
+  // Load user card, profile, and quota info
   loadUserCard();
+  loadProfileInfo();
   loadQuotaInfo();
 });
 </script>

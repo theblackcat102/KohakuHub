@@ -36,7 +36,18 @@ export default api;
  * Auth API
  */
 export const authAPI = {
-  register: (data) => api.post("/api/auth/register", data),
+  /**
+   * Register a new user
+   * @param {Object} data - { username, email, password, invitation_token? }
+   * @returns {Promise} - Registration response
+   */
+  register: (data) => {
+    const { invitation_token, ...userData } = data;
+    // invitation_token must be passed as query parameter, not in body
+    return api.post("/api/auth/register", userData, {
+      params: invitation_token ? { invitation_token } : {},
+    });
+  },
   login: (data) => api.post("/api/auth/login", data),
   logout: () => api.post("/api/auth/logout"),
   me: () => api.get("/api/auth/me"),
@@ -404,13 +415,27 @@ export const settingsAPI = {
   whoamiV2: () => api.get("/api/whoami-v2"),
 
   /**
+   * Get user public profile
+   * @param {string} username - Username
+   * @returns {Promise} - { username, full_name, bio, website, social_media, created_at }
+   */
+  getUserProfile: (username) => api.get(`/api/users/${username}/profile`),
+
+  /**
    * Update user settings
    * @param {string} username - Username
-   * @param {Object} data - { email?: string, fullname?: string }
+   * @param {Object} data - { email?: string, full_name?: string, bio?: string, website?: string, social_media?: object }
    * @returns {Promise} - { success: boolean, message: string }
    */
   updateUserSettings: (username, data) =>
     api.put(`/api/users/${username}/settings`, data),
+
+  /**
+   * Get organization public profile
+   * @param {string} orgName - Organization name
+   * @returns {Promise} - { name, description, bio, website, social_media, member_count, created_at }
+   */
+  getOrgProfile: (orgName) => api.get(`/api/organizations/${orgName}/profile`),
 
   /**
    * Update repository settings
@@ -492,6 +517,51 @@ export const validationAPI = {
    * @returns {Promise} - { available: boolean, normalized_name: string, conflict_with?: string, message: string }
    */
   checkName: (data) => api.post("/api/validate/check-name", data),
+};
+
+/**
+ * Quota API
+ */
+/**
+ * Invitation API
+ */
+export const invitationAPI = {
+  /**
+   * Create organization invitation
+   * @param {string} orgName - Organization name
+   * @param {Object} data - { email: string, role: string }
+   * @returns {Promise} - { success: boolean, token: string, invitation_link: string, expires_at: string }
+   */
+  create: (orgName, data) =>
+    api.post(`/api/invitations/org/${orgName}/create`, data),
+
+  /**
+   * Get invitation details
+   * @param {string} token - Invitation token
+   * @returns {Promise} - { action, org_name, role, inviter_username, expires_at, is_expired, is_used }
+   */
+  get: (token) => api.get(`/api/invitations/${token}`),
+
+  /**
+   * Accept invitation
+   * @param {string} token - Invitation token
+   * @returns {Promise} - { success: boolean, message: string, org_name: string, role: string }
+   */
+  accept: (token) => api.post(`/api/invitations/${token}/accept`),
+
+  /**
+   * List organization invitations (admin only)
+   * @param {string} orgName - Organization name
+   * @returns {Promise} - { invitations: Array<{id, token, email, role, created_by, created_at, expires_at, used_at, is_pending}> }
+   */
+  list: (orgName) => api.get(`/api/invitations/org/${orgName}/list`),
+
+  /**
+   * Delete/cancel invitation (admin only)
+   * @param {string} token - Invitation token
+   * @returns {Promise} - { success: boolean, message: string }
+   */
+  delete: (token) => api.delete(`/api/invitations/${token}`),
 };
 
 /**

@@ -45,6 +45,7 @@ declare module 'vue' {
     RepoViewer: typeof import('./components/repo/RepoViewer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SocialLinks: typeof import('./components/profile/SocialLinks.vue')['default']
     TheFooter: typeof import('./components/layout/TheFooter.vue')['default']
     TheHeader: typeof import('./components/layout/TheHeader.vue')['default']
   }
