@@ -32,6 +32,8 @@ from kohakuhub.api.quota.util import (
     get_storage_info,
     set_quota,
     update_namespace_storage,
+    get_repo_storage_info,
+    update_repository_storage,
 )
 
 logger = get_logger("ADMIN")
@@ -510,6 +512,77 @@ async def recalculate_quota_admin(
     }
 
 
+@router.post("/repositories/recalculate-all")
+async def recalculate_all_repo_storage_admin(
+    repo_type: str | None = None,
+    namespace: str | None = None,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Recalculate storage usage for all repositories (admin only).
+
+    This is a bulk operation that recalculates storage for all repositories
+    matching the optional filters. Can be slow for large datasets.
+
+    Args:
+        repo_type: Optional filter by repository type
+        namespace: Optional filter by namespace
+        _admin: Admin authentication (dependency)
+
+    Returns:
+        Recalculation summary with success/failure counts
+    """
+
+    logger.warning("Admin initiated bulk repository storage recalculation")
+
+    # Get all repositories matching filters
+    query = Repository.select()
+    if repo_type:
+        query = query.where(Repository.repo_type == repo_type)
+    if namespace:
+        query = query.where(Repository.namespace == namespace)
+
+    repos = list(query)
+    total = len(repos)
+
+    logger.info(f"Recalculating storage for {total} repository(ies)")
+
+    # Recalculate storage for each repository
+    success_count = 0
+    failure_count = 0
+    failures = []
+
+    for repo in repos:
+        try:
+            await update_repository_storage(repo)
+            success_count += 1
+
+            if success_count % 10 == 0:
+                logger.info(
+                    f"Progress: {success_count}/{total} repositories recalculated"
+                )
+        except Exception as e:
+            failure_count += 1
+            failures.append(
+                {
+                    "repo_id": repo.full_id,
+                    "error": str(e),
+                }
+            )
+            logger.error(f"Failed to recalculate storage for {repo.full_id}: {e}")
+
+    logger.info(
+        f"Bulk recalculation completed: {success_count} succeeded, {failure_count} failed"
+    )
+
+    return {
+        "total": total,
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "failures": failures,
+        "message": f"Recalculated storage for {success_count}/{total} repositories",
+    }
+
+
 # ===== System Information =====
 
 
@@ -554,7 +627,7 @@ async def list_repositories_admin(
     offset: int = 0,
     _admin: bool = Depends(verify_admin_token),
 ):
-    """List all repositories with filters.
+    """List all repositories with filters and storage information.
 
     Args:
         repo_type: Filter by repository type (model/dataset/space)
@@ -564,7 +637,7 @@ async def list_repositories_admin(
         _admin: Admin authentication (dependency)
 
     Returns:
-        List of repositories with metadata
+        List of repositories with metadata and storage info
     """
 
     query = Repository.select()
@@ -581,6 +654,9 @@ async def list_repositories_admin(
         owner = User.get_or_none(User.id == repo.owner_id)
         owner_username = owner.username if owner else "unknown"
 
+        # Get storage info
+        storage_info = get_repo_storage_info(repo)
+
         repos.append(
             {
                 "id": repo.id,
@@ -592,6 +668,11 @@ async def list_repositories_admin(
                 "owner_id": repo.owner_id,
                 "owner_username": owner_username,
                 "created_at": repo.created_at.isoformat(),
+                # Storage information
+                "quota_bytes": storage_info["quota_bytes"],
+                "used_bytes": storage_info["used_bytes"],
+                "percentage_used": storage_info["percentage_used"],
+                "is_inheriting": storage_info["is_inheriting"],
             }
         )
 
@@ -655,6 +736,9 @@ async def get_repository_admin(
     if total_size is None:
         total_size = 0
 
+    # Get storage info
+    storage_info = get_repo_storage_info(repo)
+
     return {
         "id": repo.id,
         "repo_type": repo.repo_type,
@@ -668,6 +752,11 @@ async def get_repository_admin(
         "file_count": file_count,
         "commit_count": commit_count,
         "total_size": total_size,
+        # Storage information
+        "quota_bytes": storage_info["quota_bytes"],
+        "used_bytes": storage_info["used_bytes"],
+        "percentage_used": storage_info["percentage_used"],
+        "is_inheriting": storage_info["is_inheriting"],
     }
 
 

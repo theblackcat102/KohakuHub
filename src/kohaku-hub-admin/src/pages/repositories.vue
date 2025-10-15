@@ -3,15 +3,20 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import AdminLayout from "@/components/AdminLayout.vue";
 import { useAdminStore } from "@/stores/admin";
-import { listRepositories, getRepositoryDetails } from "@/utils/api";
+import {
+  listRepositories,
+  getRepositoryDetails,
+  recalculateAllRepoStorage,
+} from "@/utils/api";
 import { formatBytes } from "@/utils/api";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 
 const router = useRouter();
 const adminStore = useAdminStore();
 const repositories = ref([]);
 const loading = ref(false);
+const recalculating = ref(false);
 const selectedRepo = ref(null);
 const repoDialogVisible = ref(false);
 
@@ -161,6 +166,53 @@ function resetFilters() {
   loadRepositories();
 }
 
+async function handleRecalculateAll() {
+  if (!checkAuth()) return;
+
+  try {
+    await ElMessageBox.confirm(
+      `This will recalculate storage for ${repositories.value.length || "all"} repositories. This may take some time. Continue?`,
+      "Recalculate All Repository Storage",
+      {
+        type: "warning",
+        confirmButtonText: "Recalculate",
+        cancelButtonText: "Cancel",
+      },
+    );
+
+    recalculating.value = true;
+    ElMessage.info("Recalculating storage for all repositories...");
+
+    const result = await recalculateAllRepoStorage(adminStore.token, {
+      repo_type: filterRepoType.value || undefined,
+      namespace: filterNamespace.value || undefined,
+    });
+
+    ElMessage.success(
+      `Storage recalculated: ${result.success_count}/${result.total} succeeded${result.failure_count > 0 ? `, ${result.failure_count} failed` : ""}`,
+    );
+
+    // Reload repositories to show updated storage
+    await loadRepositories();
+  } catch (err) {
+    if (err !== "cancel") {
+      console.error("Failed to recalculate storage:", err);
+      ElMessage.error(
+        err.response?.data?.detail?.error ||
+          "Failed to recalculate repository storage",
+      );
+    }
+  } finally {
+    recalculating.value = false;
+  }
+}
+
+function getProgressColor(percentage) {
+  if (percentage >= 90) return "danger";
+  if (percentage >= 75) return "warning";
+  return "success";
+}
+
 onMounted(() => {
   loadRepositories();
 });
@@ -173,6 +225,14 @@ onMounted(() => {
         <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
           Repository Management
         </h1>
+        <el-button
+          type="warning"
+          @click="handleRecalculateAll"
+          :loading="recalculating"
+        >
+          <span class="mr-2">🔄</span>
+          Recalculate All Storage
+        </el-button>
       </div>
 
       <!-- Filters -->
@@ -256,6 +316,41 @@ onMounted(() => {
             sortable="custom"
           />
           <el-table-column
+            label="Storage Used"
+            width="140"
+            sortable="custom"
+            prop="used_bytes"
+          >
+            <template #default="{ row }">
+              <span class="font-mono">{{ formatBytes(row.used_bytes) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Quota" width="120">
+            <template #default="{ row }">
+              <span v-if="row.quota_bytes" class="font-mono text-sm">
+                {{ formatBytes(row.quota_bytes) }}
+              </span>
+              <span v-else class="text-gray-400 text-sm">Inherit</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="% Used" width="140">
+            <template #default="{ row }">
+              <div
+                v-if="
+                  row.percentage_used !== null &&
+                  row.percentage_used !== undefined
+                "
+              >
+                <el-progress
+                  :percentage="Math.min(100, row.percentage_used)"
+                  :status="getProgressColor(row.percentage_used)"
+                  :format="(p) => `${p.toFixed(1)}%`"
+                />
+              </div>
+              <span v-else class="text-gray-400">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column
             prop="created_at"
             label="Created"
             width="160"
@@ -332,6 +427,15 @@ onMounted(() => {
             </el-descriptions-item>
             <el-descriptions-item label="Total Size">
               <strong>{{ formatBytes(selectedRepo.total_size) }}</strong>
+            </el-descriptions-item>
+            <el-descriptions-item label="Storage Used (Tracked)">
+              <strong>{{ formatBytes(selectedRepo.used_bytes) }}</strong>
+            </el-descriptions-item>
+            <el-descriptions-item label="Repository Quota">
+              <span v-if="selectedRepo.quota_bytes">
+                <strong>{{ formatBytes(selectedRepo.quota_bytes) }}</strong>
+              </span>
+              <span v-else class="text-gray-400">Inherit from namespace</span>
             </el-descriptions-item>
           </el-descriptions>
         </div>

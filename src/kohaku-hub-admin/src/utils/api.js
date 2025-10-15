@@ -344,3 +344,22 @@ export function parseSize(sizeStr) {
 
   return Math.floor(value * (units[unit] || 1));
 }
+
+/**
+ * Recalculate storage for all repositories (bulk operation)
+ * @param {string} token - Admin token
+ * @param {Object} params - Query parameters
+ * @param {string} params.repo_type - Optional filter by repository type
+ * @param {string} params.namespace - Optional filter by namespace
+ * @returns {Promise<Object>} Recalculation summary
+ */
+export async function recalculateAllRepoStorage(
+  token,
+  { repo_type, namespace } = {},
+) {
+  const client = createAdminClient(token);
+  const response = await client.post("/repositories/recalculate-all", null, {
+    params: { repo_type, namespace },
+  });
+  return response.data;
+}
