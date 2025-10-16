@@ -19,9 +19,22 @@ if sys.platform == "win32":
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+# Add db_migrations to path (for _migration_utils)
+sys.path.insert(0, os.path.dirname(__file__))
 
 from kohakuhub.db import db
 from kohakuhub.config import cfg
+from _migration_utils import should_skip_due_to_future_migrations, check_column_exists
+
+MIGRATION_NUMBER = 5
+
+
+def is_applied(db, cfg):
+    """Check if THIS migration has been applied.
+
+    Returns True if User.full_name column exists.
+    """
+    return check_column_exists(db, cfg, "user", "full_name")
 
 
 def check_migration_needed():
@@ -234,6 +247,11 @@ def run():
     db.connect(reuse_if_open=True)
 
     try:
+        # Check if any future migration has been applied
+        if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
+            print("Migration 005: Skipped (superseded by future migration)")
+            return True
+
         if not check_migration_needed():
             print("Migration 005: Already applied (columns exist)")
             return True

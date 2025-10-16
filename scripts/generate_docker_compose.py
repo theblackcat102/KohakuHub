@@ -15,7 +15,15 @@ from pathlib import Path
 
 
 def generate_secret(length: int = 32) -> str:
-    """Generate a random secret key."""
+    """Generate a random URL-safe secret key.
+
+    Args:
+        length: Number of random bytes (result will be ~1.33x longer due to base64 encoding)
+                Common values: 32 (→43 chars), 48 (→64 chars)
+
+    Returns:
+        URL-safe base64 encoded string
+    """
     return secrets.token_urlsafe(length)
 
 
@@ -275,6 +283,7 @@ def generate_hub_api_service(config: dict) -> str:
       - KOHAKU_HUB_LFS_THRESHOLD_BYTES=1000000
       - KOHAKU_HUB_LFS_KEEP_VERSIONS=5
       - KOHAKU_HUB_LFS_AUTO_GC=true
+      - KOHAKU_HUB_AUTO_MIGRATE=true # Auto-confirm database migrations (required for Docker)
 
       ## ===== Auth & SMTP Configuration =====
       - KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
@@ -388,35 +397,43 @@ def load_config_file(config_path: Path) -> dict:
         config["lakefs_use_postgres"] = lakefs.getboolean("use_postgres", fallback=True)
         config["lakefs_db"] = lakefs.get("database", fallback="lakefs")
         config["lakefs_encrypt_key"] = lakefs.get(
-            "encrypt_key", fallback=generate_secret()
+            "encrypt_key", fallback=generate_secret(32)  # 43 chars
         )
     else:
         config["lakefs_use_postgres"] = True
         config["lakefs_db"] = "lakefs"
-        config["lakefs_encrypt_key"] = generate_secret()
+        config["lakefs_encrypt_key"] = generate_secret(32)  # 43 chars
 
     # S3 section
     if parser.has_section("s3"):
         s3 = parser["s3"]
         config["s3_builtin"] = s3.getboolean("builtin", fallback=True)
         config["s3_endpoint"] = s3.get("endpoint", fallback="http://minio:9000")
-        config["s3_access_key"] = s3.get("access_key", fallback="minioadmin")
-        config["s3_secret_key"] = s3.get("secret_key", fallback="minioadmin")
+        config["s3_access_key"] = s3.get(
+            "access_key", fallback=generate_secret(24)
+        )  # 32 chars
+        config["s3_secret_key"] = s3.get(
+            "secret_key", fallback=generate_secret(48)
+        )  # 64 chars
         config["s3_region"] = s3.get("region", fallback="")
     else:
         config["s3_builtin"] = True
         config["s3_endpoint"] = "http://minio:9000"
-        config["s3_access_key"] = "minioadmin"
-        config["s3_secret_key"] = "minioadmin"
+        config["s3_access_key"] = generate_secret(24)  # 32 chars
+        config["s3_secret_key"] = generate_secret(48)  # 64 chars
 
     # Security section
     if parser.has_section("security"):
         sec = parser["security"]
-        config["session_secret"] = sec.get("session_secret", fallback=generate_secret())
-        config["admin_secret"] = sec.get("admin_secret", fallback=generate_secret())
+        config["session_secret"] = sec.get(
+            "session_secret", fallback=generate_secret(48)
+        )  # 64 chars
+        config["admin_secret"] = sec.get(
+            "admin_secret", fallback=generate_secret(48)
+        )  # 64 chars
     else:
-        config["session_secret"] = generate_secret()
-        config["admin_secret"] = generate_secret()
+        config["session_secret"] = generate_secret(48)  # 64 chars
+        config["admin_secret"] = generate_secret(48)  # 64 chars
 
     # Network section
     if parser.has_section("network"):
@@ -467,9 +484,10 @@ builtin = true
 # secret_key = your-secret-key
 # region = us-east-1
 
-# If builtin = true, you can customize MinIO credentials:
-access_key = minioadmin
-secret_key = minioadmin
+# If builtin = true, MinIO credentials are auto-generated (recommended)
+# You can override by uncommenting and setting custom values:
+# access_key = your-custom-access-key
+# secret_key = your-custom-secret-key
 
 [security]
 # Session and admin secrets (auto-generated if not specified)
@@ -600,8 +618,21 @@ def interactive_config() -> dict:
     config["s3_builtin"] = ask_yes_no("Use built-in MinIO container?", default=True)
 
     if config["s3_builtin"]:
-        config["s3_access_key"] = ask_string("MinIO access key", default="minioadmin")
-        config["s3_secret_key"] = ask_string("MinIO secret key", default="minioadmin")
+        # Generate secure random credentials for MinIO
+        default_access_key = generate_secret(24)  # 32 chars
+        default_secret_key = generate_secret(48)  # 64 chars
+
+        print(f"Generated MinIO access key: {default_access_key}")
+        print(f"Generated MinIO secret key: {default_secret_key}")
+        use_generated = ask_yes_no("Use generated MinIO credentials?", default=True)
+
+        if use_generated:
+            config["s3_access_key"] = default_access_key
+            config["s3_secret_key"] = default_secret_key
+        else:
+            config["s3_access_key"] = ask_string("MinIO access key")
+            config["s3_secret_key"] = ask_string("MinIO secret key")
+
         config["s3_endpoint"] = "http://minio:9000"
     else:
         config["s3_endpoint"] = ask_string("S3 endpoint URL")
@@ -613,7 +644,7 @@ def interactive_config() -> dict:
 
     # Security Configuration
     print("--- Security Configuration ---")
-    default_session_secret = generate_secret()
+    default_session_secret = generate_secret(48)  # 64 chars for session encryption
     print(f"Generated session secret: {default_session_secret}")
     use_generated = ask_yes_no("Use generated session secret?", default=True)
 
@@ -628,7 +659,7 @@ def interactive_config() -> dict:
     if same_as_session:
         config["admin_secret"] = config["session_secret"]
     else:
-        default_admin_secret = generate_secret()
+        default_admin_secret = generate_secret(48)  # 64 chars for admin token
         print(f"Generated admin secret: {default_admin_secret}")
         use_generated_admin = ask_yes_no("Use generated admin secret?", default=True)
 
@@ -638,7 +669,7 @@ def interactive_config() -> dict:
             config["admin_secret"] = ask_string("Admin secret token")
 
     # LakeFS encryption key
-    config["lakefs_encrypt_key"] = generate_secret()
+    config["lakefs_encrypt_key"] = generate_secret(32)  # 43 chars
 
     # Network configuration
     print()

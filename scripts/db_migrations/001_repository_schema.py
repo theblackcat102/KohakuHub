@@ -9,10 +9,48 @@ For example: user/myrepo can exist as both a model and dataset.
 import sys
 import os
 
+# Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+# Add db_migrations to path (for _migration_utils)
+sys.path.insert(0, os.path.dirname(__file__))
 
 from kohakuhub.db import db
 from kohakuhub.config import cfg
+
+# Import migration utilities
+from _migration_utils import should_skip_due_to_future_migrations
+
+# Migration number for this script
+MIGRATION_NUMBER = 1
+
+
+def is_applied(db, cfg):
+    """Check if THIS migration has been applied.
+
+    Returns True if the unique constraint has been removed from Repository.full_id.
+    """
+    try:
+        cursor = db.cursor()
+        if cfg.app.db_backend == "postgres":
+            cursor.execute(
+                """
+                SELECT indexname, indexdef
+                FROM pg_indexes
+                WHERE tablename = 'repository' AND indexname = 'repository_full_id'
+            """
+            )
+            result = cursor.fetchone()
+            if result and len(result) > 1:
+                # If UNIQUE is in the index definition, migration NOT applied
+                return "UNIQUE" not in result[1].upper()
+            # Index doesn't exist or can't check = assume applied
+            return True
+        else:
+            # SQLite: Hard to detect constraint removal, assume applied if table exists
+            return db.table_exists("repository")
+    except Exception:
+        # Error = treat as applied (skip migration)
+        return True
 
 
 def check_migration_needed():
@@ -44,6 +82,11 @@ def run():
     db.connect(reuse_if_open=True)
 
     try:
+        # Check if any future migration has been applied
+        if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
+            print("Migration 001: Skipped (superseded by future migration)")
+            return True
+
         if not check_migration_needed():
             print("Migration 001: Already applied (constraint removed)")
             return True

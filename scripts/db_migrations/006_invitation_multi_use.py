@@ -18,9 +18,30 @@ if sys.platform == "win32":
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+# Add db_migrations to path (for _migration_utils)
+sys.path.insert(0, os.path.dirname(__file__))
 
 from kohakuhub.db import db
 from kohakuhub.config import cfg
+from _migration_utils import (
+    should_skip_due_to_future_migrations,
+    check_column_exists,
+    check_table_exists,
+)
+
+MIGRATION_NUMBER = 6
+
+
+def is_applied(db, cfg):
+    """Check if THIS migration has been applied.
+
+    Returns True if Invitation.max_usage column exists.
+    """
+    # First check if invitation table exists
+    if not check_table_exists(db, "invitation"):
+        # Table doesn't exist, migration not applicable
+        return True
+    return check_column_exists(db, cfg, "invitation", "max_usage")
 
 
 def check_migration_needed():
@@ -155,8 +176,32 @@ def run():
     db.connect(reuse_if_open=True)
 
     try:
-        if not check_migration_needed():
-            print("Migration 006: Already applied (columns exist)")
+        # Check if any future migration has been applied
+        if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
+            print("Migration 006: Skipped (superseded by future migration)")
+            return True
+
+        migration_needed = check_migration_needed()
+        if not migration_needed:
+            # Check if table exists to provide better message
+            cursor = db.cursor()
+            if cfg.app.db_backend == "postgres":
+                cursor.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_name='invitation'"
+                )
+                table_exists = cursor.fetchone() is not None
+            else:
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='invitation'"
+                )
+                table_exists = cursor.fetchone() is not None
+
+            if not table_exists:
+                print(
+                    "Migration 006: Skipped (invitation table doesn't exist yet, will be created by init_db)"
+                )
+            else:
+                print("Migration 006: Already applied (columns exist)")
             return True
 
         print("Migration 006: Adding multi-use support to Invitation table...")

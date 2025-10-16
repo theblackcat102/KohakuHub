@@ -78,15 +78,13 @@ def run_migrations():
     print(f"Database URL: {cfg.app.database_url}")
     print()
 
-    # Initialize database (create tables if they don't exist)
-    print("Initializing database...")
-    init_db()
-    print("✓ Database initialized\n")
-
     # Discover migrations
     migrations = discover_migrations()
     if not migrations:
         print("No migrations found in db_migrations/")
+        print("\nInitializing database (creating tables)...")
+        init_db()
+        print("✓ Database initialized\n")
         return True
 
     print(f"Found {len(migrations)} migration(s):\n")
@@ -121,6 +119,19 @@ def run_migrations():
             all_success = False
 
         print()
+
+    # Initialize database AFTER migrations (create tables/indexes if needed)
+    if all_success:
+        print("\nFinalizing database schema (ensuring all tables/indexes exist)...")
+        try:
+            init_db()
+            print("✓ Database schema finalized\n")
+        except Exception as e:
+            print(f"✗ Failed to finalize database schema: {e}")
+            import traceback
+
+            traceback.print_exc()
+            all_success = False
 
     # Summary
     print("=" * 70)
