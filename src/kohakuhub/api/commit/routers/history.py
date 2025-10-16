@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, Query
 import httpx
 
 from kohakuhub.config import cfg
-from kohakuhub.db import Commit, Repository, User
-from kohakuhub.db_operations import get_commit, get_repository
+from kohakuhub.db import Repository, User
+from kohakuhub.db_operations import get_commit, get_repository, list_commits_by_repo
 from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
@@ -91,12 +91,12 @@ async def list_commits(
         # Get all commit IDs to fetch user info from our database
         commit_ids = [c["id"] for c in log_result["results"]]
 
-        # Fetch our commit records (with actual user info)
+        # Fetch our commit records using backref (with actual user info)
+        # Use repository FK object to query commits
         our_commits = {
             c.commit_id: c
-            for c in Commit.select().where(
-                Commit.commit_id.in_(commit_ids),
-                Commit.repo_full_id == repo_id,
+            for c in repo_row.commits.select().where(
+                repo_row.commits.model.commit_id.in_(commit_ids)
             )
         }
 
@@ -104,8 +104,9 @@ async def list_commits(
             try:
                 # Try to get user info from our database
                 our_commit = our_commits.get(commit["id"])
+                # Use author.username via ForeignKey relationship
                 author = (
-                    our_commit.username
+                    our_commit.author.username
                     if our_commit
                     else (commit.get("committer") or "unknown")
                 )
@@ -185,8 +186,8 @@ async def get_commit_detail(
             repository=lakefs_repo, commit_id=commit_id
         )
 
-        # Get our commit record (with actual user info)
-        our_commit = get_commit(commit_id, repo_id)
+        # Get our commit record (with actual user info) using repository FK
+        our_commit = get_commit(commit_id, repo_row)
 
         # Build response
         response = {
@@ -201,8 +202,8 @@ async def get_commit_detail(
 
         # Add user info if we have it in our database
         if our_commit:
-            response["author"] = our_commit.username
-            response["user_id"] = our_commit.user_id
+            response["author"] = our_commit.author.username  # Use FK relationship
+            response["user_id"] = our_commit.author.id  # Use FK relationship
             response["description"] = our_commit.description
             response["committed_at"] = our_commit.created_at.isoformat()
         else:
@@ -279,14 +280,14 @@ async def get_commit_diff(
         diff_results = diff_result.get("results", []) if diff_result else []
         file_paths = [d["path"] for d in diff_results]
 
-        # Fetch File records for LFS status
+        # Fetch File records for LFS status using repository FK and backref
         if file_paths:
             from kohakuhub.db import File
 
             file_records = {
                 f.path_in_repo: f
-                for f in File.select().where(
-                    File.repo_full_id == repo_id, File.path_in_repo.in_(file_paths)
+                for f in repo_row.files.select().where(
+                    repo_row.files.model.path_in_repo.in_(file_paths)
                 )
             }
         else:
@@ -450,15 +451,15 @@ async def get_commit_diff(
             *[process_diff_entry(entry) for entry in diff_results]
         )
 
-        # Get our commit record for user info
-        our_commit = get_commit(commit_id, repo_id)
+        # Get our commit record for user info using repository FK
+        our_commit = get_commit(commit_id, repo_row)
 
         response = {
             "commit_id": commit_id,
             "parent_commit": parent_id,
             "message": lakefs_commit.get("message", ""),
             "author": (
-                our_commit.username
+                our_commit.author.username  # Use FK relationship
                 if our_commit
                 else (lakefs_commit.get("committer") or "unknown")
             ),

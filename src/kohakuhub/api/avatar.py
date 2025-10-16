@@ -7,8 +7,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
-from kohakuhub.db import Organization, User
-from kohakuhub.db_operations import get_organization, get_user_by_username
+from kohakuhub.db import User
+from kohakuhub.db_operations import (
+    get_organization,
+    get_user_by_username,
+    update_user,
+    update_organization,
+)
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 
@@ -138,9 +143,9 @@ async def upload_user_avatar(
         raise HTTPException(500, detail="Failed to process avatar")
 
     # Update user avatar
-    target_user.avatar = processed_jpeg
-    target_user.avatar_updated_at = datetime.now(timezone.utc)
-    target_user.save()
+    update_user(
+        target_user, avatar=processed_jpeg, avatar_updated_at=datetime.now(timezone.utc)
+    )
 
     logger.success(
         f"Avatar uploaded for user: {username} (size={len(processed_jpeg)} bytes)"
@@ -215,9 +220,7 @@ async def delete_user_avatar(
     if not target_user.avatar:
         raise HTTPException(404, detail="No avatar to delete")
 
-    target_user.avatar = None
-    target_user.avatar_updated_at = None
-    target_user.save()
+    update_user(target_user, avatar=None, avatar_updated_at=None)
 
     logger.success(f"Avatar deleted for user: {username}")
 
@@ -253,7 +256,7 @@ async def upload_org_avatar(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if user is admin of the organization
-    user_org = get_user_organization(user.id, org.id)
+    user_org = get_user_organization(user, org)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to update organization avatar")
 
@@ -284,9 +287,9 @@ async def upload_org_avatar(
         raise HTTPException(500, detail="Failed to process avatar")
 
     # Update organization avatar
-    org.avatar = processed_jpeg
-    org.avatar_updated_at = datetime.now(timezone.utc)
-    org.save()
+    update_organization(
+        org, avatar=processed_jpeg, avatar_updated_at=datetime.now(timezone.utc)
+    )
 
     logger.success(
         f"Avatar uploaded for org: {org_name} (size={len(processed_jpeg)} bytes)"
@@ -357,16 +360,14 @@ async def delete_org_avatar(
     if not org:
         raise HTTPException(404, detail="Organization not found")
 
-    user_org = get_user_organization(user.id, org.id)
+    user_org = get_user_organization(user, org)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to delete organization avatar")
 
     if not org.avatar:
         raise HTTPException(404, detail="No avatar to delete")
 
-    org.avatar = None
-    org.avatar_updated_at = None
-    org.save()
+    update_organization(org, avatar=None, avatar_updated_at=None)
 
     logger.success(f"Avatar deleted for org: {org_name}")
 

@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from kohakuhub.db import Organization, Repository, User, UserOrganization
+from kohakuhub.db import Repository, User
+from kohakuhub.db_operations import get_organization, get_user_organization
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.auth.permissions import (
@@ -123,7 +124,7 @@ async def get_quota(
     """
 
     # Check if namespace is organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     is_org = org is not None
 
     # Check if namespace exists
@@ -170,16 +171,13 @@ async def update_quota(
     """
 
     # Check if namespace is organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     is_org = org is not None
 
     # Authorization check
     if is_org:
         # For orgs, must be admin member
-        member = UserOrganization.get_or_none(
-            (UserOrganization.user == user.id)
-            & (UserOrganization.organization == org.id)
-        )
+        member = get_user_organization(user, org)
         is_admin = member and member.role in ("admin", "super-admin")
         if not is_admin:
             raise HTTPException(
@@ -229,16 +227,13 @@ async def recalculate_storage(
     """
 
     # Check if namespace is organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     is_org = org is not None
 
     # Authorization check (same as update_quota)
     if is_org:
         # For orgs, must be admin member
-        member = UserOrganization.get_or_none(
-            (UserOrganization.user == user.id)
-            & (UserOrganization.organization == org.id)
-        )
+        member = get_user_organization(user, org)
         is_admin = member and member.role in ("admin", "super-admin")
         if not is_admin:
             raise HTTPException(
@@ -298,7 +293,7 @@ async def get_public_quota(
     """
 
     # Check if namespace is organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     is_org = org is not None
 
     # Check if namespace exists
@@ -316,10 +311,7 @@ async def get_public_quota(
     if user:
         if is_org:
             # For organizations: user must be a member
-            membership = UserOrganization.get_or_none(
-                (UserOrganization.user == user.id)
-                & (UserOrganization.organization == org.id)
-            )
+            membership = get_user_organization(user, org)
             can_see_private = membership is not None
         else:
             # For users: user must be viewing their own profile
@@ -564,7 +556,7 @@ async def list_namespace_repo_storage(
         HTTPException: If not authorized or namespace not found
     """
     # Check if namespace is organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     is_org = org is not None
 
     # Check if namespace exists
@@ -578,10 +570,7 @@ async def list_namespace_repo_storage(
     # Authorization check - requires write permission (to see private repos)
     if is_org:
         # For orgs, must be a member (any role can view storage breakdown)
-        member = UserOrganization.get_or_none(
-            (UserOrganization.user == user.id)
-            & (UserOrganization.organization == org.id)
-        )
+        member = get_user_organization(user, org)
         if not member:
             raise HTTPException(
                 403,

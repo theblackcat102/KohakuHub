@@ -153,7 +153,7 @@ async def list_ssh_keys(user: User = Depends(get_current_user)):
     Returns:
         List of SSH keys
     """
-    keys = list_user_ssh_keys(user.id)
+    keys = list_user_ssh_keys(user)
 
     return [
         SSHKeyResponse(
@@ -202,7 +202,7 @@ async def add_ssh_key(
 
         # Create key
         new_key = create_ssh_key(
-            user_id=user.id,
+            user=user,
             key_type=key_type,
             public_key=key_request.key.strip(),
             fingerprint=fingerprint,
@@ -244,7 +244,7 @@ async def remove_ssh_key(key_id: int, user: User = Depends(get_current_user)):
         raise HTTPException(404, detail="SSH key not found")
 
     # Check ownership
-    if key.user_id != user.id:
+    if key.user.id != user.id:
         raise HTTPException(403, detail="Not authorized to delete this key")
 
     # Delete key
@@ -277,7 +277,7 @@ async def get_ssh_key(key_id: int, user: User = Depends(get_current_user)):
         raise HTTPException(404, detail="SSH key not found")
 
     # Check ownership
-    if key.user_id != user.id:
+    if key.user.id != user.id:
         raise HTTPException(403, detail="Not authorized to view this key")
 
     return SSHKeyResponse(

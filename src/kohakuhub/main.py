@@ -10,6 +10,7 @@ from kohakuhub.api.invitation import router as invitation
 from kohakuhub.auth import router as auth_router
 from kohakuhub.config import cfg
 from kohakuhub.db import Repository, User
+from kohakuhub.db_operations import get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.api.commit import history as commit_history
 from kohakuhub.api.commit import router as commits
@@ -97,7 +98,7 @@ async def public_resolve_head(
     """Public HEAD endpoint without /api prefix - returns file metadata only."""
     logger.debug(f"HEAD {type}/{namespace}/{name}/resolve/{revision}/{path}")
 
-    repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
+    repo = get_repository(type, namespace, name)
     if not repo:
         logger.warning(f"Repository not found: {type}/{namespace}/{name}")
         raise HTTPException(404, detail={"error": "Repository not found"})
@@ -125,7 +126,7 @@ async def public_resolve_get(
     """Public GET endpoint without /api prefix - redirects to S3 download."""
     logger.debug(f"GET {type}/{namespace}/{name}/resolve/{revision}/{path}")
 
-    repo = Repository.get_or_none(name=name, namespace=namespace, repo_type=type)
+    repo = get_repository(type, namespace, name)
     if not repo:
         logger.warning(f"Repository not found: {type}/{namespace}/{name}")
         raise HTTPException(404, detail={"error": "Repository not found"})

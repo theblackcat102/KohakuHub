@@ -14,8 +14,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from kohakuhub.config import cfg
-from kohakuhub.db import Organization, Repository, User
-from kohakuhub.db_operations import get_file_by_sha256
+from kohakuhub.db import Repository, User
+from kohakuhub.db_operations import get_file_by_sha256, get_organization, get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import (
@@ -267,12 +267,10 @@ async def lfs_batch(
     except Exception as e:
         raise HTTPException(400, detail={"error": f"Invalid LFS batch request: {e}"})
 
-    # Check repository exists and permissions
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    # Get repository using get_repository() which returns Repository FK object
+    repo = get_repository(repo_type, namespace, name)
 
-    if repo_row:
+    if repo:
         operation = batch_req.operation
 
         match operation:
@@ -282,17 +280,17 @@ async def lfs_batch(
                     raise HTTPException(
                         401, detail={"error": "Authentication required for upload"}
                     )
-                check_repo_write_permission(repo_row, user)
+                check_repo_write_permission(repo, user)
 
                 # Check storage quota for uploads
                 total_upload_bytes = sum(obj.size for obj in batch_req.objects)
 
-                # Check if namespace is organization
-                org = Organization.get_or_none(Organization.name == namespace)
+                # Check if namespace is organization (User with is_org=True)
+                org = get_organization(namespace)
                 is_org = org is not None
 
                 # Check quota (based on repo privacy)
-                is_private = repo_row.private
+                is_private = repo.private
                 allowed, error_msg = check_quota(
                     namespace, total_upload_bytes, is_private, is_org
                 )
@@ -307,7 +305,7 @@ async def lfs_batch(
 
             case "download":
                 # Download requires read permission (may be public)
-                check_repo_read_permission(repo_row, user)
+                check_repo_read_permission(repo, user)
 
     if cfg.app.debug_log_payloads:
         logger.debug("==== LFS Batch Request ====")

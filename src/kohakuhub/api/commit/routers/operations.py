@@ -10,7 +10,8 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from kohakuhub.config import cfg
-from kohakuhub.db import File, Organization, Repository, User
+from kohakuhub.db import File, Repository, User
+from kohakuhub.db_operations import get_organization
 from kohakuhub.db_operations import (
     create_commit,
     create_file,
@@ -60,7 +61,7 @@ async def process_regular_file(
     path: str,
     content_b64: str,
     encoding: str,
-    repo_id: str,
+    repo: Repository,
     lakefs_repo: str,
     revision: str,
 ) -> bool:
@@ -73,7 +74,7 @@ async def process_regular_file(
         path: File path in repository
         content_b64: Base64 encoded content
         encoding: Content encoding
-        repo_id: Repository ID
+        repo: Repository object
         lakefs_repo: LakeFS repository name
         revision: Branch name
 
@@ -114,7 +115,7 @@ async def process_regular_file(
     git_blob_sha1 = calculate_git_blob_sha1(data)
 
     # Check if file unchanged (deduplication)
-    existing = get_file(repo_id, path)
+    existing = get_file(repo, path)
     if existing and existing.sha256 == git_blob_sha1 and existing.size == len(data):
         logger.info(f"Skipping unchanged file: {path}")
         return False
@@ -136,13 +137,14 @@ async def process_regular_file(
 
     # Update database - store git blob SHA1 in sha256 column for non-LFS files
     File.insert(
-        repo_full_id=repo_id,
+        repository=repo,
         path_in_repo=path,
         size=len(data),
         sha256=git_blob_sha1,
         lfs=False,
+        owner=repo.owner,
     ).on_conflict(
-        conflict_target=(File.repo_full_id, File.path_in_repo),
+        conflict_target=(File.repository, File.path_in_repo),
         update={
             File.sha256: git_blob_sha1,
             File.size: len(data),
@@ -159,7 +161,7 @@ async def process_lfs_file(
     oid: str,
     size: int,
     algo: str,
-    repo_id: str,
+    repo: Repository,
     lakefs_repo: str,
     revision: str,
 ) -> tuple[bool, dict | None]:
@@ -170,7 +172,7 @@ async def process_lfs_file(
         oid: Object ID (SHA256 hash)
         size: File size in bytes
         algo: Hash algorithm (default: sha256)
-        repo_id: Repository ID
+        repo: Repository object
         lakefs_repo: LakeFS repository name
         revision: Branch name
 
@@ -184,7 +186,7 @@ async def process_lfs_file(
         raise HTTPException(400, detail={"error": f"Missing OID for LFS file {path}"})
 
     # Check for existing file
-    existing = get_file(repo_id, path)
+    existing = get_file(repo, path)
 
     # Track old LFS object for potential deletion
     old_lfs_oid = None
@@ -257,13 +259,14 @@ async def process_lfs_file(
 
     # Update database
     File.insert(
-        repo_full_id=repo_id,
+        repository=repo,
         path_in_repo=path,
         size=size,
         sha256=oid,
         lfs=True,
+        owner=repo.owner,
     ).on_conflict(
-        conflict_target=(File.repo_full_id, File.path_in_repo),
+        conflict_target=(File.repository, File.path_in_repo),
         update={
             File.sha256: oid,
             File.size: size,
@@ -284,13 +287,13 @@ async def process_lfs_file(
 
 
 async def process_deleted_file(
-    path: str, repo_id: str, lakefs_repo: str, revision: str
+    path: str, repo: Repository, lakefs_repo: str, revision: str
 ) -> bool:
     """Process file deletion.
 
     Args:
         path: File path to delete
-        repo_id: Repository ID
+        repo: Repository object
         lakefs_repo: LakeFS repository name
         revision: Branch name
 
@@ -310,7 +313,7 @@ async def process_deleted_file(
     # Remove from database
     deleted_count = (
         File.delete()
-        .where((File.repo_full_id == repo_id) & (File.path_in_repo == path))
+        .where((File.repository == repo) & (File.path_in_repo == path))
         .execute()
     )
 
@@ -323,13 +326,13 @@ async def process_deleted_file(
 
 
 async def process_deleted_folder(
-    path: str, repo_id: str, lakefs_repo: str, revision: str
+    path: str, repo: Repository, lakefs_repo: str, revision: str
 ) -> bool:
     """Process folder deletion.
 
     Args:
         path: Folder path to delete
-        repo_id: Repository ID
+        repo: Repository object
         lakefs_repo: LakeFS repository name
         revision: Branch name
 
@@ -392,7 +395,7 @@ async def process_deleted_folder(
             deleted_count = (
                 File.delete()
                 .where(
-                    (File.repo_full_id == repo_id)
+                    (File.repository == repo)
                     & (File.path_in_repo.startswith(folder_path))
                 )
                 .execute()
@@ -409,7 +412,7 @@ async def process_copy_file(
     dest_path: str,
     src_path: str,
     src_revision: str,
-    repo_id: str,
+    repo: Repository,
     lakefs_repo: str,
     revision: str,
 ) -> bool:
@@ -419,7 +422,7 @@ async def process_copy_file(
         dest_path: Destination file path
         src_path: Source file path
         src_revision: Source revision
-        repo_id: Repository ID
+        repo: Repository object
         lakefs_repo: LakeFS repository name
         revision: Branch name
 
@@ -466,17 +469,18 @@ async def process_copy_file(
         )
 
         # Update database - copy file metadata
-        src_file = get_file(repo_id, src_path)
+        src_file = get_file(repo, src_path)
 
         if src_file:
             File.insert(
-                repo_full_id=repo_id,
+                repository=repo,
                 path_in_repo=dest_path,
                 size=src_file.size,
                 sha256=src_file.sha256,
                 lfs=src_file.lfs,
+                owner=repo.owner,
             ).on_conflict(
-                conflict_target=(File.repo_full_id, File.path_in_repo),
+                conflict_target=(File.repository, File.path_in_repo),
                 update={
                     File.sha256: src_file.sha256,
                     File.size: src_file.size,
@@ -488,13 +492,14 @@ async def process_copy_file(
             # If not in database, create entry based on LakeFS info
             is_lfs = src_obj["size_bytes"] >= cfg.app.lfs_threshold_bytes
             File.insert(
-                repo_full_id=repo_id,
+                repository=repo,
                 path_in_repo=dest_path,
                 size=src_obj["size_bytes"],
                 sha256=src_obj["checksum"],
                 lfs=is_lfs,
+                owner=repo.owner,
             ).on_conflict(
-                conflict_target=(File.repo_full_id, File.path_in_repo),
+                conflict_target=(File.repository, File.path_in_repo),
                 update={
                     File.sha256: src_obj["checksum"],
                     File.size: src_obj["size_bytes"],
@@ -608,7 +613,7 @@ async def commit(
                     path=path,
                     content_b64=value.get("content"),
                     encoding=(value.get("encoding") or "").lower(),
-                    repo_id=repo_id,
+                    repo=repo_row,
                     lakefs_repo=lakefs_repo,
                     revision=revision,
                 )
@@ -621,7 +626,7 @@ async def commit(
                     oid=value.get("oid"),
                     size=value.get("size"),
                     algo=value.get("algo", "sha256"),
-                    repo_id=repo_id,
+                    repo=repo_row,
                     lakefs_repo=lakefs_repo,
                     revision=revision,
                 )
@@ -633,7 +638,7 @@ async def commit(
                 # Delete single file
                 changed = await process_deleted_file(
                     path=path,
-                    repo_id=repo_id,
+                    repo=repo_row,
                     lakefs_repo=lakefs_repo,
                     revision=revision,
                 )
@@ -643,7 +648,7 @@ async def commit(
                 # Delete folder recursively
                 changed = await process_deleted_folder(
                     path=path,
-                    repo_id=repo_id,
+                    repo=repo_row,
                     lakefs_repo=lakefs_repo,
                     revision=revision,
                 )
@@ -655,7 +660,7 @@ async def commit(
                     dest_path=path,
                     src_path=value.get("srcPath"),
                     src_revision=value.get("srcRevision", revision),
-                    repo_id=repo_id,
+                    repo=repo_row,
                     lakefs_repo=lakefs_repo,
                     revision=revision,
                 )
@@ -696,10 +701,10 @@ async def commit(
     try:
         create_commit(
             commit_id=commit_result["id"],
-            repo_full_id=repo_id,
-            repo_type=repo_type,
+            repository=repo_row,
+            repo_type=repo_type.value,
             branch=revision,
-            user_id=user.id,
+            author=user,
             username=user.username,
             message=commit_msg,
             description=commit_desc,
@@ -717,7 +722,9 @@ async def commit(
     if pending_lfs_tracking:
         for lfs_info in pending_lfs_tracking:
             track_lfs_object(
-                repo_full_id=repo_id,
+                repo_type=repo_type.value,
+                namespace=namespace,
+                name=name,
                 path_in_repo=lfs_info["path"],
                 sha256=lfs_info["sha256"],
                 size=lfs_info["size"],
@@ -726,7 +733,9 @@ async def commit(
 
             if cfg.app.lfs_auto_gc and lfs_info.get("old_sha256"):
                 deleted_count = run_gc_for_file(
-                    repo_full_id=repo_id,
+                    repo_type=repo_type.value,
+                    namespace=namespace,
+                    name=name,
                     path_in_repo=lfs_info["path"],
                     current_commit_id=commit_result["id"],
                 )
@@ -737,8 +746,8 @@ async def commit(
 
     # Update storage usage for namespace after successful commit
     try:
-        # Check if namespace is organization
-        org = Organization.get_or_none(Organization.name == namespace)
+        # Check if namespace is organization (User with is_org=True)
+        org = get_organization(namespace)
         is_org = org is not None
 
         # Recalculate storage usage

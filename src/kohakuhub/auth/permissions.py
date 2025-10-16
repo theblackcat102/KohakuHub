@@ -4,7 +4,8 @@ from typing import Optional
 
 from fastapi import HTTPException
 
-from kohakuhub.db import Organization, Repository, User, UserOrganization
+from kohakuhub.db import Repository, User
+from kohakuhub.db_operations import get_organization, get_user_organization
 
 
 def check_namespace_permission(
@@ -28,7 +29,7 @@ def check_namespace_permission(
         return True
 
     # Check if it's an organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     if not org:
         raise HTTPException(
             403,
@@ -36,9 +37,7 @@ def check_namespace_permission(
         )
 
     # Check user's membership in the organization
-    membership = UserOrganization.get_or_none(
-        (UserOrganization.user == user.id) & (UserOrganization.organization == org.id)
-    )
+    membership = get_user_organization(user, org)
 
     if not membership:
         raise HTTPException(
@@ -85,12 +84,9 @@ def check_repo_read_permission(repo: Repository, user: Optional[User] = None) ->
         return True
 
     # Check if namespace is an organization and user is a member
-    org = Organization.get_or_none(Organization.name == repo.namespace)
+    org = get_organization(repo.namespace)
     if org:
-        membership = UserOrganization.get_or_none(
-            (UserOrganization.user == user.id)
-            & (UserOrganization.organization == org.id)
-        )
+        membership = get_user_organization(user, org)
         if membership:
             return True
 
@@ -121,12 +117,9 @@ def check_repo_write_permission(repo: Repository, user: User) -> bool:
         return True
 
     # Check if namespace is an organization and user is a member
-    org = Organization.get_or_none(Organization.name == repo.namespace)
+    org = get_organization(repo.namespace)
     if org:
-        membership = UserOrganization.get_or_none(
-            (UserOrganization.user == user.id)
-            & (UserOrganization.organization == org.id)
-        )
+        membership = get_user_organization(user, org)
         if membership:
             # Any member can write (visitor role can also read but not write)
             if membership.role in ["member", "admin", "super-admin"]:
@@ -159,12 +152,9 @@ def check_repo_delete_permission(repo: Repository, user: User) -> bool:
         return True
 
     # Check if namespace is an organization and user is admin
-    org = Organization.get_or_none(Organization.name == repo.namespace)
+    org = get_organization(repo.namespace)
     if org:
-        membership = UserOrganization.get_or_none(
-            (UserOrganization.user == user.id)
-            & (UserOrganization.organization == org.id)
-        )
+        membership = get_user_organization(user, org)
         if membership and membership.role in ["admin", "super-admin"]:
             return True
 

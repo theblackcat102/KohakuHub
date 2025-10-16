@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from kohakuhub.db import Repository, Token, User
+from kohakuhub.db_operations import get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import (
@@ -50,8 +51,8 @@ async def get_user_from_git_auth(authorization: str | None) -> User | None:
         logger.debug(f"Invalid token for user {username}")
         return None
 
-    # Get user
-    user = User.get_or_none(User.id == token.user_id)
+    # Get user via FK relationship
+    user = token.user  # Use FK instead of manual lookup
     if not user or not user.is_active:
         logger.warning(f"User {username} not found or inactive")
         return None
@@ -91,11 +92,7 @@ async def git_info_refs(
     # Get repository - try all repo types since we don't know from URL
     repo = None
     for repo_type in ["model", "dataset", "space"]:
-        repo = Repository.get_or_none(
-            Repository.namespace == namespace,
-            Repository.name == name,
-            Repository.repo_type == repo_type,
-        )
+        repo = get_repository(repo_type, namespace, name)
         if repo:
             break
     if not repo:
@@ -163,11 +160,7 @@ async def git_upload_pack(
     # Get repository - try all repo types since we don't know from URL
     repo = None
     for repo_type in ["model", "dataset", "space"]:
-        repo = Repository.get_or_none(
-            Repository.namespace == namespace,
-            Repository.name == name,
-            Repository.repo_type == repo_type,
-        )
+        repo = get_repository(repo_type, namespace, name)
         if repo:
             break
     if not repo:
@@ -220,11 +213,7 @@ async def git_receive_pack(
     # Get repository - try all repo types since we don't know from URL
     repo = None
     for repo_type in ["model", "dataset", "space"]:
-        repo = Repository.get_or_none(
-            Repository.namespace == namespace,
-            Repository.name == name,
-            Repository.repo_type == repo_type,
-        )
+        repo = get_repository(repo_type, namespace, name)
         if repo:
             break
     if not repo:
@@ -274,11 +263,7 @@ async def git_head(
     # Get repository - try all repo types since we don't know from URL
     repo = None
     for repo_type in ["model", "dataset", "space"]:
-        repo = Repository.get_or_none(
-            Repository.namespace == namespace,
-            Repository.name == name,
-            Repository.repo_type == repo_type,
-        )
+        repo = get_repository(repo_type, namespace, name)
         if repo:
             break
     if not repo:

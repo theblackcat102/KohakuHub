@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, Repository, User
-from kohakuhub.db_operations import get_file
+from kohakuhub.db_operations import get_file, get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
@@ -115,12 +115,12 @@ async def calculate_folder_stats(
     return folder_size, folder_latest_mtime
 
 
-async def convert_file_object(obj, repo_id: str, prefix_len: int) -> dict:
+async def convert_file_object(obj, repository: Repository, prefix_len: int) -> dict:
     """Convert LakeFS file object to HuggingFace format.
 
     Args:
         obj: LakeFS object dict
-        repo_id: Repository ID
+        repository: Repository object (FK)
         prefix_len: Length of path prefix to remove
 
     Returns:
@@ -131,8 +131,8 @@ async def convert_file_object(obj, repo_id: str, prefix_len: int) -> dict:
     # Remove prefix from path to get relative path
     relative_path = obj["path"][prefix_len:] if prefix_len else obj["path"]
 
-    # Get correct checksum from database
-    file_record = get_file(repo_id, obj["path"])
+    # Get correct checksum from database using repository FK
+    file_record = get_file(repository, obj["path"])
 
     checksum = (
         file_record.sha256 if file_record and file_record.sha256 else obj["checksum"]
@@ -235,10 +235,8 @@ async def list_repo_tree(
     # Construct full repo ID
     repo_id = f"{namespace}/{repo_name}"
 
-    # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    # Check if repository exists using get_repository
+    repo_row = get_repository(repo_type, namespace, repo_name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -278,8 +276,8 @@ async def list_repo_tree(
     for obj in all_results:
         match obj["path_type"]:
             case "object":
-                # File object
-                file_obj = await convert_file_object(obj, repo_id, prefix_len)
+                # File object - pass Repository FK instead of repo_id
+                file_obj = await convert_file_object(obj, repo_row, prefix_len)
                 result_list.append(file_obj)
 
             case "common_prefix":
@@ -321,10 +319,8 @@ async def get_paths_info(
     # Construct full repo ID
     repo_id = f"{namespace}/{repo_name}"
 
-    # Check if repository exists
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    # Check if repository exists using get_repository
+    repo_row = get_repository(repo_type, namespace, repo_name)
 
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
@@ -351,8 +347,8 @@ async def get_paths_info(
             # It's a file
             is_lfs = obj_stats["size_bytes"] > cfg.app.lfs_threshold_bytes
 
-            # Get correct checksum from database
-            file_record = get_file(repo_id, clean_path)
+            # Get correct checksum from database using repository FK
+            file_record = get_file(repo_row, clean_path)
 
             checksum = (
                 file_record.sha256

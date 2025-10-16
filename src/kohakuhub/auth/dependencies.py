@@ -38,7 +38,7 @@ def get_current_user(
             & (Session.expires_at > datetime.now(timezone.utc))
         )
         if session:
-            user = User.get_or_none(User.id == session.user_id)
+            user = session.user  # Use ForeignKey relationship
             if user and user.is_active:
                 logger.debug(
                     f"Authenticated via session: {user.username} (session={session_id[:8]}...)"
@@ -67,7 +67,7 @@ def get_current_user(
                 Token.id == token.id
             ).execute()
 
-            user = User.get_or_none(User.id == token.user_id)
+            user = token.user  # Use ForeignKey relationship
             if user and user.is_active:
                 logger.debug(
                     f"Authenticated via token: {user.username} (token_id={token.id})"

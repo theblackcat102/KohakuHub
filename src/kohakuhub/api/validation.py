@@ -5,28 +5,10 @@ import re
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from kohakuhub.db import Organization, Repository, User
+from kohakuhub.db import Repository, User
+from kohakuhub.utils.names import normalize_name
 
 router = APIRouter()
-
-
-def normalize_name(name: str) -> str:
-    """Normalize name for conflict checking.
-
-    Names that normalize to the same value are considered conflicts.
-    This prevents confusing names like 'My-Repo' and 'my_repo'.
-
-    Args:
-        name: Original name
-
-    Returns:
-        Normalized name (lowercase, hyphens/underscores removed)
-    """
-    # Convert to lowercase
-    normalized = name.lower()
-    # Remove hyphens and underscores
-    normalized = normalized.replace("-", "").replace("_", "")
-    return normalized
 
 
 class CheckNameRequest(BaseModel):
@@ -121,26 +103,18 @@ async def check_name_availability(req: CheckNameRequest) -> CheckNameResponse:
                 message=f"Username conflicts with existing user: {user.username}",
             )
 
-    # Check organization name
-    existing_org = Organization.get_or_none(Organization.name == name)
+    # Check organization name (now unified with User model using normalized_name for efficiency)
+    # Use User.normalized_name for O(1) lookup instead of O(n) loop
+    existing_org = User.get_or_none(
+        (User.normalized_name == normalized) & (User.is_org == True)
+    )
     if existing_org:
         return CheckNameResponse(
             available=False,
             normalized_name=normalized,
-            conflict_with=name,
-            message=f"Organization name {name} is already taken",
+            conflict_with=existing_org.username,
+            message=f"Name conflicts with existing organization: {existing_org.username}",
         )
-
-    # Check for normalized organization conflicts
-    all_orgs = Organization.select()
-    for org in all_orgs:
-        if normalize_name(org.name) == normalized:
-            return CheckNameResponse(
-                available=False,
-                normalized_name=normalized,
-                conflict_with=org.name,
-                message=f"Name conflicts with existing organization: {org.name}",
-            )
 
     return CheckNameResponse(
         available=True, normalized_name=normalized, message="Name is available"

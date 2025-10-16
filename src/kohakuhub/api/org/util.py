@@ -1,87 +1,144 @@
-"""Utility functions for organization management."""
+"""Utility functions for organization management.
+
+DEPRECATED: This module is deprecated. Use db_operations.py instead.
+Organizations are now User objects with is_org=True.
+"""
 
 from fastapi import HTTPException
 
-from kohakuhub.config import cfg
-from kohakuhub.db import Organization, User, UserOrganization
+from kohakuhub.db_operations import (
+    create_organization as create_org_op,
+    create_user_organization as create_user_org_op,
+    get_organization,
+)
 
 # Error messages
 _ERR_USER_NOT_FOUND = "User not found"
 
 
-def create_organization(name: str, description: str | None, user: User):
-    """Create organization with default quotas (synchronous version).
+def create_organization(name: str, description: str | None, user):
+    """Create organization with default quotas.
 
-    Note: This function is deprecated. Use async version from db_async instead.
+    DEPRECATED: Use db_operations.create_organization instead.
+
+    Args:
+        name: Organization name
+        description: Organization description
+        user: User object (FK) who creates the organization
     """
-    if Organization.get_or_none(Organization.name == name):
-        raise HTTPException(400, detail="Organization name already exists")
+    from kohakuhub.db import db
 
-    # Apply default quotas
-    org = Organization.create(
-        name=name,
-        description=description,
-        private_quota_bytes=cfg.quota.default_org_private_quota_bytes,
-        public_quota_bytes=cfg.quota.default_org_public_quota_bytes,
-    )
-    UserOrganization.create(user=user.id, organization=org.id, role="super-admin")
+    with db.atomic():
+        existing_org = get_organization(name)
+        if existing_org:
+            raise HTTPException(400, detail="Organization name already exists")
+
+        org = create_org_op(name, description)
+        create_user_org_op(user, org, "super-admin")
     return org
 
 
 def get_organization_details(name: str):
-    return Organization.get_or_none(Organization.name == name)
+    """Get organization by name.
+
+    DEPRECATED: Use db_operations.get_organization instead.
+
+    Returns:
+        User object with is_org=True or None
+    """
+    return get_organization(name)
 
 
 def add_member_to_organization(org_id: int, username: str, role: str):
-    user = User.get_or_none(User.username == username)
+    """Add member to organization (by integer ID).
+
+    DEPRECATED: Use db_operations functions with User objects instead.
+    This function exists for backward compatibility but uses the new schema.
+    """
+    from kohakuhub.db_operations import (
+        get_user_by_id,
+        get_user_by_username,
+        get_user_organization,
+    )
+
+    user = get_user_by_username(username)
     if not user:
         raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
 
-    if UserOrganization.get_or_none(
-        (UserOrganization.user == user.id) & (UserOrganization.organization == org_id)
-    ):
+    org = get_user_by_id(org_id)
+    if not org or not org.is_org:
+        raise HTTPException(404, detail="Organization not found")
+
+    if get_user_organization(user, org):
         raise HTTPException(400, detail="User is already a member of the organization")
 
-    UserOrganization.create(user=user.id, organization=org_id, role=role)
+    create_user_org_op(user, org, role)
 
 
 def remove_member_from_organization(org_id: int, username: str):
-    user = User.get_or_none(User.username == username)
+    """Remove member from organization (by integer ID).
+
+    DEPRECATED: Use db_operations functions with User objects instead.
+    """
+    from kohakuhub.db_operations import (
+        delete_user_organization,
+        get_user_by_id,
+        get_user_by_username,
+        get_user_organization,
+    )
+
+    user = get_user_by_username(username)
     if not user:
         raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
 
-    user_org = UserOrganization.get_or_none(
-        (UserOrganization.user == user.id) & (UserOrganization.organization == org_id)
-    )
+    org = get_user_by_id(org_id)
+    if not org or not org.is_org:
+        raise HTTPException(404, detail="Organization not found")
+
+    user_org = get_user_organization(user, org)
     if not user_org:
         raise HTTPException(404, detail="User is not a member of the organization")
 
-    user_org.delete_instance()
+    delete_user_organization(user_org)
 
 
 def get_user_organizations(user_id: int):
-    """
-    Return the user's organization memberships with joined Organization rows.
-    Using FK + join allows attribute access like uo.organization.name.
-    """
-    query = (
-        UserOrganization.select(UserOrganization, Organization)
-        .join(Organization)  # FK-based join now works implicitly
-        .where(UserOrganization.user == user_id)
-    )
-    return list(query)
+    """Get user's organization memberships (by integer ID).
 
+    DEPRECATED: Use db_operations.list_user_organizations with User object instead.
+    This function exists for backward compatibility.
+    """
+    from kohakuhub.db_operations import get_user_by_id, list_user_organizations
 
-def update_member_role(org_id: int, username: str, role: str):
-    user = User.get_or_none(User.username == username)
+    user = get_user_by_id(user_id)
     if not user:
         raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
 
-    user_org = UserOrganization.get_or_none(
-        (UserOrganization.user == user.id) & (UserOrganization.organization == org_id)
+    return list_user_organizations(user)
+
+
+def update_member_role(org_id: int, username: str, role: str):
+    """Update member role in organization (by integer ID).
+
+    DEPRECATED: Use db_operations functions with User objects instead.
+    """
+    from kohakuhub.db_operations import (
+        get_user_by_id,
+        get_user_by_username,
+        get_user_organization,
+        update_user_organization,
     )
+
+    user = get_user_by_username(username)
+    if not user:
+        raise HTTPException(404, detail=_ERR_USER_NOT_FOUND)
+
+    org = get_user_by_id(org_id)
+    if not org or not org.is_org:
+        raise HTTPException(404, detail="Organization not found")
+
+    user_org = get_user_organization(user, org)
     if not user_org:
         raise HTTPException(404, detail="User is not a member of the organization")
 
-    user_org.role = role
-    user_org.save()
+    update_user_organization(user_org, role=role)

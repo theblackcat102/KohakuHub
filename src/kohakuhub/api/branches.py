@@ -398,7 +398,9 @@ async def revert_branch(
         tracked = await track_commit_lfs_objects(
             lakefs_repo=lakefs_repo,
             commit_id=new_commit_id,
-            repo_full_id=repo_id,
+            repo_type=repo_type,
+            namespace=namespace,
+            name=name,
         )
 
         if tracked > 0:
@@ -409,10 +411,10 @@ async def revert_branch(
         try:
             create_commit(
                 commit_id=new_commit_id,
-                repo_full_id=repo_id,
+                repository=repo_row,
                 repo_type=repo_type,
                 branch=branch,
-                user_id=user.id,
+                author=user,
                 username=user.username,
                 message=commit_msg,
                 description=f"Reverted {commit_id}",
@@ -525,7 +527,9 @@ async def merge_branches(
             tracked = await track_commit_lfs_objects(
                 lakefs_repo=lakefs_repo,
                 commit_id=merge_commit_id,
-                repo_full_id=repo_id,
+                repo_type=repo_type,
+                namespace=namespace,
+                name=name,
             )
 
             if tracked > 0:
@@ -538,10 +542,10 @@ async def merge_branches(
             try:
                 create_commit(
                     commit_id=merge_commit_id,
-                    repo_full_id=repo_id,
+                    repository=repo_row,
                     repo_type=repo_type,
                     branch=destination_branch,
-                    user_id=user.id,
+                    author=user,
                     username=user.username,
                     message=merge_msg,
                     description=f"Merged {source_ref}",
@@ -637,7 +641,9 @@ async def reset_branch(
         all_recoverable, missing_files, affected_commits = (
             await check_commit_range_recoverability(
                 lakefs_repo=lakefs_repo,
-                repo_full_id=repo_id,
+                repo_type=repo_type,
+                namespace=namespace,
+                name=name,
                 target_commit=commit_id,
                 current_branch=branch,
             )
@@ -776,7 +782,9 @@ async def reset_branch(
             synced = await sync_file_table_with_commit(
                 lakefs_repo=lakefs_repo,
                 ref=branch,
-                repo_full_id=repo_id,
+                repo_type=repo_type,
+                namespace=namespace,
+                name=name,
             )
             logger.info(f"Synced {synced} file(s) to File table")
         except Exception as e:
@@ -787,10 +795,10 @@ async def reset_branch(
         try:
             create_commit(
                 commit_id=commit_result["id"],
-                repo_full_id=repo_id,
+                repository=repo_row,
                 repo_type=repo_type,
                 branch=branch,
-                user_id=user.id,
+                author=user,
                 username=user.username,
                 message=commit_message,
                 description=f"Reset to {commit_id}",

@@ -17,7 +17,6 @@ from kohakuhub.db import (
     Commit,
     File,
     LFSObjectHistory,
-    Organization,
     Repository,
     User,
 )
@@ -29,6 +28,7 @@ from kohakuhub.db_operations import (
     delete_repository,
     delete_user,
     get_invitation,
+    get_organization,
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.s3 import get_s3_client
@@ -301,8 +301,8 @@ async def delete_user_admin(
     if not user:
         raise HTTPException(404, detail={"error": f"User not found: {username}"})
 
-    # Get all repositories owned by this user
-    owned_repos = list(Repository.select().where(Repository.owner_id == user.id))
+    # Get all repositories owned by this user (using FK)
+    owned_repos = list(Repository.select().where(Repository.owner == user))
 
     # Check if user owns repositories
     if owned_repos and not force:
@@ -404,14 +404,14 @@ async def create_register_invitation_admin(
                 400, detail={"error": "Invalid role. Must be visitor, member, or admin"}
             )
 
-        # Verify organization exists
-        org = Organization.get_or_none(Organization.id == request.org_id)
+        # Verify organization exists (using get_organization with ID)
+        org = User.get_or_none((User.id == request.org_id) & (User.is_org == True))
         if not org:
             raise HTTPException(
                 404, detail={"error": f"Organization not found: {request.org_id}"}
             )
 
-        org_name = org.name
+        org_name = org.username
     else:
         org_name = None
 
@@ -486,9 +486,8 @@ async def list_invitations_admin(
 
     invitations = []
     for inv in query:
-        # Get creator username
-        creator = User.get_or_none(User.id == inv.created_by)
-        creator_username = creator.username if creator else "System"
+        # Get creator username (using FK backref)
+        creator_username = inv.created_by.username if inv.created_by else "System"
 
         # Parse parameters
         try:
@@ -578,9 +577,9 @@ async def get_quota_admin(
 
     # Check if namespace exists
     if is_org:
-        entity = Organization.get_or_none(Organization.name == namespace)
+        entity = User.get_or_none((User.username == namespace) & (User.is_org == True))
     else:
-        entity = User.get_or_none(User.username == namespace)
+        entity = User.get_or_none((User.username == namespace) & (User.is_org == False))
 
     if not entity:
         raise HTTPException(
@@ -623,9 +622,9 @@ async def set_quota_admin(
 
     # Check if namespace exists
     if is_org:
-        entity = Organization.get_or_none(Organization.name == namespace)
+        entity = User.get_or_none((User.username == namespace) & (User.is_org == True))
     else:
-        entity = User.get_or_none(User.username == namespace)
+        entity = User.get_or_none((User.username == namespace) & (User.is_org == False))
 
     if not entity:
         raise HTTPException(
@@ -676,9 +675,9 @@ async def recalculate_quota_admin(
 
     # Check if namespace exists
     if is_org:
-        entity = Organization.get_or_none(Organization.name == namespace)
+        entity = User.get_or_none((User.username == namespace) & (User.is_org == True))
     else:
-        entity = User.get_or_none(User.username == namespace)
+        entity = User.get_or_none((User.username == namespace) & (User.is_org == False))
 
     if not entity:
         raise HTTPException(
@@ -790,8 +789,8 @@ async def get_system_stats(
         System statistics
     """
 
-    user_count = User.select().count()
-    org_count = Organization.select().count()
+    user_count = User.select().where(User.is_org == False).count()
+    org_count = User.select().where(User.is_org == True).count()
     repo_count = Repository.select().count()
     private_repo_count = Repository.select().where(Repository.private == True).count()
     public_repo_count = Repository.select().where(Repository.private == False).count()
@@ -841,9 +840,8 @@ async def list_repositories_admin(
 
     repos = []
     for repo in query:
-        # Get owner username
-        owner = User.get_or_none(User.id == repo.owner_id)
-        owner_username = owner.username if owner else "unknown"
+        # Get owner username (using FK)
+        owner_username = repo.owner.username if repo.owner else "unknown"
 
         # Get storage info
         storage_info = get_repo_storage_info(repo)
@@ -856,7 +854,7 @@ async def list_repositories_admin(
                 "name": repo.name,
                 "full_id": repo.full_id,
                 "private": repo.private,
-                "owner_id": repo.owner_id,
+                "owner_id": repo.owner.id if repo.owner else None,
                 "owner_username": owner_username,
                 "created_at": repo.created_at.isoformat(),
                 # Storage information
@@ -904,23 +902,19 @@ async def get_repository_admin(
             detail={"error": f"Repository not found: {repo_type}/{namespace}/{name}"},
         )
 
-    # Get owner
-    owner = User.get_or_none(User.id == repo.owner_id)
+    # Get owner (using FK)
+    owner = repo.owner
 
-    # Count files
-    file_count = File.select().where(File.repo_full_id == repo.full_id).count()
+    # Count files (using FK)
+    file_count = File.select().where(File.repository == repo).count()
 
-    # Count commits
-    commit_count = (
-        Commit.select()
-        .where(Commit.repo_full_id == repo.full_id, Commit.repo_type == repo.repo_type)
-        .count()
-    )
+    # Count commits (using FK)
+    commit_count = Commit.select().where(Commit.repository == repo).count()
 
-    # Get total file size
+    # Get total file size (using FK)
     total_size = (
         File.select()
-        .where(File.repo_full_id == repo.full_id)
+        .where(File.repository == repo)
         .select(File.size)
         .scalar(as_tuple=False)
     )
@@ -937,7 +931,7 @@ async def get_repository_admin(
         "name": repo.name,
         "full_id": repo.full_id,
         "private": repo.private,
-        "owner_id": repo.owner_id,
+        "owner_id": owner.id if owner else None,
         "owner_username": owner.username if owner else "unknown",
         "created_at": repo.created_at.isoformat(),
         "file_count": file_count,
@@ -978,7 +972,10 @@ async def list_commits_admin(
     query = Commit.select()
 
     if repo_full_id:
-        query = query.where(Commit.repo_full_id == repo_full_id)
+        # Find repository by full_id (need to search across all types)
+        repo = Repository.get_or_none(Repository.full_id == repo_full_id)
+        if repo:
+            query = query.where(Commit.repository == repo)
     if username:
         query = query.where(Commit.username == username)
 
@@ -990,10 +987,12 @@ async def list_commits_admin(
             {
                 "id": commit.id,
                 "commit_id": commit.commit_id,
-                "repo_full_id": commit.repo_full_id,
+                "repo_full_id": (
+                    commit.repository.full_id if commit.repository else None
+                ),
                 "repo_type": commit.repo_type,
                 "branch": commit.branch,
-                "user_id": commit.user_id,
+                "user_id": commit.author.id if commit.author else None,
                 "username": commit.username,
                 "message": commit.message,
                 "description": commit.description,
@@ -1135,12 +1134,18 @@ async def get_detailed_stats(
     """
 
     # User stats
-    total_users = User.select().count()
-    active_users = User.select().where(User.is_active == True).count()
-    verified_users = User.select().where(User.email_verified == True).count()
+    total_users = User.select().where(User.is_org == False).count()
+    active_users = (
+        User.select().where((User.is_active == True) & (User.is_org == False)).count()
+    )
+    verified_users = (
+        User.select()
+        .where((User.email_verified == True) & (User.is_org == False))
+        .count()
+    )
 
     # Organization stats
-    total_orgs = Organization.select().count()
+    total_orgs = User.select().where(User.is_org == True).count()
 
     # Repository stats
     total_repos = Repository.select().count()
@@ -1175,12 +1180,18 @@ async def get_detailed_stats(
         or 0
     )
 
-    # Storage stats
+    # Storage stats (only count regular users, not orgs)
     total_private_used = (
-        User.select(fn.SUM(User.private_used_bytes).alias("total")).scalar() or 0
+        User.select(fn.SUM(User.private_used_bytes).alias("total"))
+        .where(User.is_org == False)
+        .scalar()
+        or 0
     )
     total_public_used = (
-        User.select(fn.SUM(User.public_used_bytes).alias("total")).scalar() or 0
+        User.select(fn.SUM(User.public_used_bytes).alias("total"))
+        .where(User.is_org == False)
+        .scalar()
+        or 0
     )
 
     return {
@@ -1266,10 +1277,10 @@ async def get_timeseries_stats(
         date_key = commit.created_at.date().isoformat()
         daily_commits[date_key] = daily_commits.get(date_key, 0) + 1
 
-    # Users created per day
+    # Users created per day (only regular users, not orgs)
     users_by_day = (
         User.select(User.created_at)
-        .where(User.created_at >= cutoff_date)
+        .where((User.created_at >= cutoff_date) & (User.is_org == False))
         .order_by(User.created_at.asc())
     )
 
@@ -1303,58 +1314,44 @@ async def get_top_repositories(
     """
 
     if by == "commits":
-        # Top repos by commit count
+        # Top repos by commit count (using FK)
         top_repos = (
             Commit.select(
-                Commit.repo_full_id,
-                Commit.repo_type,
+                Commit.repository,
                 fn.COUNT(Commit.id).alias("count"),
             )
-            .group_by(Commit.repo_full_id, Commit.repo_type)
+            .group_by(Commit.repository)
             .order_by(fn.COUNT(Commit.id).desc())
             .limit(limit)
         )
 
         result = []
         for item in top_repos:
-            repo = Repository.get_or_none(
-                Repository.full_id == item.repo_full_id,
-                Repository.repo_type == item.repo_type,
-            )
+            repo = item.repository
             result.append(
                 {
-                    "repo_full_id": item.repo_full_id,
-                    "repo_type": item.repo_type,
+                    "repo_full_id": repo.full_id if repo else "unknown",
+                    "repo_type": repo.repo_type if repo else "unknown",
                     "commit_count": item.count,
                     "private": repo.private if repo else False,
                 }
             )
 
     else:  # by size
-        # Top repos by total file size
+        # Top repos by total file size (using FK)
         top_repos = (
-            File.select(File.repo_full_id, fn.SUM(File.size).alias("total_size"))
-            .group_by(File.repo_full_id)
+            File.select(File.repository, fn.SUM(File.size).alias("total_size"))
+            .group_by(File.repository)
             .order_by(fn.SUM(File.size).desc())
             .limit(limit)
         )
 
         result = []
         for item in top_repos:
-            # Find repo in any type
-            repo = None
-            for repo_type in ["model", "dataset", "space"]:
-                r = Repository.get_or_none(
-                    Repository.full_id == item.repo_full_id,
-                    Repository.repo_type == repo_type,
-                )
-                if r:
-                    repo = r
-                    break
-
+            repo = item.repository
             result.append(
                 {
-                    "repo_full_id": item.repo_full_id,
+                    "repo_full_id": repo.full_id if repo else "unknown",
                     "repo_type": repo.repo_type if repo else "unknown",
                     "total_size": item.total_size,
                     "private": repo.private if repo else False,

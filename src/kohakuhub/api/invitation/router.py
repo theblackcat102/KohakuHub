@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
 from kohakuhub.config import cfg
-from kohakuhub.db import Invitation, Organization, User, UserOrganization, db
+from kohakuhub.db import Invitation, User, UserOrganization, db
 from kohakuhub.db_operations import (
     check_invitation_available,
     create_invitation,
@@ -19,6 +19,7 @@ from kohakuhub.db_operations import (
     get_invitation,
     get_organization,
     get_user_by_email,
+    get_user_by_id,
     get_user_organization,
     list_org_invitations,
     mark_invitation_used,
@@ -81,7 +82,7 @@ async def create_org_invitation(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if user is admin of the organization
-    user_org = get_user_organization(user.id, org.id)
+    user_org = get_user_organization(user, org)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(
             403, detail="Not authorized to invite members to this organization"
@@ -91,7 +92,7 @@ async def create_org_invitation(
     if req.email:
         invitee_user = get_user_by_email(req.email)
         if invitee_user:
-            existing_membership = get_user_organization(invitee_user.id, org.id)
+            existing_membership = get_user_organization(invitee_user, org)
             if existing_membership:
                 raise HTTPException(
                     400, detail="User is already a member of this organization"
@@ -107,7 +108,7 @@ async def create_org_invitation(
     parameters = json.dumps(
         {
             "org_id": org.id,
-            "org_name": org.name,
+            "org_name": org.username,
             "role": req.role,
             "email": req.email,  # May be None for reusable invitations
         }
@@ -119,7 +120,7 @@ async def create_org_invitation(
             token=token,
             action="join_org",
             parameters=parameters,
-            created_by=user.id,
+            created_by=user,
             expires_at=expires_at,
             max_usage=req.max_usage,
         )
@@ -129,7 +130,7 @@ async def create_org_invitation(
         await asyncio.to_thread(
             send_org_invitation_email,
             req.email,
-            org.name,
+            org.username,
             user.username,
             token,
             req.role,
@@ -139,11 +140,11 @@ async def create_org_invitation(
     invite_type = "reusable" if req.max_usage else "single-use"
     if req.email:
         logger.success(
-            f"Invitation created by {user.username} for {req.email} to join {org.name} as {req.role}"
+            f"Invitation created by {user.username} for {req.email} to join {org.username} as {req.role}"
         )
     else:
         logger.success(
-            f"{invite_type.capitalize()} invitation created by {user.username} for {org.name} as {req.role}"
+            f"{invite_type.capitalize()} invitation created by {user.username} for {org.username} as {req.role}"
         )
 
     invitation_link = f"{cfg.app.base_url}/invite/{token}"
@@ -183,9 +184,10 @@ async def get_invitation_details(token: str):
     except json.JSONDecodeError:
         raise HTTPException(500, detail="Invalid invitation data")
 
-    # Get inviter username
-    inviter = User.get_or_none(User.id == invitation.created_by)
-    inviter_username = inviter.username if inviter else "Unknown"
+    # Get inviter username (created_by is now a ForeignKey to User)
+    inviter_username = (
+        invitation.created_by.username if invitation.created_by else "Unknown"
+    )
 
     response = {
         "action": invitation.action,
@@ -222,15 +224,20 @@ def _handle_join_org_action(invitation: Invitation, user: User, params: dict) ->
     org_id = params.get("org_id")
     role = params.get("role", "member")
 
+    # Get organization object
+    org = get_user_by_id(org_id)
+    if not org:
+        raise HTTPException(404, detail="Organization not found")
+
     # Check if user is already a member
-    existing_membership = get_user_organization(user.id, org_id)
+    existing_membership = get_user_organization(user, org)
     if existing_membership:
         raise HTTPException(400, detail="You are already a member of this organization")
 
     # Add user to organization
     with db.atomic():
-        create_user_organization(user.id, org_id, role)
-        mark_invitation_used(invitation, user.id)
+        create_user_organization(user, org, role)
+        mark_invitation_used(invitation, user)
 
     org_name = params.get("org_name", "the organization")
     logger.success(
@@ -260,19 +267,21 @@ def _handle_register_account_action(
     """
     # For register invitations, mark as used and optionally add to org
     with db.atomic():
-        mark_invitation_used(invitation, user.id)
+        mark_invitation_used(invitation, user)
 
         # If invitation includes org membership, add user to org
         org_id = params.get("org_id")
         if org_id:
-            role = params.get("role", "member")
-            existing_membership = get_user_organization(user.id, org_id)
-            if not existing_membership:
-                create_user_organization(user.id, org_id, role)
-                org_name = params.get("org_name", "the organization")
-                logger.success(
-                    f"User {user.username} registered via invitation and joined {org_name} as {role}"
-                )
+            org = get_user_by_id(org_id)
+            if org:
+                role = params.get("role", "member")
+                existing_membership = get_user_organization(user, org)
+                if not existing_membership:
+                    create_user_organization(user, org, role)
+                    org_name = params.get("org_name", "the organization")
+                    logger.success(
+                        f"User {user.username} registered via invitation and joined {org_name} as {role}"
+                    )
 
     logger.success(f"User {user.username} used registration invitation")
 
@@ -340,19 +349,20 @@ async def list_organization_invitations(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if user is admin of the organization
-    user_org = get_user_organization(user.id, org.id)
+    user_org = get_user_organization(user, org)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(403, detail="Not authorized to view invitations")
 
     # Get all invitations for this organization
-    invitations = list_org_invitations(org.id)
+    invitations = list_org_invitations(org)
 
     # Format response
     result = []
     for inv in invitations:
         try:
             params = json.loads(inv.parameters)
-            inviter = User.get_or_none(User.id == inv.created_by)
+            # created_by is now a ForeignKey to User
+            inviter_username = inv.created_by.username if inv.created_by else "Unknown"
 
             # Check if invitation is still available
             is_available, _ = check_invitation_available(inv)
@@ -363,7 +373,7 @@ async def list_organization_invitations(
                     "token": inv.token,
                     "email": params.get("email"),
                     "role": params.get("role"),
-                    "created_by": inviter.username if inviter else "Unknown",
+                    "created_by": inviter_username,
                     "created_at": inv.created_at.isoformat(),
                     "expires_at": inv.expires_at.isoformat(),
                     "max_usage": inv.max_usage,
@@ -407,7 +417,11 @@ async def delete_invitation_endpoint(
     # Check authorization based on action type
     if invitation.action == "join_org":
         org_id = params.get("org_id")
-        user_org = get_user_organization(user.id, org_id)
+        org = get_user_by_id(org_id)
+        if not org:
+            raise HTTPException(404, detail="Organization not found")
+
+        user_org = get_user_organization(user, org)
 
         if not user_org or user_org.role not in ["admin", "super-admin"]:
             raise HTTPException(403, detail="Not authorized to delete this invitation")

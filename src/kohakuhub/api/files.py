@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
 from kohakuhub.config import cfg
-from kohakuhub.db import File, Organization, Repository, User
-from kohakuhub.db_operations import get_file, get_repository
+from kohakuhub.db import File, Repository, User
+from kohakuhub.db_operations import get_file, get_repository, get_organization
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.auth.permissions import (
@@ -46,11 +46,13 @@ class RepoType(str, Enum):
 # ========== Preupload Endpoint ==========
 
 
-async def check_file_by_sha256(repo_id: str, path: str, sha256: str, size: int) -> bool:
+async def check_file_by_sha256(
+    repo: Repository, path: str, sha256: str, size: int
+) -> bool:
     """Check if file with same SHA256 and size already exists.
 
     Args:
-        repo_id: Repository ID
+        repo: Repository object
         path: File path
         sha256: SHA256 hash
         size: File size
@@ -58,7 +60,7 @@ async def check_file_by_sha256(repo_id: str, path: str, sha256: str, size: int) 
     Returns:
         True if file should be ignored (already exists), False otherwise
     """
-    existing = get_file(repo_id, path)
+    existing = get_file(repo, path)
     if existing and existing.sha256 == sha256 and existing.size == size:
         return True
     return False
@@ -119,13 +121,19 @@ async def check_file_by_sample(
 
 
 async def process_preupload_file(
-    file_info: dict, repo_id: str, lakefs_repo: str, revision: str, threshold: int
+    file_info: dict,
+    repo: Repository,
+    repo_id: str,
+    lakefs_repo: str,
+    revision: str,
+    threshold: int,
 ) -> dict:
     """Process single file for preupload check.
 
     Args:
         file_info: File metadata dict
-        repo_id: Repository ID
+        repo: Repository object
+        repo_id: Repository ID (for check_file_by_sample)
         lakefs_repo: LakeFS repository name
         revision: Branch name
         threshold: LFS size threshold
@@ -145,7 +153,7 @@ async def process_preupload_file(
     # Check for existing file with same content
     if sha256:
         # If sha256 provided, use it for comparison (most reliable)
-        should_ignore = await check_file_by_sha256(repo_id, path, sha256, size)
+        should_ignore = await check_file_by_sha256(repo, path, sha256, size)
     elif sample and upload_mode == "regular":
         # For small files, compare sample content if no sha256 provided
         should_ignore = await check_file_by_sample(
@@ -214,7 +222,7 @@ async def preupload(
     total_upload_bytes = sum(int(f.get("size", 0)) for f in files)
 
     # Check if namespace is organization
-    org = Organization.get_or_none(Organization.name == namespace)
+    org = get_organization(namespace)
     is_org = org is not None
 
     # Check storage quota before upload (based on repo privacy)
@@ -236,7 +244,9 @@ async def preupload(
     # Process all files in parallel
     result_files = await asyncio.gather(
         *[
-            process_preupload_file(f, repo_id, lakefs_repo, revision, threshold)
+            process_preupload_file(
+                f, repo_row, repo_id, lakefs_repo, revision, threshold
+            )
             for f in files
         ]
     )
@@ -348,9 +358,7 @@ async def _get_file_metadata(
     repo_id = f"{namespace}/{name}"
 
     # Check repository exists and read permission
-    repo_row = Repository.get_or_none(
-        (Repository.full_id == repo_id) & (Repository.repo_type == repo_type)
-    )
+    repo_row = get_repository(repo_type, namespace, name)
     if repo_row:
         check_repo_read_permission(repo_row, user)
 
@@ -394,7 +402,7 @@ async def _get_file_metadata(
 
     # Get correct checksum from database
     # sha256 column stores: git blob SHA1 for non-LFS, SHA256 for LFS
-    file_record = get_file(repo_id, path)
+    file_record = get_file(repo_row, path) if repo_row else None
 
     # HuggingFace expects plain SHA256 hex (64 characters, unquoted)
     # For non-LFS: use git blob SHA1, for LFS: use SHA256

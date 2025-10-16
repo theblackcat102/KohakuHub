@@ -5,7 +5,7 @@ from pydantic import BaseModel
 import yaml
 
 from kohakuhub.config import cfg
-from kohakuhub.db import Organization, User, UserOrganization
+from kohakuhub.db import User, UserOrganization
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
 
@@ -85,19 +85,19 @@ def whoami_v2(user: User | None = Depends(get_optional_user)):
     if not user:
         raise HTTPException(401, detail="Invalid user token")
 
-    # Get user's organizations
+    # Get user's organizations (organizations are User objects with is_org=True)
     user_orgs = (
         UserOrganization.select()
-        .join(Organization)
-        .where(UserOrganization.user == user.id)
+        .join(User, on=(UserOrganization.organization == User.id))
+        .where(UserOrganization.user == user)
     )
 
     orgs_list = []
     for uo in user_orgs:
         orgs_list.append(
             {
-                "name": uo.organization.name,
-                "fullname": uo.organization.name,
+                "name": uo.organization.username,
+                "fullname": uo.organization.username,
                 "roleInOrg": uo.role,
             }
         )

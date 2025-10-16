@@ -7,7 +7,7 @@ import asyncio
 from fastapi import APIRouter, Depends, Query, Request
 
 from kohakuhub.config import cfg
-from kohakuhub.db import Organization, Repository, User, UserOrganization
+from kohakuhub.db import Repository, User, UserOrganization
 from kohakuhub.db_operations import (
     get_file,
     get_organization,
@@ -266,12 +266,10 @@ def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = No
         # 2. Their own private repos
         # 3. Private repos in organizations they're a member of
 
-        # Get user's organizations
+        # Get user's organizations using FK relationship
         user_orgs = [
-            uo.organization.name
-            for uo in UserOrganization.select()
-            .join(Organization)
-            .where(UserOrganization.user == user.id)
+            uo.organization.username
+            for uo in UserOrganization.select().where(UserOrganization.user == user)
         ]
 
         # Build query: public OR (private AND owned by user or user's orgs)

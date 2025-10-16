@@ -7,7 +7,8 @@ for users and organizations with separate tracking for private and public reposi
 import asyncio
 
 from kohakuhub.config import cfg
-from kohakuhub.db import LFSObjectHistory, Organization, Repository, User
+from kohakuhub.db import LFSObjectHistory, Repository, User
+from kohakuhub.db_operations import get_organization
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 
@@ -64,16 +65,14 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
     # Calculate LFS storage from history
     # Total LFS storage (all versions)
     lfs_total = (
-        LFSObjectHistory.select()
-        .where(LFSObjectHistory.repo_full_id == repo.full_id)
-        .count()
+        LFSObjectHistory.select().where(LFSObjectHistory.repository == repo).count()
     )
 
     if lfs_total > 0:
         lfs_total_bytes = sum(
             obj.size
             for obj in LFSObjectHistory.select().where(
-                LFSObjectHistory.repo_full_id == repo.full_id
+                LFSObjectHistory.repository == repo
             )
         )
     else:
@@ -82,7 +81,7 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
     # Unique LFS storage (deduplicated by SHA256)
     unique_lfs = (
         LFSObjectHistory.select(LFSObjectHistory.sha256, LFSObjectHistory.size)
-        .where(LFSObjectHistory.repo_full_id == repo.full_id)
+        .where(LFSObjectHistory.repository == repo)
         .distinct()
     )
 
@@ -166,17 +165,16 @@ async def update_namespace_storage(
     """
     storage = await calculate_namespace_storage(namespace, is_org)
 
-    # Update database
+    # Update database - organizations are now users with is_org=True
     if is_org:
-        org = Organization.get(Organization.name == namespace)
-        org.private_used_bytes = storage["private_bytes"]
-        org.public_used_bytes = storage["public_bytes"]
-        org.save()
+        entity = get_organization(namespace)
     else:
-        user = User.get(User.username == namespace)
-        user.private_used_bytes = storage["private_bytes"]
-        user.public_used_bytes = storage["public_bytes"]
-        user.save()
+        entity = User.get(User.username == namespace)
+
+    if entity:
+        entity.private_used_bytes = storage["private_bytes"]
+        entity.public_used_bytes = storage["public_bytes"]
+        entity.save()
 
     return storage
 
@@ -196,42 +194,19 @@ def check_quota(
         Tuple of (allowed: bool, error_message: str | None)
     """
 
-    # Get current quota and usage
+    # Get current quota and usage - organizations are now users with is_org=True
     if is_org:
-        org = Organization.get_or_none(Organization.name == namespace)
-        if not org:
-            entity, private_quota, public_quota, private_used, public_used = (
-                None,
-                0,
-                0,
-                0,
-                0,
-            )
-        else:
-            entity = org
-            private_quota = org.private_quota_bytes
-            public_quota = org.public_quota_bytes
-            private_used = org.private_used_bytes
-            public_used = org.public_used_bytes
+        entity = get_organization(namespace)
     else:
-        user = User.get_or_none(User.username == namespace)
-        if not user:
-            entity, private_quota, public_quota, private_used, public_used = (
-                None,
-                0,
-                0,
-                0,
-                0,
-            )
-        else:
-            entity = user
-            private_quota = user.private_quota_bytes
-            public_quota = user.public_quota_bytes
-            private_used = user.private_used_bytes
-            public_used = user.public_used_bytes
+        entity = User.get_or_none(User.username == namespace)
 
     if not entity:
         return False, f"{'Organization' if is_org else 'User'} not found: {namespace}"
+
+    private_quota = entity.private_quota_bytes
+    public_quota = entity.public_quota_bytes
+    private_used = entity.private_used_bytes
+    public_used = entity.public_used_bytes
 
     # Check the appropriate quota based on repo privacy
     if is_private:
@@ -276,22 +251,19 @@ def increment_storage(
         Tuple of (private_used_bytes, public_used_bytes)
     """
 
+    # Organizations are now users with is_org=True
     if is_org:
-        org = Organization.get(Organization.name == namespace)
-        if is_private:
-            org.private_used_bytes = max(0, org.private_used_bytes + bytes_delta)
-        else:
-            org.public_used_bytes = max(0, org.public_used_bytes + bytes_delta)
-        org.save()
-        private_used, public_used = org.private_used_bytes, org.public_used_bytes
+        entity = get_organization(namespace)
     else:
-        user = User.get(User.username == namespace)
-        if is_private:
-            user.private_used_bytes = max(0, user.private_used_bytes + bytes_delta)
-        else:
-            user.public_used_bytes = max(0, user.public_used_bytes + bytes_delta)
-        user.save()
-        private_used, public_used = user.private_used_bytes, user.public_used_bytes
+        entity = User.get(User.username == namespace)
+
+    if is_private:
+        entity.private_used_bytes = max(0, entity.private_used_bytes + bytes_delta)
+    else:
+        entity.public_used_bytes = max(0, entity.public_used_bytes + bytes_delta)
+    entity.save()
+
+    private_used, public_used = entity.private_used_bytes, entity.public_used_bytes
 
     logger.debug(
         f"Updated storage for {'org' if is_org else 'user'} {namespace}: "
@@ -315,24 +287,19 @@ def get_storage_info(
         Dict with quota information for both private and public storage
     """
 
+    # Organizations are now users with is_org=True
     if is_org:
-        org = Organization.get_or_none(Organization.name == namespace)
-        if not org:
-            private_quota, public_quota, private_used, public_used = None, None, 0, 0
-        else:
-            private_quota = org.private_quota_bytes
-            public_quota = org.public_quota_bytes
-            private_used = org.private_used_bytes
-            public_used = org.public_used_bytes
+        entity = get_organization(namespace)
     else:
-        user = User.get_or_none(User.username == namespace)
-        if not user:
-            private_quota, public_quota, private_used, public_used = None, None, 0, 0
-        else:
-            private_quota = user.private_quota_bytes
-            public_quota = user.public_quota_bytes
-            private_used = user.private_used_bytes
-            public_used = user.public_used_bytes
+        entity = User.get_or_none(User.username == namespace)
+
+    if not entity:
+        private_quota, public_quota, private_used, public_used = None, None, 0, 0
+    else:
+        private_quota = entity.private_quota_bytes
+        public_quota = entity.public_quota_bytes
+        private_used = entity.private_used_bytes
+        public_used = entity.public_used_bytes
 
     # Calculate availability and percentages
     private_available = (
@@ -386,27 +353,24 @@ def set_quota(
         Updated storage info dict
     """
 
+    # Organizations are now users with is_org=True
     if is_org:
-        org = Organization.get(Organization.name == namespace)
-        if private_quota_bytes is not None:
-            org.private_quota_bytes = private_quota_bytes
-        if public_quota_bytes is not None:
-            org.public_quota_bytes = public_quota_bytes
-        org.save()
+        entity = get_organization(namespace)
     else:
-        user = User.get(User.username == namespace)
-        if private_quota_bytes is not None:
-            user.private_quota_bytes = private_quota_bytes
-        if public_quota_bytes is not None:
-            user.public_quota_bytes = public_quota_bytes
-        user.save()
+        entity = User.get(User.username == namespace)
+
+    if private_quota_bytes is not None:
+        entity.private_quota_bytes = private_quota_bytes
+    if public_quota_bytes is not None:
+        entity.public_quota_bytes = public_quota_bytes
+    entity.save()
 
     logger.info(
         f"Set quota for {'org' if is_org else 'user'} {namespace}: "
         f"private={private_quota_bytes}, public={public_quota_bytes}"
     )
 
-    return get_storage_info(namespace, is_org)  # No await - it's sync now
+    return get_storage_info(namespace, is_org)
 
 
 # ============================================================================
@@ -423,29 +387,19 @@ def get_repo_storage_info(repo: Repository) -> dict[str, int | float | None]:
     Returns:
         Dict with quota information including namespace context
     """
-    # Get namespace quota info for context
-    org = Organization.get_or_none(Organization.name == repo.namespace)
-    is_org = org is not None
+    # Get namespace quota info for context - use owner ForeignKey
+    entity = repo.owner  # Direct ForeignKey access
 
-    if is_org:
+    if entity:
         namespace_quota = (
-            org.private_quota_bytes if repo.private else org.public_quota_bytes
+            entity.private_quota_bytes if repo.private else entity.public_quota_bytes
         )
         namespace_used = (
-            org.private_used_bytes if repo.private else org.public_used_bytes
+            entity.private_used_bytes if repo.private else entity.public_used_bytes
         )
     else:
-        user = User.get_or_none(User.username == repo.namespace)
-        if user:
-            namespace_quota = (
-                user.private_quota_bytes if repo.private else user.public_quota_bytes
-            )
-            namespace_used = (
-                user.private_used_bytes if repo.private else user.public_used_bytes
-            )
-        else:
-            namespace_quota = None
-            namespace_used = 0
+        namespace_quota = None
+        namespace_used = 0
 
     # Calculate namespace available quota
     namespace_available = (
@@ -502,31 +456,21 @@ def set_repo_quota(
     """
     # If setting a specific quota (not NULL), validate against namespace
     if quota_bytes is not None:
-        # Get namespace available quota
-        org = Organization.get_or_none(Organization.name == repo.namespace)
-        is_org = org is not None
+        # Get namespace available quota - use owner ForeignKey
+        entity = repo.owner  # Direct ForeignKey access
 
-        if is_org:
+        if entity:
             namespace_quota = (
-                org.private_quota_bytes if repo.private else org.public_quota_bytes
+                entity.private_quota_bytes
+                if repo.private
+                else entity.public_quota_bytes
             )
             namespace_used = (
-                org.private_used_bytes if repo.private else org.public_used_bytes
+                entity.private_used_bytes if repo.private else entity.public_used_bytes
             )
         else:
-            user = User.get_or_none(User.username == repo.namespace)
-            if user:
-                namespace_quota = (
-                    user.private_quota_bytes
-                    if repo.private
-                    else user.public_quota_bytes
-                )
-                namespace_used = (
-                    user.private_used_bytes if repo.private else user.public_used_bytes
-                )
-            else:
-                namespace_quota = None
-                namespace_used = 0
+            namespace_quota = None
+            namespace_used = 0
 
         # Validate: repository quota cannot exceed namespace available
         if namespace_quota is not None:

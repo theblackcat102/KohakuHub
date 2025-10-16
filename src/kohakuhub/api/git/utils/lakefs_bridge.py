@@ -170,10 +170,15 @@ class GitLakeFSBridge:
             Dict of path -> (blob_sha1, blob_data, mode)
         """
 
-        # Get File table records for LFS tracking
+        # Get repository and File table records for LFS tracking
+        from kohakuhub.db_operations import get_repository
+
+        repo = get_repository(self.repo_type, self.namespace, self.name)
+        if not repo:
+            return {}
+
         file_records = {
-            f.path_in_repo: f
-            for f in File.select().where(File.repo_full_id == self.repo_id)
+            f.path_in_repo: f for f in File.select().where(File.repository == repo)
         }
 
         # Check for .gitattributes and parse LFS patterns

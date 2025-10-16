@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from kohakuhub.config import cfg
 from kohakuhub.db import (
     File,
-    Organization,
     Repository,
     StagingUpload,
     User,
@@ -126,7 +125,7 @@ async def create_repo(
         namespace=namespace,
         name=payload.name,
         full_id=full_id,
-        defaults={"private": payload.private, "owner_id": user.id},
+        defaults={"private": payload.private, "owner": user},
     )
 
     return {
@@ -190,14 +189,14 @@ async def delete_repo(
             return hf_server_error(f"LakeFS repository deletion failed: {str(e)}")
         logger.info(f"LakeFS repository {lakefs_repo} not found/already deleted (OK)")
 
-    # 3. Delete related metadata from database (manual cascade) atomically
+    # 3. Delete related metadata from database (CASCADE will handle related records)
     try:
         with db.atomic():
-            # Delete related file records first
-            File.delete().where(File.repo_full_id == full_id).execute()
-            StagingUpload.delete().where(
-                StagingUpload.repo_full_id == full_id
-            ).execute()
+            # ForeignKey CASCADE will automatically delete:
+            # - All files (File.repository)
+            # - All commits (Commit.repository)
+            # - All staging uploads (StagingUpload.repository)
+            # - All LFS history (LFSObjectHistory.repository)
             repo_row.delete_instance()
         logger.success(f"Successfully deleted database records for: {full_id}")
     except Exception as e:
@@ -206,7 +205,12 @@ async def delete_repo(
 
     # 4. Clean up S3 storage (repository folder and unreferenced LFS objects)
     try:
-        cleanup_stats = await cleanup_repository_storage(full_id, lakefs_repo)
+        cleanup_stats = await cleanup_repository_storage(
+            repo_type=repo_type,
+            namespace=namespace,
+            name=payload.name,
+            lakefs_repo=lakefs_repo,
+        )
         logger.info(
             f"S3 cleanup for {full_id}: "
             f"{cleanup_stats['repo_objects_deleted']} repo objects, "
@@ -267,6 +271,17 @@ async def _migrate_lakefs_repository(repo_type: str, from_id: str, to_id: str) -
         # No migration needed (e.g., just renaming within namespace)
         return
 
+    # Get source repository object for File table queries
+    from_parts = from_id.split("/", 1)
+    from_namespace, from_name = from_parts
+    from_repo = get_repository(repo_type, from_namespace, from_name)
+
+    if not from_repo:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Source repository {from_id} not found"},
+        )
+
     client = get_lakefs_client()
     from_s3_prefix = f"{from_lakefs_repo}/"
 
@@ -324,7 +339,7 @@ async def _migrate_lakefs_repository(repo_type: str, from_id: str, to_id: str) -
 
             # Query File table to get LFS status (source of truth)
             # This handles dynamic LFS rules and ensures consistency
-            file_record = get_file(from_id, obj_path)
+            file_record = get_file(from_repo, obj_path)
 
             # Determine if file is LFS:
             # - Primary: Use File table record if exists (handles dynamic rules)
@@ -489,13 +504,9 @@ def _update_repository_database_records(
         used_bytes=current_used_bytes,
     ).where(Repository.id == repo_row.id).execute()
 
-    # Update related file records
-    File.update(repo_full_id=to_id).where(File.repo_full_id == from_id).execute()
-
-    # Update staging uploads
-    StagingUpload.update(repo_full_id=to_id).where(
-        StagingUpload.repo_full_id == from_id
-    ).execute()
+    # NOTE: File and StagingUpload records don't need updating!
+    # They use ForeignKey to Repository.id (which doesn't change on move).
+    # Only Repository.namespace, Repository.name, Repository.full_id change.
 
     # Update storage quotas if namespace changed
     if moving_namespace and repo_size > 0:
@@ -653,7 +664,12 @@ async def move_repo(
     # Note: Migration already deleted the old LakeFS repo, but S3 data remains
     # We need to clean up the S3 folder and unreferenced LFS objects
     try:
-        cleanup_stats = await cleanup_repository_storage(from_id, from_lakefs_repo)
+        cleanup_stats = await cleanup_repository_storage(
+            repo_type=repo_type,
+            namespace=from_namespace,
+            name=from_name,
+            lakefs_repo=from_lakefs_repo,
+        )
         logger.info(
             f"S3 cleanup for moved repo {from_id}: "
             f"{cleanup_stats['repo_objects_deleted']} repo objects, "
@@ -746,7 +762,12 @@ async def squash_repo(
             )
 
         # Clean up old storage
-        await cleanup_repository_storage(repo_id, from_lakefs_repo)
+        await cleanup_repository_storage(
+            repo_type=repo_type,
+            namespace=namespace,
+            name=name,
+            lakefs_repo=from_lakefs_repo,
+        )
 
         logger.success(f"Moved to temporary repository: {temp_id}")
 
@@ -801,7 +822,12 @@ async def squash_repo(
 
         # Clean up temp storage
         temp_lakefs_repo = lakefs_repo_name(repo_type, temp_id)
-        await cleanup_repository_storage(temp_id, temp_lakefs_repo)
+        await cleanup_repository_storage(
+            repo_type=repo_type,
+            namespace=namespace,
+            name=temp_name,
+            lakefs_repo=temp_lakefs_repo,
+        )
 
         # Wait for temp LakeFS repo to be fully deleted
         temp_deleted = False

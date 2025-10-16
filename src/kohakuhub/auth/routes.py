@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 from kohakuhub.config import cfg
-from kohakuhub.db import EmailVerification, Organization, Session, Token, User, db
+from kohakuhub.db import EmailVerification, Session, Token, User, db
 from kohakuhub.db_operations import (
     create_email_verification,
     create_session,
@@ -37,7 +37,7 @@ from kohakuhub.auth.utils import (
     hash_token,
     verify_password,
 )
-from kohakuhub.api.validation import normalize_name
+from kohakuhub.utils.names import normalize_name
 
 logger = get_logger("AUTH")
 
@@ -109,32 +109,18 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
             logger.warning(f"Registration failed: email '{req.email}' already exists")
             raise HTTPException(400, detail="Email already exists")
 
-        # Check for normalized name conflicts with users and organizations
+        # Check for normalized name conflicts (efficient O(1) lookup using indexed column)
         normalized = normalize_name(req.username)
-
-        # Check other users
-        all_users = User.select()
-        for user in all_users:
-            if normalize_name(user.username) == normalized:
-                logger.warning(
-                    f"Registration failed: username conflicts with '{user.username}'"
-                )
-                raise HTTPException(
-                    400,
-                    detail=f"Username conflicts with existing user: {user.username}",
-                )
-
-        # Check organizations
-        all_orgs = Organization.select()
-        for org in all_orgs:
-            if normalize_name(org.name) == normalized:
-                logger.warning(
-                    f"Registration failed: username conflicts with organization '{org.name}'"
-                )
-                raise HTTPException(
-                    400,
-                    detail=f"Username conflicts with existing organization: {org.name}",
-                )
+        existing_normalized = User.get_or_none(User.normalized_name == normalized)
+        if existing_normalized:
+            logger.warning(
+                f"Registration failed: username conflicts with '{existing_normalized.username}'"
+            )
+            entity_type = "organization" if existing_normalized.is_org else "user"
+            raise HTTPException(
+                400,
+                detail=f"Username conflicts with existing {entity_type}: {existing_normalized.username}",
+            )
 
         # Create user
         user = create_user(
@@ -158,17 +144,22 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
                 org_id = params.get("org_id")
 
                 with db.atomic():
-                    mark_invitation_used(invitation, user.id)
+                    mark_invitation_used(invitation, user)
 
                     # Add user to organization if specified
                     if org_id:
-                        from kohakuhub.db_operations import create_user_organization
-
-                        role = params.get("role", "member")
-                        create_user_organization(user.id, org_id, role)
-                        logger.success(
-                            f"User {user.username} added to org (id={org_id}) as {role}"
+                        from kohakuhub.db_operations import (
+                            create_user_organization,
+                            get_user_by_id,
                         )
+
+                        org = get_user_by_id(org_id)
+                        if org:
+                            role = params.get("role", "member")
+                            create_user_organization(user, org, role)
+                            logger.success(
+                                f"User {user.username} added to org {org.username} as {role}"
+                            )
             except (json.JSONDecodeError, Exception) as e:
                 logger.warning(f"Failed to process invitation on registration: {e}")
 
@@ -176,7 +167,7 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
     if cfg.auth.require_email_verification:
         token = generate_token()
         create_email_verification(
-            user_id=user.id, token=token, expires_at=get_expiry_time(24)
+            user=user, token=token, expires_at=get_expiry_time(24)
         )
 
         verification_email = await asyncio.to_thread(
@@ -229,8 +220,8 @@ async def verify_email(token: str, response: Response):
             status_code=302,
         )
 
-    # Get user
-    user = get_user_by_id(verification.user)
+    # Get user from foreign key
+    user = verification.user
     if not user:
         logger.error(f"User not found for verification token: {token[:8]}...")
         return RedirectResponse(url="/?error=user_not_found", status_code=302)
@@ -248,7 +239,7 @@ async def verify_email(token: str, response: Response):
 
         create_session(
             session_id=session_id,
-            user_id=user.id,
+            user=user,
             secret=session_secret,
             expires_at=get_expiry_time(cfg.auth.session_expire_hours),
         )
@@ -296,7 +287,7 @@ async def login(req: LoginRequest, response: Response):
 
     create_session(
         session_id=session_id,
-        user_id=user.id,
+        user=user,
         secret=session_secret,
         expires_at=get_expiry_time(cfg.auth.session_expire_hours),
     )
@@ -327,7 +318,7 @@ async def logout(response: Response, user: User = Depends(get_current_user)):
     logger.info(f"Logout request for user: {user.username}")
 
     # Delete all user sessions
-    deleted_count = Session.delete().where(Session.user_id == user.id).execute()
+    deleted_count = Session.delete().where(Session.user == user).execute()
 
     # Clear cookie
     response.delete_cookie(key="session_id")
@@ -356,7 +347,7 @@ def get_me(user: User = Depends(get_current_user)):
 async def list_tokens(user: User = Depends(get_current_user)):
     """List user's API tokens."""
 
-    tokens = list_user_tokens(user.id)
+    tokens = list_user_tokens(user)
 
     return {
         "tokens": [
@@ -382,10 +373,10 @@ async def create_token_endpoint(
     token_hash_val = hash_token(token_str)
 
     # Save to database
-    token = create_token(user_id=user.id, token_hash=token_hash_val, name=req.name)
+    token = create_token(user=user, token_hash=token_hash_val, name=req.name)
 
     # Get session secret for encryption (if in web session)
-    session = Session.get_or_none(Session.user_id == user.id)
+    session = Session.get_or_none(Session.user == user)
     session_secret = session.secret if session else None
 
     return {
@@ -401,7 +392,7 @@ async def create_token_endpoint(
 async def revoke_token(token_id: int, user: User = Depends(get_current_user)):
     """Revoke an API token."""
 
-    token = Token.get_or_none((Token.id == token_id) & (Token.user_id == user.id))
+    token = Token.get_or_none((Token.id == token_id) & (Token.user == user))
 
     if not token:
         raise HTTPException(404, detail="Token not found")

@@ -5,12 +5,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from kohakuhub.db import Organization, Repository, User, UserOrganization
+from kohakuhub.db import Repository, User, UserOrganization
 from kohakuhub.db_operations import (
     get_organization,
     get_repository,
+    get_user_by_email_excluding_id,
     get_user_by_username,
     get_user_organization,
+    update_organization,
+    update_repository,
+    update_user,
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
@@ -62,7 +66,7 @@ async def update_user_settings(
 
     if req.email is not None:
         # Check if email is already taken by another user
-        existing = User.get_or_none((User.email == req.email) & (User.id != user.id))
+        existing = get_user_by_email_excluding_id(req.email, user.id)
         if existing:
             raise HTTPException(400, detail="Email already in use")
         update_fields["email"] = req.email
@@ -90,7 +94,7 @@ async def update_user_settings(
 
     # Execute update if there are fields to update
     if update_fields:
-        User.update(**update_fields).where(User.id == user.id).execute()
+        update_user(user, **update_fields)
 
     return {"success": True, "message": "User settings updated successfully"}
 
@@ -162,7 +166,7 @@ async def update_organization_settings(
         raise HTTPException(404, detail="Organization not found")
 
     # Check if user is admin of the organization
-    user_org = get_user_organization(user.id, org.id)
+    user_org = get_user_organization(user, org)
     if not user_org or user_org.role not in ["admin", "super-admin"]:
         raise HTTPException(
             403, detail="Not authorized to update organization settings"
@@ -192,7 +196,7 @@ async def update_organization_settings(
 
     # Execute update if there are fields to update
     if update_fields:
-        Organization.update(**update_fields).where(Organization.id == org.id).execute()
+        update_organization(org, **update_fields)
 
     return {"success": True, "message": "Organization settings updated successfully"}
 
@@ -224,11 +228,11 @@ async def get_organization_profile(org_name: str):
     # Count members
     from kohakuhub.db_operations import list_organization_members
 
-    members = list_organization_members(org.id)
+    members = list_organization_members(org)
     member_count = len(members)
 
     return {
-        "name": org.name,
+        "name": org.username,
         "description": org.description,
         "bio": org.bio,
         "website": org.website,
@@ -322,9 +326,7 @@ async def update_repo_settings(
                 )
 
         # Update repository visibility
-        Repository.update(private=payload.private).where(
-            Repository.id == repo_row.id
-        ).execute()
+        update_repository(repo_row, private=payload.private)
 
     # Note: gated functionality not yet implemented in database schema
     # Would require adding a 'gated' field to Repository model

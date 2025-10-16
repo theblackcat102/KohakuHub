@@ -5,7 +5,8 @@ from typing import List, Optional
 import asyncio
 
 from kohakuhub.config import cfg
-from kohakuhub.db import File, LFSObjectHistory
+from kohakuhub.db import File, LFSObjectHistory, Repository
+from kohakuhub.db_operations import get_repository, create_lfs_history
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client
 from kohakuhub.utils.s3 import delete_objects_with_prefix, get_s3_client, object_exists
@@ -14,7 +15,9 @@ logger = get_logger("GC")
 
 
 def track_lfs_object(
-    repo_full_id: str,
+    repo_type: str,
+    namespace: str,
+    name: str,
     path_in_repo: str,
     sha256: str,
     size: int,
@@ -23,18 +26,33 @@ def track_lfs_object(
     """Track LFS object usage in a commit.
 
     Args:
-        repo_full_id: Full repository ID (namespace/name)
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
         path_in_repo: File path in repository
         sha256: LFS object SHA256 hash
         size: Object size in bytes
         commit_id: LakeFS commit ID
     """
-    LFSObjectHistory.create(
-        repo_full_id=repo_full_id,
+    # Get repository FK object
+    repo = get_repository(repo_type, namespace, name)
+    if not repo:
+        logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
+        return
+
+    # Try to find corresponding File record for FK link
+    file_fk = File.get_or_none(
+        (File.repository == repo) & (File.path_in_repo == path_in_repo)
+    )
+
+    # Create LFS history with FK objects
+    create_lfs_history(
+        repository=repo,
         path_in_repo=path_in_repo,
         sha256=sha256,
         size=size,
         commit_id=commit_id,
+        file=file_fk,  # Optional FK for faster lookups
     )
     logger.debug(
         f"Tracked LFS object {sha256[:8]} for {path_in_repo} in commit {commit_id[:8]}"
@@ -42,25 +60,25 @@ def track_lfs_object(
 
 
 def get_old_lfs_versions(
-    repo_full_id: str,
+    repo: Repository,
     path_in_repo: str,
     keep_count: int,
 ) -> List[str]:
     """Get old LFS object hashes that should be garbage collected.
 
     Args:
-        repo_full_id: Full repository ID
+        repo: Repository FK object
         path_in_repo: File path
         keep_count: Number of versions to keep
 
     Returns:
         List of SHA256 hashes to delete
     """
-    # Get all historical versions for this file, sorted by creation date (newest first)
+    # Get all historical versions for this file using repository FK, sorted by creation date (newest first)
     history = (
         LFSObjectHistory.select()
         .where(
-            (LFSObjectHistory.repo_full_id == repo_full_id)
+            (LFSObjectHistory.repository == repo)
             & (LFSObjectHistory.path_in_repo == path_in_repo)
         )
         .order_by(LFSObjectHistory.created_at.desc())
@@ -95,20 +113,20 @@ def get_old_lfs_versions(
     return delete_hashes
 
 
-def cleanup_lfs_object(sha256: str, repo_full_id: Optional[str] = None) -> bool:
+def cleanup_lfs_object(sha256: str, repo: Optional[Repository] = None) -> bool:
     """Delete an LFS object from S3 if it's not used anywhere.
 
     Args:
         sha256: LFS object hash
-        repo_full_id: Optional - restrict check to specific repo
+        repo: Optional Repository FK - restrict check to specific repo
 
     Returns:
         True if deleted, False if still in use or deletion failed
     """
     # Check if this object is still referenced in current files
     query = File.select().where((File.sha256 == sha256) & (File.lfs == True))
-    if repo_full_id:
-        query = query.where(File.repo_full_id == repo_full_id)
+    if repo:
+        query = query.where(File.repository == repo)
 
     current_uses = query.count()
 
@@ -119,7 +137,7 @@ def cleanup_lfs_object(sha256: str, repo_full_id: Optional[str] = None) -> bool:
         return False
 
     # Check if this object is referenced in any commit history (other repos might use it)
-    if not repo_full_id:
+    if not repo:
         # Global check across all repos
         history_uses = (
             LFSObjectHistory.select().where(LFSObjectHistory.sha256 == sha256).count()
@@ -139,12 +157,12 @@ def cleanup_lfs_object(sha256: str, repo_full_id: Optional[str] = None) -> bool:
 
         logger.success(f"Deleted LFS object from S3: {lfs_key}")
 
-        # Remove from history table
-        if repo_full_id:
+        # Remove from history table using repository FK
+        if repo:
             deleted_count = (
                 LFSObjectHistory.delete()
                 .where(
-                    (LFSObjectHistory.repo_full_id == repo_full_id)
+                    (LFSObjectHistory.repository == repo)
                     & (LFSObjectHistory.sha256 == sha256)
                 )
                 .execute()
@@ -165,14 +183,18 @@ def cleanup_lfs_object(sha256: str, repo_full_id: Optional[str] = None) -> bool:
 
 
 def run_gc_for_file(
-    repo_full_id: str,
+    repo_type: str,
+    namespace: str,
+    name: str,
     path_in_repo: str,
     current_commit_id: str,
 ) -> int:
     """Run garbage collection for a specific file.
 
     Args:
-        repo_full_id: Full repository ID
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
         path_in_repo: File path
         current_commit_id: Current commit ID
 
@@ -183,15 +205,21 @@ def run_gc_for_file(
         logger.debug("Auto GC disabled, skipping")
         return 0
 
+    # Get repository FK object
+    repo = get_repository(repo_type, namespace, name)
+    if not repo:
+        logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
+        return 0
+
     keep_count = cfg.app.lfs_keep_versions
-    old_hashes = get_old_lfs_versions(repo_full_id, path_in_repo, keep_count)
+    old_hashes = get_old_lfs_versions(repo, path_in_repo, keep_count)
 
     if not old_hashes:
         return 0
 
     deleted_count = 0
     for sha256 in old_hashes:
-        if cleanup_lfs_object(sha256, repo_full_id):
+        if cleanup_lfs_object(sha256, repo):
             deleted_count += 1
 
     if deleted_count > 0:
@@ -203,23 +231,20 @@ def run_gc_for_file(
 
 
 async def check_lfs_recoverability(
-    repo_full_id: str, commit_id: str
+    repo: Repository, commit_id: str
 ) -> tuple[bool, list[str]]:
     """Check if all LFS files in a commit are still available in S3.
 
     Args:
-        repo_full_id: Full repository ID
+        repo: Repository FK object
         commit_id: Commit ID to check
 
     Returns:
         Tuple of (all_recoverable: bool, missing_files: list[str])
     """
-    # Get all LFS objects from this commit
+    # Get all LFS objects from this commit using repository FK and backref
     lfs_objects = list(
-        LFSObjectHistory.select().where(
-            (LFSObjectHistory.repo_full_id == repo_full_id)
-            & (LFSObjectHistory.commit_id == commit_id)
-        )
+        repo.lfs_history.select().where(LFSObjectHistory.commit_id == commit_id)
     )
 
     if not lfs_objects:
@@ -261,7 +286,9 @@ async def check_lfs_recoverability(
 
 async def check_commit_range_recoverability(
     lakefs_repo: str,
-    repo_full_id: str,
+    repo_type: str,
+    namespace: str,
+    name: str,
     target_commit: str,
     current_branch: str,
 ) -> tuple[bool, list[str], list[str]]:
@@ -272,7 +299,9 @@ async def check_commit_range_recoverability(
 
     Args:
         lakefs_repo: LakeFS repository name
-        repo_full_id: Full repository ID
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
         target_commit: Target commit to reset to
         current_branch: Current branch name
 
@@ -280,6 +309,12 @@ async def check_commit_range_recoverability(
         Tuple of (all_recoverable: bool, missing_files: list[str], affected_commits: list[str])
     """
     client = get_lakefs_client()
+
+    # Get repository FK object
+    repo = get_repository(repo_type, namespace, name)
+    if not repo:
+        logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
+        return False, [], []
 
     # Get all commits from target to HEAD
     try:
@@ -318,9 +353,7 @@ async def check_commit_range_recoverability(
         # Check all commits concurrently
         async def check_commit(commit):
             commit_id = commit["id"]
-            recoverable, missing = await check_lfs_recoverability(
-                repo_full_id, commit_id
-            )
+            recoverable, missing = await check_lfs_recoverability(repo, commit_id)
             return recoverable, missing, commit_id
 
         results = await asyncio.gather(
@@ -354,7 +387,9 @@ async def check_commit_range_recoverability(
 async def sync_file_table_with_commit(
     lakefs_repo: str,
     ref: str,
-    repo_full_id: str,
+    repo_type: str,
+    namespace: str,
+    name: str,
 ) -> int:
     """Sync File table with actual commit state (for reset operations).
 
@@ -365,12 +400,20 @@ async def sync_file_table_with_commit(
     Args:
         lakefs_repo: LakeFS repository name
         ref: Branch name or commit ID to sync to
-        repo_full_id: Full repository ID (namespace/name)
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
 
     Returns:
         Number of files synced
     """
     client = get_lakefs_client()
+
+    # Get repository FK object
+    repo = get_repository(repo_type, namespace, name)
+    if not repo:
+        logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
+        return 0
 
     try:
         # Get commit ID from ref
@@ -415,15 +458,21 @@ async def sync_file_table_with_commit(
                 f"Syncing file: {path} (size={size_bytes}, lfs={is_lfs}, sha256={sha256[:8]})"
             )
 
-            # Update File table
+            # Get File FK if exists for LFS history tracking
+            file_fk = File.get_or_none(
+                (File.repository == repo) & (File.path_in_repo == path)
+            )
+
+            # Update File table using repository FK
             File.insert(
-                repo_full_id=repo_full_id,
+                repository=repo,
                 path_in_repo=path,
                 size=size_bytes,
                 sha256=sha256,
                 lfs=is_lfs,
+                owner=repo.owner,  # Denormalized owner
             ).on_conflict(
-                conflict_target=(File.repo_full_id, File.path_in_repo),
+                conflict_target=(File.repository, File.path_in_repo),
                 update={
                     File.sha256: sha256,
                     File.size: size_bytes,
@@ -432,25 +481,31 @@ async def sync_file_table_with_commit(
                 },
             ).execute()
 
+            # Reload file_fk after insert/update
+            if not file_fk:
+                file_fk = File.get_or_none(
+                    (File.repository == repo) & (File.path_in_repo == path)
+                )
+
             # Track LFS objects in history
             if is_lfs:
-                track_lfs_object(
-                    repo_full_id=repo_full_id,
+                create_lfs_history(
+                    repository=repo,
                     path_in_repo=path,
                     sha256=sha256,
                     size=size_bytes,
                     commit_id=commit_id,
+                    file=file_fk,
                 )
 
             synced_count += 1
 
-        # Remove files from File table that no longer exist in commit
+        # Remove files from File table that no longer exist in commit using repository FK
         if file_paths:
             removed_count = (
                 File.delete()
                 .where(
-                    (File.repo_full_id == repo_full_id)
-                    & (File.path_in_repo.not_in(file_paths))
+                    (File.repository == repo) & (File.path_in_repo.not_in(file_paths))
                 )
                 .execute()
             )
@@ -471,7 +526,9 @@ async def sync_file_table_with_commit(
 
 
 async def cleanup_repository_storage(
-    repo_full_id: str,
+    repo_type: str,
+    namespace: str,
+    name: str,
     lakefs_repo: str,
 ) -> dict[str, int]:
     """Clean up S3 storage for a deleted or moved repository.
@@ -483,12 +540,24 @@ async def cleanup_repository_storage(
     LFS objects are only deleted if they are not referenced by any other repository.
 
     Args:
-        repo_full_id: Full repository ID (namespace/name)
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
         lakefs_repo: LakeFS repository name (for S3 prefix)
 
     Returns:
         Dict with 'repo_objects_deleted' and 'lfs_objects_deleted' counts
     """
+    # Get repository FK object
+    repo = get_repository(repo_type, namespace, name)
+    if not repo:
+        logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
+        return {
+            "repo_objects_deleted": 0,
+            "lfs_objects_deleted": 0,
+            "lfs_history_deleted": 0,
+        }
+
     # 1. Delete repository folder in S3 (LakeFS data)
     repo_prefix = f"{lakefs_repo}/"
     repo_objects_deleted = await delete_objects_with_prefix(cfg.s3.bucket, repo_prefix)
@@ -498,12 +567,8 @@ async def cleanup_repository_storage(
     )
 
     # 2. Clean up LFS objects that were only used by this repository
-    # Get all LFS objects ever used by this repository
-    lfs_objects = list(
-        LFSObjectHistory.select(LFSObjectHistory.sha256)
-        .where(LFSObjectHistory.repo_full_id == repo_full_id)
-        .distinct()
-    )
+    # Get all LFS objects ever used by this repository using backref
+    lfs_objects = list(repo.lfs_history.select(LFSObjectHistory.sha256).distinct())
 
     lfs_objects_deleted = 0
     for lfs_obj in lfs_objects:
@@ -514,23 +579,21 @@ async def cleanup_repository_storage(
         # - Current File table (any repo)
         # - LFSObjectHistory (any other repo)
         # Only deletes if not referenced anywhere
-        if cleanup_lfs_object(sha256, repo_full_id=None):
+        if cleanup_lfs_object(sha256, repo=None):
             lfs_objects_deleted += 1
 
     if lfs_objects_deleted > 0:
         logger.success(
-            f"Cleaned up {lfs_objects_deleted} unreferenced LFS object(s) for {repo_full_id}"
+            f"Cleaned up {lfs_objects_deleted} unreferenced LFS object(s) for {repo_type}/{namespace}/{name}"
         )
 
-    # 3. Clean up LFSObjectHistory for this repository
+    # 3. Clean up LFSObjectHistory for this repository using repository FK
     history_deleted = (
-        LFSObjectHistory.delete()
-        .where(LFSObjectHistory.repo_full_id == repo_full_id)
-        .execute()
+        LFSObjectHistory.delete().where(LFSObjectHistory.repository == repo).execute()
     )
 
     logger.info(
-        f"Removed {history_deleted} LFS history record(s) for repository: {repo_full_id}"
+        f"Removed {history_deleted} LFS history record(s) for repository: {repo_type}/{namespace}/{name}"
     )
 
     return {
@@ -543,7 +606,9 @@ async def cleanup_repository_storage(
 async def track_commit_lfs_objects(
     lakefs_repo: str,
     commit_id: str,
-    repo_full_id: str,
+    repo_type: str,
+    namespace: str,
+    name: str,
 ) -> int:
     """Track all LFS objects in a commit (after revert/merge).
 
@@ -554,12 +619,20 @@ async def track_commit_lfs_objects(
     Args:
         lakefs_repo: LakeFS repository name
         commit_id: The new commit ID (from revert/merge)
-        repo_full_id: Full repository ID (namespace/name)
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
 
     Returns:
         Number of LFS objects tracked
     """
     client = get_lakefs_client()
+
+    # Get repository FK object
+    repo = get_repository(repo_type, namespace, name)
+    if not repo:
+        logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
+        return 0
 
     # Get commit details to find parent
     try:
@@ -618,27 +691,34 @@ async def track_commit_lfs_objects(
                 else:
                     sha256 = checksum
 
+                # Get File FK if exists for LFS history tracking
+                file_fk = File.get_or_none(
+                    (File.repository == repo) & (File.path_in_repo == path)
+                )
+
                 # Track LFS objects in history
                 if is_lfs:
-                    track_lfs_object(
-                        repo_full_id=repo_full_id,
+                    create_lfs_history(
+                        repository=repo,
                         path_in_repo=path,
                         sha256=sha256,
                         size=size_bytes,
                         commit_id=commit_id,
+                        file=file_fk,
                     )
                     tracked_count += 1
                     logger.debug(f"Tracked LFS object: {path} ({sha256[:8]})")
 
-                # Update File table for BOTH LFS and regular files
+                # Update File table for BOTH LFS and regular files using repository FK
                 File.insert(
-                    repo_full_id=repo_full_id,
+                    repository=repo,
                     path_in_repo=path,
                     size=size_bytes,
                     sha256=sha256,
                     lfs=is_lfs,
+                    owner=repo.owner,  # Denormalized owner
                 ).on_conflict(
-                    conflict_target=(File.repo_full_id, File.path_in_repo),
+                    conflict_target=(File.repository, File.path_in_repo),
                     update={
                         File.sha256: sha256,
                         File.size: size_bytes,
@@ -651,13 +731,12 @@ async def track_commit_lfs_objects(
                 logger.warning(f"Failed to stat object {path}: {e}")
                 continue
 
-        # Remove deleted files from File table
+        # Remove deleted files from File table using repository FK
         if files_to_remove:
             removed_count = (
                 File.delete()
                 .where(
-                    (File.repo_full_id == repo_full_id)
-                    & (File.path_in_repo.in_(files_to_remove))
+                    (File.repository == repo) & (File.path_in_repo.in_(files_to_remove))
                 )
                 .execute()
             )
