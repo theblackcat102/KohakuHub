@@ -24,7 +24,7 @@ from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_write_permission
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.utils.s3 import get_object_metadata, object_exists
-from kohakuhub.api.quota.util import update_namespace_storage
+from kohakuhub.api.quota.util import update_namespace_storage, update_repository_storage
 from kohakuhub.api.repo.utils.gc import run_gc_for_file, track_lfs_object
 
 logger = get_logger("FILE")
@@ -744,13 +744,19 @@ async def commit(
                         f"GC: Cleaned up {deleted_count} old version(s) of {lfs_info['path']}"
                     )
 
-    # Update storage usage for namespace after successful commit
+    # Update storage usage for namespace and repository after successful commit
     try:
+        # Recalculate repository storage (keeps repo.used_bytes accurate)
+        await update_repository_storage(repo_row)
+        logger.debug(
+            f"Updated repository storage for {repo_id}: {repo_row.used_bytes:,} bytes"
+        )
+
         # Check if namespace is organization (User with is_org=True)
         org = get_organization(namespace)
         is_org = org is not None
 
-        # Recalculate storage usage
+        # Recalculate namespace storage usage
         await update_namespace_storage(namespace, is_org)
         logger.debug(
             f"Updated storage usage for {'org' if is_org else 'user'} {namespace}"

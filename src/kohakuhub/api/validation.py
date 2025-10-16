@@ -73,7 +73,7 @@ async def check_name_availability(req: CheckNameRequest) -> CheckNameResponse:
                     available=False,
                     normalized_name=normalized,
                     conflict_with=f"{req.namespace}/{repo.name}",
-                    message=f"Repository name conflicts with existing repository: {repo.name}",
+                    message=f"Repository name conflicts with existing repository: {repo.name} (case-insensitive)",
                 )
 
         return CheckNameResponse(
@@ -100,7 +100,7 @@ async def check_name_availability(req: CheckNameRequest) -> CheckNameResponse:
                 available=False,
                 normalized_name=normalized,
                 conflict_with=user.username,
-                message=f"Username conflicts with existing user: {user.username}",
+                message=f"Username conflicts with existing user: {user.username} (case-insensitive)",
             )
 
     # Check organization name (now unified with User model using normalized_name for efficiency)
@@ -113,7 +113,7 @@ async def check_name_availability(req: CheckNameRequest) -> CheckNameResponse:
             available=False,
             normalized_name=normalized,
             conflict_with=existing_org.username,
-            message=f"Name conflicts with existing organization: {existing_org.username}",
+            message=f"Name conflicts with existing organization: {existing_org.username} (case-insensitive)",
         )
 
     return CheckNameResponse(

@@ -30,7 +30,7 @@
             />
             <div class="text-xs text-gray-500 mt-1">
               <div class="i-carbon-information inline-block mr-1" />
-              Only lowercase letters, numbers, and hyphens are allowed
+              Letters (case-insensitive), numbers, hyphens and underscores allowed
             </div>
           </el-form-item>
 
@@ -120,8 +120,8 @@ const rules = {
       trigger: "blur",
     },
     {
-      pattern: /^[a-z0-9-]+$/,
-      message: "Only lowercase letters, numbers, and hyphens allowed",
+      pattern: /^[a-zA-Z0-9_-]+$/,
+      message: "Only letters, numbers, hyphens and underscores allowed",
       trigger: "blur",
     },
     {
@@ -133,7 +133,8 @@ const rules = {
 };
 
 function validateOrgName() {
-  form.value.name = form.value.name.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  // Remove invalid characters but preserve case (case-insensitive matching done server-side)
+  form.value.name = form.value.name.replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
 function handleCancel() {

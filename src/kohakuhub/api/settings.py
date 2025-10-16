@@ -1,17 +1,19 @@
 """User, organization, and repository settings API endpoints."""
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from kohakuhub.db import Repository, User, UserOrganization
+from kohakuhub.db import User
 from kohakuhub.db_operations import (
     get_organization,
     get_repository,
     get_user_by_email_excluding_id,
     get_user_by_username,
     get_user_organization,
+    list_organization_members,
     update_organization,
     update_repository,
     update_user,
@@ -19,8 +21,8 @@ from kohakuhub.db_operations import (
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
-from kohakuhub.api.repo.utils.hf import hf_repo_not_found
 from kohakuhub.api.quota.util import calculate_repository_storage, check_quota
+from kohakuhub.api.repo.utils.hf import hf_repo_not_found
 
 logger = get_logger("SETTINGS")
 
@@ -83,8 +85,6 @@ async def update_user_settings(
         update_fields["website"] = req.website
 
     if req.social_media is not None:
-        import json
-
         # Validate social_media structure
         if not isinstance(req.social_media, dict):
             raise HTTPException(400, detail="social_media must be a dictionary")
@@ -112,8 +112,6 @@ async def get_user_profile(username: str):
     user = get_user_by_username(username)
     if not user:
         raise HTTPException(404, detail="User not found")
-
-    import json
 
     # Parse social_media JSON if exists
     social_media = None
@@ -185,8 +183,6 @@ async def update_organization_settings(
         update_fields["website"] = req.website
 
     if req.social_media is not None:
-        import json
-
         # Validate social_media structure
         if not isinstance(req.social_media, dict):
             raise HTTPException(400, detail="social_media must be a dictionary")
@@ -215,8 +211,6 @@ async def get_organization_profile(org_name: str):
     if not org:
         raise HTTPException(404, detail="Organization not found")
 
-    import json
-
     # Parse social_media JSON if exists
     social_media = None
     if org.social_media:
@@ -226,8 +220,6 @@ async def get_organization_profile(org_name: str):
             social_media = None
 
     # Count members
-    from kohakuhub.db_operations import list_organization_members
-
     members = list_organization_members(org)
     member_count = len(members)
 

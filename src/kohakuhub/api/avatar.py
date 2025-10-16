@@ -11,8 +11,9 @@ from kohakuhub.db import User
 from kohakuhub.db_operations import (
     get_organization,
     get_user_by_username,
-    update_user,
+    get_user_organization,
     update_organization,
+    update_user,
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
@@ -249,8 +250,6 @@ async def upload_org_avatar(
     Raises:
         HTTPException: If not authorized or invalid image
     """
-    from kohakuhub.db_operations import get_user_organization
-
     org = get_organization(org_name)
     if not org:
         raise HTTPException(404, detail="Organization not found")
@@ -354,8 +353,6 @@ async def delete_org_avatar(
     Returns:
         Success message
     """
-    from kohakuhub.db_operations import get_user_organization
-
     org = get_organization(org_name)
     if not org:
         raise HTTPException(404, detail="Organization not found")

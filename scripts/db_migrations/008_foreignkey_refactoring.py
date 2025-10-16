@@ -306,8 +306,9 @@ def migrate_sqlite():
 
     print("\n=== Phase 4: Update Foreign Key references ===")
 
-    # 4a. Update UserOrganization.organization to reference new User IDs
-    cursor.execute("SELECT id, organization FROM userorganization")
+    # 4a. Update UserOrganization.organization_id to reference new User IDs
+    # NOTE: Peewee ForeignKeyField creates columns with _id suffix
+    cursor.execute("SELECT id, organization_id FROM userorganization")
     memberships = cursor.fetchall()
 
     for membership_id, old_org_id in memberships:
@@ -319,7 +320,7 @@ def migrate_sqlite():
         if result:
             new_user_id = result[0]
             cursor.execute(
-                "UPDATE userorganization SET organization = ? WHERE id = ?",
+                "UPDATE userorganization SET organization_id = ? WHERE id = ?",
                 (new_user_id, membership_id),
             )
 
@@ -609,10 +610,11 @@ def migrate_postgres():
 
     print("\n=== Phase 4: Update Foreign Key references ===")
 
-    # 4a. Update UserOrganization.organization to reference new User IDs
+    # 4a. Update UserOrganization.organization_id to reference new User IDs
+    # NOTE: Peewee ForeignKeyField creates columns with _id suffix
     cursor.execute(
-        "UPDATE userorganization SET organization = m.new_user_id "
-        "FROM _org_id_mapping m WHERE userorganization.organization = m.old_org_id"
+        "UPDATE userorganization SET organization_id = m.new_user_id "
+        "FROM _org_id_mapping m WHERE userorganization.organization_id = m.old_org_id"
     )
     affected = cursor.rowcount
     db.commit()

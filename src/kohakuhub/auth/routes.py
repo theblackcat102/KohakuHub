@@ -1,6 +1,7 @@
 """Authentication API routes."""
 
 import asyncio
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -8,26 +9,27 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 from kohakuhub.config import cfg
-from kohakuhub.db import EmailVerification, Session, Token, User, db
+from kohakuhub.db import Session, Token, User, db
 from kohakuhub.db_operations import (
+    check_invitation_available,
     create_email_verification,
     create_session,
     create_token,
     create_user,
+    create_user_organization,
     delete_email_verification,
-    delete_session,
     delete_token,
     get_email_verification,
-    get_session,
-    get_token_by_hash,
+    get_invitation,
     get_user_by_email,
     get_user_by_id,
     get_user_by_username,
     list_user_tokens,
+    mark_invitation_used,
     update_user,
 )
 from kohakuhub.logger import get_logger
-from kohakuhub.auth.dependencies import get_current_user, get_optional_user
+from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.email import send_verification_email
 from kohakuhub.auth.utils import (
     generate_session_secret,
@@ -80,8 +82,6 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
             )
 
         # Validate invitation token
-        from kohakuhub.db_operations import check_invitation_available, get_invitation
-
         invitation = get_invitation(invitation_token)
         if not invitation:
             raise HTTPException(400, detail="Invalid invitation token")
@@ -134,9 +134,6 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
 
     # If registration used an invitation, mark it and add to org if specified
     if cfg.auth.invitation_only and invitation_token:
-        from kohakuhub.db_operations import get_invitation, mark_invitation_used
-        import json
-
         invitation = get_invitation(invitation_token)
         if invitation:
             try:
@@ -148,11 +145,6 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
 
                     # Add user to organization if specified
                     if org_id:
-                        from kohakuhub.db_operations import (
-                            create_user_organization,
-                            get_user_by_id,
-                        )
-
                         org = get_user_by_id(org_id)
                         if org:
                             role = params.get("role", "member")

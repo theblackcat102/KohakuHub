@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -13,12 +14,13 @@ from pydantic import BaseModel
 from kohakuhub.async_utils import run_in_s3_executor
 from kohakuhub.config import cfg
 from kohakuhub.db import (
-    db,
     Commit,
     File,
+    Invitation,
     LFSObjectHistory,
     Repository,
     User,
+    db,
 )
 from kohakuhub.db_operations import (
     check_invitation_available,
@@ -395,8 +397,6 @@ async def create_register_invitation_admin(
     Returns:
         Created invitation token and link
     """
-    import json
-
     # Validate role if org_id provided
     if request.org_id:
         if request.role not in ["visitor", "member", "admin"]:
@@ -475,8 +475,6 @@ async def list_invitations_admin(
     Returns:
         List of invitations with details
     """
-    from kohakuhub.db import Invitation
-
     query = Invitation.select()
 
     if action:

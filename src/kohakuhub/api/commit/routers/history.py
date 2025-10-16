@@ -1,15 +1,14 @@
 """Commit history API endpoints."""
 
-from typing import Optional
 import asyncio
 import difflib
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-import httpx
 
 from kohakuhub.config import cfg
-from kohakuhub.db import Repository, User
-from kohakuhub.db_operations import get_commit, get_repository, list_commits_by_repo
+from kohakuhub.db import User
+from kohakuhub.db_operations import get_commit, get_repository
 from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
@@ -282,8 +281,6 @@ async def get_commit_diff(
 
         # Fetch File records for LFS status using repository FK and backref
         if file_paths:
-            from kohakuhub.db import File
-
             file_records = {
                 f.path_in_repo: f
                 for f in repo_row.files.select().where(
