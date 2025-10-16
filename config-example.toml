@@ -1,16 +1,23 @@
+# KohakuHub Configuration Example
+# NOTE: This is for DIRECT uvicorn execution (development/testing only)
+# For Docker deployment, use docker-compose.yml or generate with:
+#   python scripts/generate_docker_compose.py
+
 [s3]
-public_endpoint = "http://127.0.0.1:29001"
-endpoint = "http://127.0.0.1:29001"
-access_key = "minioadmin"
-secret_key = "minioadmin"
+public_endpoint = "http://127.0.0.1:29001"  # Public-facing S3 URL (for downloads)
+endpoint = "http://127.0.0.1:29001"         # Internal S3 endpoint
+access_key = "CHANGE-ME-GENERATE-RANDOM"    # Use: python -c "import secrets; print(secrets.token_urlsafe(24))"
+secret_key = "CHANGE-ME-GENERATE-RANDOM"    # Use: python -c "import secrets; print(secrets.token_urlsafe(48))"
 bucket = "hub-storage"
 region = "us-east-1"
 force_path_style = true
 
 [lakefs]
 endpoint = "http://127.0.0.1:28000"
-access_key = "xxx"
-secret_key = "yyy"
+# LakeFS credentials auto-generated on first start → ./hub-meta/hub-api/credentials.env
+# You can override by setting these (not recommended):
+# access_key = "your-lakefs-access-key"
+# secret_key = "your-lakefs-secret-key"
 repo_namespace = "hf"
 
 [smtp]
@@ -24,19 +31,29 @@ use_tls = true
 
 [auth]
 require_email_verification = false
-session_secret = "change-me-in-production"
+session_secret = "CHANGE-ME-GENERATE-RANDOM"  # Use: python -c "import secrets; print(secrets.token_urlsafe(48))"
 session_expire_hours = 168  # 7 days
 token_expire_days = 365
+# Admin secret token (for /admin/* endpoints)
+admin_secret_token = "CHANGE-ME-GENERATE-RANDOM"  # Use: python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 [app]
-base_url = "http://127.0.0.1:48888"
+base_url = "http://127.0.0.1:28080"  # Use nginx port (28080), not direct backend (48888)
 api_base = "/api"
 db_backend = "postgres"  # or "sqlite"
 database_url = "postgresql://hub:hubpass@127.0.0.1:25432/hubdb"
+auto_migrate = false  # Auto-confirm database migrations (set true for Docker)
 lfs_threshold_bytes = 10485760 # 10MB
-debug_log_payloads = true
+debug_log_payloads = false  # Log commit payloads (development only)
 # LFS Garbage Collection settings
 lfs_keep_versions = 5  # Keep last K versions of each LFS file
 lfs_auto_gc = true  # Automatically delete old LFS objects on commit
 # Site identification
 site_name = "KohakuHub"  # Customizable site name (e.g., "MyCompany Hub")
+
+[quota]
+# Default storage quotas for new users/organizations (in bytes, null = unlimited)
+default_user_private_quota_bytes = 10_000_000_000    # 10GB for private repos
+default_user_public_quota_bytes = 100_000_000_000   # 100GB for public repos
+default_org_private_quota_bytes = 10_000_000_000    # 10GB for private repos
+default_org_public_quota_bytes = 100_000_000_000    # 100GB for public repos

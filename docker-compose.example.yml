@@ -41,6 +41,7 @@ services:
       ## ===== Database Configuration =====
       - KOHAKU_HUB_DB_BACKEND=postgres
       - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/kohakuhub
+      - KOHAKU_HUB_AUTO_MIGRATE=true # Auto-confirm database migrations (required for Docker)
 
       ## ===== S3 Storage Configuration =====
       - KOHAKU_HUB_S3_ENDPOINT=http://minio:9000
