@@ -68,11 +68,17 @@ class AppConfig(BaseModel):
     database_url: str = "sqlite:///./hub.db"
     # Lower threshold to 5MB to account for base64 encoding overhead (~33%)
     # 5MB file -> ~6.7MB base64, leaving room for multiple files in one commit
-    lfs_threshold_bytes: int = 5 * 1024 * 1024
+    lfs_threshold_bytes: int = 5 * 1000 * 1000
     debug_log_payloads: bool = False
     # LFS Garbage Collection settings
     lfs_keep_versions: int = 5  # Keep last K versions of each file
     lfs_auto_gc: bool = False  # Auto-delete old LFS objects on commit
+    # Download tracking settings
+    download_time_bucket_seconds: int = 900  # 15 minutes - session deduplication window
+    download_session_cleanup_threshold: int = (
+        100  # Trigger cleanup when sessions > this
+    )
+    download_keep_sessions_days: int = 30  # Keep sessions from last N days
     # LFS Suffix Rules - File extensions that should ALWAYS use LFS
     # These are server-wide defaults that apply to ALL repositories
     # Repositories can add their own additional suffix rules

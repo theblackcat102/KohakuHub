@@ -149,11 +149,15 @@ class Repository(BaseModel):
     )  # NULL = no specific limit, inherit from namespace
     used_bytes = BigIntegerField(default=0)
 
-    # NOTE: LFS settings NOT present - this represents schema BEFORE migration 009
-    # Migration 009 will add:
-    # - lfs_threshold_bytes
-    # - lfs_keep_versions
-    # - lfs_suffix_rules
+    # LFS settings (added in migration 009)
+    lfs_threshold_bytes = IntegerField(null=True)
+    lfs_keep_versions = IntegerField(null=True)
+    lfs_suffix_rules = TextField(null=True)
+
+    # NOTE: Social metrics NOT present - this represents schema BEFORE migration 010
+    # Migration 010 will add:
+    # - downloads
+    # - likes_count
 
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
@@ -332,6 +336,11 @@ class Invitation(BaseModel):
 
 
 def init_db():
+    """Initialize database with OLD schema (before migration 010).
+
+    NOTE: RepositoryLike, DownloadSession, DailyRepoStats are NOT included.
+    These tables are added by migration 010.
+    """
     db.connect(reuse_if_open=True)
     db.create_tables(
         [
@@ -347,6 +356,8 @@ def init_db():
             LFSObjectHistory,
             SSHKey,
             Invitation,
+            # NOTE: RepositoryLike, DownloadSession, DailyRepoStats NOT included
+            # Migration 010 adds these tables
         ],
         safe=True,
     )

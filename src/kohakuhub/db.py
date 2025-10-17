@@ -13,6 +13,7 @@ from peewee import (
     BlobField,
     BooleanField,
     CharField,
+    DateField,
     DateTimeField,
     ForeignKeyField,
     IntegerField,
@@ -155,6 +156,10 @@ class Repository(BaseModel):
     lfs_suffix_rules = TextField(
         null=True
     )  # JSON list of suffixes like [".safetensors", ".bin"], NULL = no suffix rules
+
+    # Social metrics (denormalized counters for fast queries)
+    downloads = IntegerField(default=0)  # Total download sessions (not file count)
+    likes_count = IntegerField(default=0)  # Total likes
 
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
@@ -332,6 +337,87 @@ class Invitation(BaseModel):
         )
 
 
+class RepositoryLike(BaseModel):
+    """User likes for repositories (similar to GitHub stars)."""
+
+    id = AutoField()
+    repository = ForeignKeyField(
+        Repository, backref="likes", on_delete="CASCADE", index=True
+    )
+    user = ForeignKeyField(User, backref="liked_repos", on_delete="CASCADE", index=True)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = ((("repository", "user"), True),)  # UNIQUE - can't like twice
+
+
+class DownloadSession(BaseModel):
+    """Track download sessions for deduplication and statistics.
+
+    A download session represents a bulk download (e.g., git clone, snapshot_download).
+    Multiple files downloaded within the same session (15-minute window) count as 1 download.
+    """
+
+    id = AutoField()
+    repository = ForeignKeyField(
+        Repository, backref="download_sessions", on_delete="CASCADE", index=True
+    )
+    user = ForeignKeyField(
+        User,
+        backref="downloads",
+        on_delete="SET NULL",
+        null=True,
+        index=True,
+    )  # NULL if anonymous
+
+    # Session identification for deduplication
+    session_id = CharField(index=True)  # From cookie: auth session OR tracking cookie
+    time_bucket = IntegerField(index=True)  # Unix timestamp / 900 (15-minute buckets)
+
+    # Download details
+    file_count = IntegerField(default=1)  # Files downloaded in this session
+    first_file = CharField()  # Which file started the session
+
+    # Timestamps
+    first_download_at = DateTimeField(
+        default=partial(datetime.now, tz=timezone.utc), index=True
+    )
+    last_download_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = (
+            (
+                ("repository", "session_id", "time_bucket"),
+                True,
+            ),  # UNIQUE - deduplication key
+        )
+
+
+class DailyRepoStats(BaseModel):
+    """Daily aggregated statistics for repository trends.
+
+    TODAY's stats are updated in real-time.
+    Historical stats (yesterday and older) are lazily aggregated from DownloadSession.
+    """
+
+    id = AutoField()
+    repository = ForeignKeyField(
+        Repository, backref="daily_stats", on_delete="CASCADE", index=True
+    )
+    date = DateField(index=True)  # YYYY-MM-DD
+
+    # Aggregated metrics
+    download_sessions = IntegerField(default=0)  # Unique download sessions
+    authenticated_downloads = IntegerField(default=0)  # Logged-in users
+    anonymous_downloads = IntegerField(default=0)  # Anonymous users
+    total_files = IntegerField(default=0)  # Total file /resolve calls
+
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = ((("repository", "date"), True),)  # UNIQUE per repo per day
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
@@ -348,6 +434,9 @@ def init_db():
             LFSObjectHistory,
             SSHKey,
             Invitation,
+            RepositoryLike,
+            DownloadSession,
+            DailyRepoStats,
         ],
         safe=True,
     )

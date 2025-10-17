@@ -7,15 +7,20 @@ REFACTORED: Organization model merged into User (is_org flag).
 All operations now use proper ForeignKey relationships with backref for convenience.
 """
 
+import json
+from datetime import datetime, timezone
+
 from kohakuhub.config import cfg
-from kohakuhub.utils.names import normalize_name
 from kohakuhub.db import (
     Commit,
+    DailyRepoStats,
+    DownloadSession,
     EmailVerification,
     File,
     Invitation,
     LFSObjectHistory,
     Repository,
+    RepositoryLike,
     Session,
     SSHKey,
     StagingUpload,
@@ -24,6 +29,7 @@ from kohakuhub.db import (
     UserOrganization,
     db,
 )
+from kohakuhub.utils.names import normalize_name
 
 
 # ===== User operations =====
@@ -547,8 +553,6 @@ def get_effective_lfs_suffix_rules(repo: Repository) -> list[str]:
         List of file suffixes that should always use LFS (e.g., [".safetensors", ".bin"])
         Duplicates are removed, order is preserved (server defaults first)
     """
-    import json
-
     # Start with server-wide defaults
     effective_rules = list(cfg.app.lfs_suffix_rules_default)
 
@@ -704,8 +708,6 @@ def mark_invitation_used(invitation: Invitation, used_by: User) -> None:
     For multi-use invitations, this increments usage_count.
     For single-use invitations, it also sets used_at and used_by.
     """
-    from datetime import datetime, timezone
-
     # Increment usage count
     invitation.usage_count += 1
 
@@ -726,8 +728,6 @@ def check_invitation_available(invitation: Invitation) -> tuple[bool, str | None
     Returns:
         Tuple of (is_available, error_message)
     """
-    from datetime import datetime, timezone
-
     # Check expiration
     expires_at = invitation.expires_at
     if expires_at.tzinfo is None:
@@ -769,8 +769,6 @@ def list_org_invitations(org: User) -> list[Invitation]:
     Returns:
         List of invitations (both pending and used)
     """
-    import json
-
     # Get all invitations with action "join_org" and matching org_id in parameters
     invitations = []
     all_invites = Invitation.select().where(Invitation.action == "join_org")
@@ -792,8 +790,6 @@ def delete_expired_invitations() -> int:
     Returns:
         Number of invitations deleted
     """
-    from datetime import datetime, timezone
-
     now = datetime.now(timezone.utc)
     deleted = (
         Invitation.delete()
@@ -802,3 +798,216 @@ def delete_expired_invitations() -> int:
     )
 
     return deleted
+
+
+# ===== Likes operations =====
+
+
+def create_repository_like(repository: Repository, user: User):
+    """Create a like for a repository.
+
+    NOTE: Wrap in db.atomic() to prevent race conditions with counter increment.
+
+    Args:
+        repository: Repository to like
+        user: User who likes
+
+    Returns:
+        RepositoryLike instance
+
+    Raises:
+        IntegrityError: If user already liked this repository
+    """
+    return RepositoryLike.create(repository=repository, user=user)
+
+
+def delete_repository_like(repository: Repository, user: User) -> int:
+    """Delete a like for a repository.
+
+    Args:
+        repository: Repository to unlike
+        user: User who unlikes
+
+    Returns:
+        Number of likes deleted (0 or 1)
+    """
+    return (
+        RepositoryLike.delete()
+        .where(
+            (RepositoryLike.repository == repository) & (RepositoryLike.user == user)
+        )
+        .execute()
+    )
+
+
+def get_repository_like(repository: Repository, user: User):
+    """Get like record for a repository and user.
+
+    Args:
+        repository: Repository
+        user: User
+
+    Returns:
+        RepositoryLike instance or None
+    """
+    return RepositoryLike.get_or_none(
+        (RepositoryLike.repository == repository) & (RepositoryLike.user == user)
+    )
+
+
+def list_repository_likers(repository: Repository, limit: int = 50):
+    """List users who liked a repository.
+
+    Args:
+        repository: Repository
+        limit: Maximum number of likers to return
+
+    Returns:
+        List of User objects
+    """
+    likes = (
+        RepositoryLike.select()
+        .where(RepositoryLike.repository == repository)
+        .order_by(RepositoryLike.created_at.desc())
+        .limit(limit)
+    )
+
+    return [like.user for like in likes]
+
+
+# ===== Download tracking operations =====
+
+
+def create_download_session(
+    repository: Repository,
+    session_id: str,
+    time_bucket: int,
+    first_file: str,
+    user: User | None = None,
+):
+    """Create a download session.
+
+    NOTE: Wrap in db.atomic() to prevent race conditions with counter increment.
+
+    Args:
+        repository: Repository being downloaded
+        session_id: Session cookie ID
+        time_bucket: 15-minute time bucket
+        first_file: First file downloaded
+        user: User (NULL if anonymous)
+
+    Returns:
+        DownloadSession instance
+
+    Raises:
+        IntegrityError: If session already exists (duplicate)
+    """
+    return DownloadSession.create(
+        repository=repository,
+        user=user,
+        session_id=session_id,
+        time_bucket=time_bucket,
+        file_count=1,
+        first_file=first_file,
+    )
+
+
+def get_download_session(repository: Repository, session_id: str, time_bucket: int):
+    """Get download session by dedup key.
+
+    Args:
+        repository: Repository
+        session_id: Session cookie ID
+        time_bucket: 15-minute time bucket
+
+    Returns:
+        DownloadSession instance or None
+    """
+    return DownloadSession.get_or_none(
+        (DownloadSession.repository == repository)
+        & (DownloadSession.session_id == session_id)
+        & (DownloadSession.time_bucket == time_bucket)
+    )
+
+
+def increment_download_session_files(session_id: int) -> None:
+    """Increment file_count and update last_download_at for a session.
+
+    Args:
+        session_id: DownloadSession ID
+    """
+    DownloadSession.update(
+        file_count=DownloadSession.file_count + 1,
+        last_download_at=datetime.now(timezone.utc),
+    ).where(DownloadSession.id == session_id).execute()
+
+
+def count_repository_sessions(repository: Repository) -> int:
+    """Count total download sessions for a repository.
+
+    Args:
+        repository: Repository
+
+    Returns:
+        Number of download sessions
+    """
+    return (
+        DownloadSession.select().where(DownloadSession.repository == repository).count()
+    )
+
+
+# ===== Daily statistics operations =====
+
+
+def get_daily_stat(repository: Repository, date_value):
+    """Get daily statistics for a specific date.
+
+    Args:
+        repository: Repository
+        date_value: Date to query
+
+    Returns:
+        DailyRepoStats instance or None
+    """
+    return DailyRepoStats.get_or_none(
+        (DailyRepoStats.repository == repository) & (DailyRepoStats.date == date_value)
+    )
+
+
+def list_daily_stats(repository: Repository, start_date, end_date):
+    """List daily statistics for a date range.
+
+    Args:
+        repository: Repository
+        start_date: Start date (inclusive)
+        end_date: End date (inclusive)
+
+    Returns:
+        List of DailyRepoStats ordered by date ascending
+    """
+    return list(
+        DailyRepoStats.select()
+        .where(
+            (DailyRepoStats.repository == repository)
+            & (DailyRepoStats.date >= start_date)
+            & (DailyRepoStats.date <= end_date)
+        )
+        .order_by(DailyRepoStats.date.asc())
+    )
+
+
+def get_latest_daily_stat(repository: Repository):
+    """Get the most recent daily statistics entry for a repository.
+
+    Args:
+        repository: Repository
+
+    Returns:
+        DailyRepoStats instance or None
+    """
+    return (
+        DailyRepoStats.select()
+        .where(DailyRepoStats.repository == repository)
+        .order_by(DailyRepoStats.date.desc())
+        .first()
+    )

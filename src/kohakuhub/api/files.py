@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -30,6 +30,10 @@ from kohakuhub.auth.permissions import (
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.utils.s3 import generate_download_presigned_url, parse_s3_uri
 from kohakuhub.api.quota.util import check_quota
+from kohakuhub.api.utils.downloads import (
+    get_or_create_tracking_cookie,
+    track_download_async,
+)
 from kohakuhub.api.repo.utils.hf import (
     hf_repo_not_found,
     hf_revision_not_found,
@@ -336,8 +340,8 @@ async def get_revision(
         "lastModified": last_modified,
         "createdAt": created_at,
         "private": repo_row.private,
-        "downloads": 0,
-        "likes": 0,
+        "downloads": repo_row.downloads,
+        "likes": repo_row.likes_count,
         "gated": False,
         "files": [],  # Client will call /tree for file list
         "type": repo_type.value,
@@ -478,15 +482,54 @@ async def resolve_file_get(
     name: str,
     revision: str,
     path: str,
+    request: Request,
     user: User | None = Depends(get_optional_user),
 ):
     """Download file (GET request).
 
     Returns 302 redirect to presigned S3 URL for actual download.
+    Also tracks download in background for statistics.
     """
     presigned_url, _ = await _get_file_metadata(
         repo_type, namespace, name, revision, path, user
     )
+
+    # Get repository for download tracking
+    repo_row = get_repository(repo_type, namespace, name)
+
+    # Track download asynchronously (don't block redirect)
+    if repo_row:
+        # Get session ID (auth session or tracking cookie)
+        response_cookies = {}
+
+        if user:
+            # Authenticated: Use auth session ID
+            session_id = request.cookies.get("session_id", "")
+        else:
+            # Anonymous: Use or create tracking cookie
+            session_id = get_or_create_tracking_cookie(
+                dict(request.cookies), response_cookies
+            )
+
+        # Track download in background (non-blocking)
+        tracking_download_task = asyncio.create_task(
+            track_download_async(
+                repo=repo_row, file_path=path, session_id=session_id, user=user
+            )
+        )
+
+        # Set tracking cookie if created for anonymous user
+        if response_cookies:
+            response = RedirectResponse(url=presigned_url, status_code=302)
+            cookie_data = response_cookies["hf_download_session"]
+            response.set_cookie(
+                key="hf_download_session",
+                value=cookie_data["value"],
+                max_age=cookie_data["max_age"],
+                httponly=cookie_data["httponly"],
+                samesite=cookie_data["samesite"],
+            )
+            return response
 
     # Return 302 redirect to presigned S3 URL
     return RedirectResponse(
