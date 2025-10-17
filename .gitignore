@@ -8,6 +8,7 @@ hub-meta/
 hub-storage/
 *.db
 test_*/
+test.*
 config.toml
 docker-compose.yml
 kohakuhub.conf

@@ -37,12 +37,6 @@ This migration cannot be easily rolled back. Test thoroughly before deploying to
 import sys
 import os
 
-# Fix Windows encoding issues
-if sys.platform == "win32":
-    import io
-
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 # Add db_migrations to path (for _migration_utils)
@@ -137,6 +131,9 @@ def check_migration_needed():
 def migrate_sqlite():
     """Migrate SQLite database.
 
+    NOTE: This function runs inside a transaction (db.atomic()).
+    Do NOT call db.commit() or db.rollback() inside this function.
+
     Strategy:
     1. Add new columns to User table (is_org, description, make email/password nullable)
     2. Migrate Organization data into User table
@@ -147,28 +144,7 @@ def migrate_sqlite():
     """
     cursor = db.cursor()
 
-    print("\n=== Phase 1: Backup Warning ===")
-    print("⚠️  This migration modifies the database schema significantly.")
-    print("⚠️  BACKUP YOUR DATABASE before proceeding!")
-    print("")
-
-    # Allow auto-confirmation via environment variable (for Docker/CI)
-    auto_confirm = os.environ.get("KOHAKU_HUB_AUTO_MIGRATE", "").lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    if auto_confirm:
-        print("  Auto-confirmation enabled (KOHAKU_HUB_AUTO_MIGRATE=true)")
-        response = "yes"
-    else:
-        response = input("Type 'yes' to continue: ")
-
-    if response.lower() != "yes":
-        print("Migration cancelled.")
-        return False
-
-    print("\n=== Phase 2: Add new columns to User table ===")
+    print("\n=== Phase 1: Add new columns to User table ===")
 
     # Add is_org column
     try:
@@ -203,10 +179,8 @@ def migrate_sqlite():
     # Note: SQLite doesn't support ALTER COLUMN to make existing columns nullable
     # This will require table recreation, which we'll handle in a full rebuild
 
-    db.commit()
-
     # Populate normalized_name for existing users
-    print("  Populating User.normalized_name for existing users...")
+    print("\n  Populating User.normalized_name for existing users...")
     cursor.execute("SELECT id, username FROM user")
     users = cursor.fetchall()
 
@@ -217,7 +191,6 @@ def migrate_sqlite():
             "UPDATE user SET normalized_name = ? WHERE id = ?", (normalized, user_id)
         )
 
-    db.commit()
     print(f"    ✓ Populated normalized_name for {len(users)} existing users")
 
     print("\n=== Phase 3: Migrate Organization data into User table ===")
@@ -299,8 +272,7 @@ def migrate_sqlite():
 
             print(f"  ✓ Migrated organization '{name}' (id {org_id} -> {new_user_id})")
 
-        db.commit()
-        print(f"  ✓ All {len(orgs)} organizations migrated to User table")
+            print(f"  ✓ All {len(orgs)} organizations migrated to User table")
     else:
         print("  - No organization table found, skipping")
 
@@ -324,7 +296,6 @@ def migrate_sqlite():
                 (new_user_id, membership_id),
             )
 
-    db.commit()
     print(f"  ✓ Updated {len(memberships)} UserOrganization records")
 
     # 4b. Add owner column to File table (denormalized from repository.owner)
@@ -348,7 +319,6 @@ def migrate_sqlite():
     """
     )
     print(f"    ✓ Updated File.owner_id for all files")
-    db.commit()
 
     # 4c. Add owner column to Commit table (repository owner)
     print("  Adding Commit.owner_id column...")
@@ -371,7 +341,6 @@ def migrate_sqlite():
     """
     )
     print(f"    ✓ Updated Commit.owner_id for all commits")
-    db.commit()
 
     # 4d. Add uploader column to StagingUpload table
     print("  Adding StagingUpload.uploader_id column...")
@@ -384,7 +353,6 @@ def migrate_sqlite():
         if "duplicate column" not in str(e).lower():
             raise
         print("    - StagingUpload.uploader_id already exists")
-    db.commit()
 
     # 4e. Add file FK column to LFSObjectHistory table
     print("  Adding LFSObjectHistory.file_id column...")
@@ -410,9 +378,8 @@ def migrate_sqlite():
     """
     )
     print(f"    ✓ Updated LFSObjectHistory.file_id for all records")
-    db.commit()
 
-    print("\n=== Phase 5: Cleanup ===")
+    print("\n=== Phase 4: Cleanup ===")
 
     # Drop temporary mapping table
     try:
@@ -425,7 +392,6 @@ def migrate_sqlite():
     try:
         cursor.execute("DROP TABLE organization")
         print("  ✓ Dropped Organization table")
-        db.commit()
     except Exception as e:
         print(f"  - Failed to drop organization table: {e}")
         # Non-fatal, continue
@@ -471,7 +437,6 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("  - User.is_org already exists")
-            db.rollback()
         else:
             raise
 
@@ -482,7 +447,6 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("  - User.description already exists")
-            db.rollback()
         else:
             raise
 
@@ -493,7 +457,6 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("  - User.normalized_name already exists")
-            db.rollback()
         else:
             raise
 
@@ -505,8 +468,6 @@ def migrate_postgres():
     except Exception as e:
         print(f"  - Failed to make columns nullable (may already be nullable): {e}")
         db.rollback()
-
-    db.commit()
 
     # Populate normalized_name for existing users
     print("  Populating User.normalized_name for existing users...")
@@ -521,7 +482,6 @@ def migrate_postgres():
             (normalized, user_id),
         )
 
-    db.commit()
     print(f"    ✓ Populated normalized_name for {len(users)} existing users")
 
     print("\n=== Phase 3: Migrate Organization data into User table ===")
@@ -603,8 +563,7 @@ def migrate_postgres():
 
             print(f"  ✓ Migrated organization '{name}' (id {org_id} -> {new_user_id})")
 
-        db.commit()
-        print(f"  ✓ All {len(orgs)} organizations migrated to User table")
+            print(f"  ✓ All {len(orgs)} organizations migrated to User table")
     else:
         print("  - No organization table found, skipping")
 
@@ -617,7 +576,6 @@ def migrate_postgres():
         "FROM _org_id_mapping m WHERE userorganization.organization_id = m.old_org_id"
     )
     affected = cursor.rowcount
-    db.commit()
     print(f"  ✓ Updated {affected} UserOrganization records")
 
     # 4b. Add owner column to File table (denormalized from repository.owner)
@@ -628,7 +586,6 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("    - File.owner_id already exists")
-            db.rollback()
         else:
             raise
 
@@ -641,7 +598,6 @@ def migrate_postgres():
     """
     )
     print(f"    ✓ Updated File.owner_id for all files")
-    db.commit()
 
     # 4c. Add owner column to Commit table (repository owner)
     print("  Adding Commit.owner_id column...")
@@ -651,7 +607,6 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("    - Commit.owner_id already exists")
-            db.rollback()
         else:
             raise
 
@@ -664,7 +619,6 @@ def migrate_postgres():
     """
     )
     print(f"    ✓ Updated Commit.owner_id for all commits")
-    db.commit()
 
     # 4d. Add uploader column to StagingUpload table
     print("  Adding StagingUpload.uploader_id column...")
@@ -676,10 +630,8 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("    - StagingUpload.uploader_id already exists")
-            db.rollback()
         else:
             raise
-    db.commit()
 
     # 4e. Add file FK column to LFSObjectHistory table
     print("  Adding LFSObjectHistory.file_id column...")
@@ -691,7 +643,6 @@ def migrate_postgres():
     except Exception as e:
         if "already exists" in str(e).lower():
             print("    - LFSObjectHistory.file_id already exists")
-            db.rollback()
         else:
             raise
 
@@ -705,17 +656,14 @@ def migrate_postgres():
     """
     )
     print(f"    ✓ Updated LFSObjectHistory.file_id for all records")
-    db.commit()
 
     print("\n=== Phase 5: Drop old Organization table ===")
 
     try:
         cursor.execute("DROP TABLE IF EXISTS organization CASCADE")
         print("  ✓ Dropped Organization table")
-        db.commit()
     except Exception as e:
         print(f"  - Failed to drop organization table: {e}")
-        db.rollback()
 
     print("\n⚠️  IMPORTANT: Table recreation with Foreign Keys")
     print("⚠️  Peewee ORM will handle ForeignKey constraint creation on next startup")
@@ -725,11 +673,20 @@ def migrate_postgres():
 
 
 def run():
-    """Run this migration."""
+    """Run this migration.
+
+    IMPORTANT: Do NOT call db.close() in finally block!
+    The db connection is managed by run_migrations.py and should stay open
+    across all migrations to avoid stdout/stderr closure issues on Windows.
+
+    NOTE: Migration 008 is special - user confirmation happens INSIDE migrate functions
+    because it needs to check data before prompting. This is an exception to the normal
+    pattern where confirmations happen before transactions.
+    """
     db.connect(reuse_if_open=True)
 
     try:
-        # Check if any future migration has been applied (for extensibility)
+        # Pre-flight checks (outside transaction for performance)
         if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
             print("Migration 008: Skipped (superseded by future migration)")
             return True
@@ -762,6 +719,9 @@ def run():
         print("Merging User/Organization tables + Adding ForeignKey constraints")
         print("=" * 70)
 
+        # NOTE: User confirmation happens INSIDE migrate functions for this migration
+        # because it needs to analyze data first. Not wrapped in db.atomic() here
+        # because the migrate functions handle their own transaction logic.
         if cfg.app.db_backend == "postgres":
             result = migrate_postgres()
         else:
@@ -779,13 +739,15 @@ def run():
         return result
 
     except Exception as e:
+        # If exception occurs, changes may have been partially applied
         print(f"\nMigration 008: ✗ Failed - {e}")
+        print("  WARNING: This migration does not use db.atomic() due to user prompts")
+        print("  Database may be in intermediate state - restore from backup!")
         import traceback
 
         traceback.print_exc()
         return False
-    finally:
-        db.close()
+    # NOTE: No finally block - db connection stays open
 
 
 if __name__ == "__main__":

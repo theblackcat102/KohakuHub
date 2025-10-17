@@ -31,11 +31,16 @@ def check_migration_needed():
 
 
 def run():
-    """Run this migration."""
+    """Run this migration.
+
+    IMPORTANT: Do NOT call db.close() in finally block!
+    The db connection is managed by run_migrations.py and should stay open
+    across all migrations to avoid stdout/stderr closure issues on Windows.
+    """
     db.connect(reuse_if_open=True)
 
     try:
-        # Check if any future migration has been applied
+        # Pre-flight checks (outside transaction for performance)
         if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
             print("Migration 003: Skipped (superseded by future migration)")
             return True
@@ -46,66 +51,68 @@ def run():
 
         print("Migration 003: Creating Commit table...")
 
-        cursor = db.cursor()
-        if cfg.app.db_backend == "postgres":
-            # PostgreSQL: Create Commit table
-            cursor.execute(
+        # Run migration in a transaction - will auto-rollback on exception
+        with db.atomic():
+            cursor = db.cursor()
+            if cfg.app.db_backend == "postgres":
+                # PostgreSQL: Create Commit table
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS commit (
+                        id SERIAL PRIMARY KEY,
+                        commit_id VARCHAR(255) NOT NULL,
+                        repo_full_id VARCHAR(255) NOT NULL,
+                        author_id INTEGER NOT NULL,
+                        message TEXT,
+                        created_at TIMESTAMP NOT NULL
+                    )
                 """
-                CREATE TABLE IF NOT EXISTS commit (
-                    id SERIAL PRIMARY KEY,
-                    commit_id VARCHAR(255) NOT NULL,
-                    repo_full_id VARCHAR(255) NOT NULL,
-                    author_id INTEGER NOT NULL,
-                    message TEXT,
-                    created_at TIMESTAMP NOT NULL
                 )
-            """
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS commit_commit_id ON commit(commit_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS commit_repo_full_id ON commit(repo_full_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS commit_author_id ON commit(author_id)"
-            )
-        else:
-            # SQLite: Create Commit table
-            cursor.execute(
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS commit_commit_id ON commit(commit_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS commit_repo_full_id ON commit(repo_full_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS commit_author_id ON commit(author_id)"
+                )
+            else:
+                # SQLite: Create Commit table
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS commit (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        commit_id VARCHAR(255) NOT NULL,
+                        repo_full_id VARCHAR(255) NOT NULL,
+                        author_id INTEGER NOT NULL,
+                        message TEXT,
+                        created_at DATETIME NOT NULL
+                    )
                 """
-                CREATE TABLE IF NOT EXISTS commit (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    commit_id VARCHAR(255) NOT NULL,
-                    repo_full_id VARCHAR(255) NOT NULL,
-                    author_id INTEGER NOT NULL,
-                    message TEXT,
-                    created_at DATETIME NOT NULL
                 )
-            """
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS commit_commit_id ON commit(commit_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS commit_repo_full_id ON commit(repo_full_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS commit_author_id ON commit(author_id)"
-            )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS commit_commit_id ON commit(commit_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS commit_repo_full_id ON commit(repo_full_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS commit_author_id ON commit(author_id)"
+                )
 
-        db.commit()
         print("Migration 003: ✓ Completed")
         return True
 
     except Exception as e:
+        # Transaction automatically rolled back if we reach here
         print(f"Migration 003: ✗ Failed - {e}")
+        print("  All changes have been rolled back")
         import traceback
 
         traceback.print_exc()
         return False
-    finally:
-        db.close()
+    # NOTE: No finally block - db connection stays open
 
 
 if __name__ == "__main__":

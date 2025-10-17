@@ -78,11 +78,19 @@ def check_migration_needed():
 
 
 def run():
-    """Run this migration."""
+    """Run this migration.
+
+    IMPORTANT: Do NOT call db.close() in finally block!
+    The db connection is managed by run_migrations.py and should stay open
+    across all migrations to avoid stdout/stderr closure issues on Windows.
+
+    NOTE: Migration 001 delegates to external script (migrate_repository_schema.py).
+    Cannot easily add db.atomic() without modifying external script.
+    """
     db.connect(reuse_if_open=True)
 
     try:
-        # Check if any future migration has been applied
+        # Pre-flight checks (outside transaction for performance)
         if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
             print("Migration 001: Skipped (superseded by future migration)")
             return True
@@ -93,19 +101,23 @@ def run():
 
         print("Migration 001: Removing unique constraint from Repository.full_id...")
 
-        # Just import and run the existing migration logic
+        # Import and run the existing migration logic (external script)
         from pathlib import Path
+        import importlib.util
 
         parent_dir = Path(__file__).parent.parent
         spec_path = parent_dir / "migrate_repository_schema.py"
 
-        import importlib.util
+        if not spec_path.exists():
+            print(f"  WARNING: External script not found: {spec_path}")
+            print("  Skipping migration 001 (constraint likely already removed or N/A)")
+            return True
 
         spec = importlib.util.spec_from_file_location("migrate_repo_schema", spec_path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        # Run the migration
+        # Run the migration (external script handles its own transactions)
         if cfg.app.db_backend == "postgres":
             module.migrate_postgres()
         else:
@@ -116,9 +128,12 @@ def run():
 
     except Exception as e:
         print(f"Migration 001: ✗ Failed - {e}")
+        print("  WARNING: External script migration - may need manual rollback")
+        import traceback
+
+        traceback.print_exc()
         return False
-    finally:
-        db.close()
+    # NOTE: No finally block - db connection stays open
 
 
 if __name__ == "__main__":

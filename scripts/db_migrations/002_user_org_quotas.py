@@ -52,7 +52,11 @@ def check_migration_needed():
 
 
 def migrate_sqlite():
-    """Migrate SQLite database."""
+    """Migrate SQLite database.
+
+    Note: This function runs inside a transaction (db.atomic()).
+    Do NOT call db.commit() or db.rollback() inside this function.
+    """
     cursor = db.cursor()
 
     # User table
@@ -111,11 +115,13 @@ def migrate_sqlite():
             else:
                 raise
 
-    db.commit()
-
 
 def migrate_postgres():
-    """Migrate PostgreSQL database."""
+    """Migrate PostgreSQL database.
+
+    Note: This function runs inside a transaction (db.atomic()).
+    Do NOT call db.commit() or db.rollback() inside this function.
+    """
     cursor = db.cursor()
 
     # User table
@@ -143,7 +149,6 @@ def migrate_postgres():
         except Exception as e:
             if "already exists" in str(e).lower():
                 print(f"  - User.{column} already exists")
-                db.rollback()
             else:
                 raise
 
@@ -172,19 +177,21 @@ def migrate_postgres():
         except Exception as e:
             if "already exists" in str(e).lower():
                 print(f"  - Organization.{column} already exists")
-                db.rollback()
             else:
                 raise
 
-    db.commit()
-
 
 def run():
-    """Run this migration."""
+    """Run this migration.
+
+    IMPORTANT: Do NOT call db.close() in finally block!
+    The db connection is managed by run_migrations.py and should stay open
+    across all migrations to avoid stdout/stderr closure issues on Windows.
+    """
     db.connect(reuse_if_open=True)
 
     try:
-        # Check if any future migration has been applied
+        # Pre-flight checks (outside transaction for performance)
         if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
             print("Migration 002: Skipped (superseded by future migration)")
             return True
@@ -195,22 +202,25 @@ def run():
 
         print("Migration 002: Adding User/Organization quota fields...")
 
-        if cfg.app.db_backend == "postgres":
-            migrate_postgres()
-        else:
-            migrate_sqlite()
+        # Run migration in a transaction - will auto-rollback on exception
+        with db.atomic():
+            if cfg.app.db_backend == "postgres":
+                migrate_postgres()
+            else:
+                migrate_sqlite()
 
         print("Migration 002: ✓ Completed")
         return True
 
     except Exception as e:
+        # Transaction automatically rolled back if we reach here
         print(f"Migration 002: ✗ Failed - {e}")
+        print("  All changes have been rolled back")
         import traceback
 
         traceback.print_exc()
         return False
-    finally:
-        db.close()
+    # NOTE: No finally block - db connection stays open
 
 
 if __name__ == "__main__":

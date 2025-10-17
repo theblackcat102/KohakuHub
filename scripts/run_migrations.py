@@ -65,7 +65,7 @@ def load_migration_module(name, path):
         spec.loader.exec_module(module)
         return module
     except Exception as e:
-        print(f"  ✗ Failed to load {name}: {e}")
+        print(f"  [ERROR] Failed to load {name}: {e}")
         return None
 
 
@@ -102,7 +102,7 @@ def run_migrations():
 
         # Check if module has run() function
         if not hasattr(module, "run"):
-            print(f"  ✗ Migration {name} missing run() function")
+            print(f"  [ERROR] Migration {name} missing run() function")
             all_success = False
             continue
 
@@ -112,7 +112,7 @@ def run_migrations():
             if not success:
                 all_success = False
         except Exception as e:
-            print(f"  ✗ Migration {name} crashed: {e}")
+            print(f"  [ERROR] Migration {name} crashed: {e}")
             import traceback
 
             traceback.print_exc()
@@ -125,9 +125,9 @@ def run_migrations():
         print("\nFinalizing database schema (ensuring all tables/indexes exist)...")
         try:
             init_db()
-            print("✓ Database schema finalized\n")
+            print("[OK] Database schema finalized\n")
         except Exception as e:
-            print(f"✗ Failed to finalize database schema: {e}")
+            print(f"[ERROR] Failed to finalize database schema: {e}")
             import traceback
 
             traceback.print_exc()
@@ -136,9 +136,9 @@ def run_migrations():
     # Summary
     print("=" * 70)
     if all_success:
-        print("✓ All migrations completed successfully!")
+        print("[OK] All migrations completed successfully!")
     else:
-        print("✗ Some migrations failed - please check errors above")
+        print("[ERROR] Some migrations failed - please check errors above")
     print("=" * 70)
 
     return all_success
@@ -149,7 +149,7 @@ def main():
         success = run_migrations()
         return 0 if success else 1
     except Exception as e:
-        print(f"\n✗ Migration runner crashed: {e}")
+        print(f"\n[ERROR] Migration runner crashed: {e}")
         import traceback
 
         traceback.print_exc()
