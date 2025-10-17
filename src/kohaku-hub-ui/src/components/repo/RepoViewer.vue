@@ -285,31 +285,43 @@
           </div>
 
           <!-- Breadcrumb for current path -->
-          <div v-if="currentPath" class="mb-3 text-sm">
-            <el-breadcrumb
-              separator="/"
-              class="text-gray-700 dark:text-gray-300"
-            >
-              <el-breadcrumb-item>
-                <RouterLink
-                  :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}`"
-                  class="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  root
-                </RouterLink>
-              </el-breadcrumb-item>
-              <el-breadcrumb-item
-                v-for="(segment, idx) in pathSegments"
-                :key="idx"
+          <div v-if="currentPath" class="mb-3">
+            <div class="flex items-center justify-between">
+              <el-breadcrumb
+                separator="/"
+                class="text-sm text-gray-700 dark:text-gray-300"
               >
-                <RouterLink
-                  :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}/${pathSegments.slice(0, idx + 1).join('/')}`"
-                  class="text-blue-600 dark:text-blue-400 hover:underline"
+                <el-breadcrumb-item>
+                  <RouterLink
+                    :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}`"
+                    class="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    root
+                  </RouterLink>
+                </el-breadcrumb-item>
+                <el-breadcrumb-item
+                  v-for="(segment, idx) in pathSegments"
+                  :key="idx"
                 >
-                  {{ segment }}
-                </RouterLink>
-              </el-breadcrumb-item>
-            </el-breadcrumb>
+                  <RouterLink
+                    :to="`/${repoType}s/${namespace}/${name}/tree/${currentBranch}/${pathSegments.slice(0, idx + 1).join('/')}`"
+                    class="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    {{ segment }}
+                  </RouterLink>
+                </el-breadcrumb-item>
+              </el-breadcrumb>
+              <el-button
+                v-if="isOwner"
+                @click="confirmDeleteFolder"
+                type="danger"
+                size="small"
+                :loading="deletingFolder"
+              >
+                <div class="i-carbon-trash-can inline-block mr-1" />
+                Delete Folder
+              </el-button>
+            </div>
           </div>
 
           <!-- File List -->
@@ -671,7 +683,7 @@ import { likesAPI, repoAPI } from "@/utils/api";
 import { useAuthStore } from "@/stores/auth";
 import { copyToClipboard } from "@/utils/clipboard";
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -716,6 +728,7 @@ const fileSearchQuery = ref("");
 const isLiked = ref(false);
 const likesCount = ref(0);
 const likingInProgress = ref(false);
+const deletingFolder = ref(false);
 
 const baseUrl = window.location.origin;
 
@@ -1101,6 +1114,72 @@ async function copyRepoId() {
     ElMessage.success("Repository ID copied to clipboard");
   } else {
     ElMessage.error("Failed to copy");
+  }
+}
+
+async function confirmDeleteFolder() {
+  const folderName = pathSegments.value[pathSegments.value.length - 1];
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to delete the folder "${folderName}" and all its contents? This action cannot be undone.`,
+      "Delete Folder",
+      {
+        confirmButtonText: "Delete",
+        cancelButtonText: "Cancel",
+        type: "warning",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+
+    // User confirmed, proceed with deletion
+    await deleteFolder();
+  } catch {
+    // User cancelled - do nothing
+  }
+}
+
+async function deleteFolder() {
+  deletingFolder.value = true;
+
+  try {
+    // Create commit with deletedFolder operation
+    await repoAPI.commitFiles(
+      props.repoType,
+      props.namespace,
+      props.name,
+      currentBranch.value,
+      {
+        message: `Delete folder ${props.currentPath}`,
+        operations: [
+          {
+            operation: "deletedFolder",
+            path: props.currentPath,
+          },
+        ],
+      },
+    );
+
+    const folderName = pathSegments.value[pathSegments.value.length - 1];
+    ElMessage.success(`Folder "${folderName}" deleted successfully`);
+
+    // Navigate back to parent folder or repo root
+    if (pathSegments.value.length > 1) {
+      const parentPath = pathSegments.value.slice(0, -1).join("/");
+      router.push(
+        `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}/${parentPath}`,
+      );
+    } else {
+      router.push(
+        `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`,
+      );
+    }
+  } catch (err) {
+    console.error("Failed to delete folder:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to delete folder";
+    ElMessage.error(errorMsg);
+  } finally {
+    deletingFolder.value = false;
   }
 }
 

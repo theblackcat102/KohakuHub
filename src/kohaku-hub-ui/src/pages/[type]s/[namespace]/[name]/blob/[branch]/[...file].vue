@@ -85,6 +85,17 @@
               <div class="i-carbon-download inline-block mr-1" />
               Download
             </el-button>
+            <el-button
+              v-if="canDelete"
+              @click="confirmDeleteFile"
+              type="danger"
+              size="small"
+              class="flex-1 sm:flex-initial"
+              :loading="deleting"
+            >
+              <div class="i-carbon-trash-can inline-block mr-1" />
+              Delete
+            </el-button>
           </div>
         </div>
 
@@ -244,8 +255,9 @@
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
 import CodeViewer from "@/components/common/CodeViewer.vue";
 import { copyToClipboard } from "@/utils/clipboard";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useAuthStore } from "@/stores/auth";
+import { repoAPI } from "@/utils/api";
 
 const route = useRoute();
 const router = useRouter();
@@ -274,6 +286,7 @@ const fileContent = ref("");
 const fileSize = ref(0);
 const fileHeaders = ref({});
 const markdownView = ref("preview");
+const deleting = ref(false);
 
 // Computed
 const repoTypeLabel = computed(() => {
@@ -455,6 +468,13 @@ const canEdit = computed(() => {
   );
 });
 
+const canDelete = computed(() => {
+  // Allow deleting files if user has write access to the namespace
+  return (
+    authStore.isAuthenticated && authStore.canWriteToNamespace(namespace.value)
+  );
+});
+
 // Methods
 function getFileIcon(filename) {
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -546,6 +566,70 @@ function editFile() {
   router.push(
     `/${repoType.value}s/${namespace.value}/${name.value}/edit/${branch.value}/${filePath.value}`,
   );
+}
+
+async function confirmDeleteFile() {
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to delete "${fileName.value}"? This action cannot be undone.`,
+      "Delete File",
+      {
+        confirmButtonText: "Delete",
+        cancelButtonText: "Cancel",
+        type: "warning",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+
+    // User confirmed, proceed with deletion
+    await deleteFile();
+  } catch {
+    // User cancelled - do nothing
+  }
+}
+
+async function deleteFile() {
+  deleting.value = true;
+
+  try {
+    // Create commit with deletedFile operation
+    await repoAPI.commitFiles(
+      repoType.value,
+      namespace.value,
+      name.value,
+      branch.value,
+      {
+        message: `Delete ${filePath.value}`,
+        operations: [
+          {
+            operation: "deletedFile",
+            path: filePath.value,
+          },
+        ],
+      },
+    );
+
+    ElMessage.success(`File "${fileName.value}" deleted successfully`);
+
+    // Navigate back to folder or repo root
+    if (pathSegments.value.length > 1) {
+      const folderPath = pathSegments.value.slice(0, -1).join("/");
+      router.push(
+        `/${repoType.value}s/${namespace.value}/${name.value}/tree/${branch.value}/${folderPath}`,
+      );
+    } else {
+      router.push(
+        `/${repoType.value}s/${namespace.value}/${name.value}/tree/${branch.value}`,
+      );
+    }
+  } catch (err) {
+    console.error("Failed to delete file:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to delete file";
+    ElMessage.error(errorMsg);
+  } finally {
+    deleting.value = false;
+  }
 }
 
 // Lifecycle

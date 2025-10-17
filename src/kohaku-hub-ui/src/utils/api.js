@@ -278,11 +278,11 @@ export const repoAPI = {
    * @param {string} namespace - Owner namespace
    * @param {string} name - Repository name
    * @param {string} revision - Branch name
-   * @param {Object} data - { files: Array<{path, content}>, message: string, description?: string }
+   * @param {Object} data - { files?: Array<{path, content}>, operations?: Array<{operation, path}>, message: string, description?: string }
    * @returns {Promise} - Commit result
    */
   commitFiles: async (type, namespace, name, revision, data) => {
-    // Convert files to NDJSON format for commit API
+    // Convert files/operations to NDJSON format for commit API
     const ndjsonLines = [];
 
     // Header
@@ -294,19 +294,33 @@ export const repoAPI = {
       },
     });
 
-    // Files
-    for (const file of data.files) {
-      // Encode content as base64
-      const base64Content = btoa(unescape(encodeURIComponent(file.content)));
+    // Files (for regular file uploads with content)
+    if (data.files) {
+      for (const file of data.files) {
+        // Encode content as base64
+        const base64Content = btoa(unescape(encodeURIComponent(file.content)));
 
-      ndjsonLines.push({
-        key: "file",
-        value: {
-          path: file.path,
-          content: base64Content,
-          encoding: "base64",
-        },
-      });
+        ndjsonLines.push({
+          key: "file",
+          value: {
+            path: file.path,
+            content: base64Content,
+            encoding: "base64",
+          },
+        });
+      }
+    }
+
+    // Operations (for delete operations)
+    if (data.operations) {
+      for (const op of data.operations) {
+        ndjsonLines.push({
+          key: op.operation,
+          value: {
+            path: op.path,
+          },
+        });
+      }
     }
 
     // Convert to NDJSON
