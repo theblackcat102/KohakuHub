@@ -177,6 +177,7 @@ class File(BaseModel):
     size = IntegerField(default=0)
     sha256 = CharField(index=True)
     lfs = BooleanField(default=False)
+    is_deleted = BooleanField(default=False, index=True)  # Soft delete flag
     owner = ForeignKeyField(
         User, backref="owned_files", on_delete="CASCADE", index=True
     )  # Repository owner (denormalized for convenience)
@@ -274,8 +275,10 @@ class LFSObjectHistory(BaseModel):
     size = IntegerField()
     commit_id = CharField(index=True)  # LakeFS commit ID
     # Optional link to File record for faster lookups
+    # IMPORTANT: on_delete="SET NULL" prevents CASCADE deletion when File is deleted
+    # LFSObjectHistory must persist for quota tracking even after file deletion
     file = ForeignKeyField(
-        File, backref="lfs_versions", on_delete="CASCADE", null=True, index=True
+        File, backref="lfs_versions", on_delete="SET NULL", null=True, index=True
     )
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 

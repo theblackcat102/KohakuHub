@@ -1,8 +1,8 @@
 """Garbage collection utilities for LFS objects."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
-import asyncio
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory, Repository
@@ -30,6 +30,9 @@ def track_lfs_object(
 ):
     """Track LFS object usage in a commit.
 
+    Always creates a new LFSObjectHistory entry for full commit tracking.
+    GC will count unique oids to determine what to delete.
+
     Args:
         repo_type: Repository type (model/dataset/space)
         namespace: Repository namespace
@@ -39,6 +42,11 @@ def track_lfs_object(
         size: Object size in bytes
         commit_id: LakeFS commit ID
     """
+    logger.info(
+        f"[TRACK_LFS_OBJECT_CALLED] repo={repo_type}/{namespace}/{name}, "
+        f"path={path_in_repo}, sha256={sha256[:8]}, size={size:,}, commit={commit_id[:8]}"
+    )
+
     # Get repository FK object
     repo = get_repository(repo_type, namespace, name)
     if not repo:
@@ -50,7 +58,7 @@ def track_lfs_object(
         (File.repository == repo) & (File.path_in_repo == path_in_repo)
     )
 
-    # Create LFS history with FK objects
+    # Always create new LFS history entry with FK objects
     create_lfs_history(
         repository=repo,
         path_in_repo=path_in_repo,
@@ -59,8 +67,9 @@ def track_lfs_object(
         commit_id=commit_id,
         file=file_fk,  # Optional FK for faster lookups
     )
-    logger.debug(
-        f"Tracked LFS object {sha256[:8]} for {path_in_repo} in commit {commit_id[:8]}"
+    logger.success(
+        f"[TRACK_LFS_OBJECT_DONE] Created LFS history for {path_in_repo} "
+        f"(sha256={sha256[:8]}, commit={commit_id[:8]})"
     )
 
 
@@ -71,10 +80,14 @@ def get_old_lfs_versions(
 ) -> List[str]:
     """Get old LFS object hashes that should be garbage collected.
 
+    Counts UNIQUE oids (sha256), not individual history entries.
+    If the same oid appears in multiple commits, it's counted once.
+    Keeps the newest K unique oids, deletes all others.
+
     Args:
         repo: Repository FK object
         path_in_repo: File path
-        keep_count: Number of versions to keep
+        keep_count: Number of unique versions to keep
 
     Returns:
         List of SHA256 hashes to delete
@@ -91,31 +104,37 @@ def get_old_lfs_versions(
 
     all_versions = list(history)
 
-    if len(all_versions) <= keep_count:
-        # Not enough versions to trigger GC
+    if not all_versions:
+        logger.debug(f"No LFS history for {path_in_repo}")
+        return []
+
+    # Extract unique sha256 values in order (newest first)
+    unique_oids = []
+    seen_oids = set()
+
+    for version in all_versions:
+        if version.sha256 not in seen_oids:
+            unique_oids.append(version.sha256)
+            seen_oids.add(version.sha256)
+
+    # Check if we have enough unique versions to trigger GC
+    if len(unique_oids) <= keep_count:
         logger.debug(
-            f"Only {len(all_versions)} versions of {path_in_repo}, keeping all"
+            f"Only {len(unique_oids)} unique version(s) of {path_in_repo} "
+            f"({len(all_versions)} total entries), keeping all"
         )
         return []
 
-    # Keep the newest K versions, delete the rest
-    versions_to_keep = all_versions[:keep_count]
-    versions_to_delete = all_versions[keep_count:]
-
-    keep_hashes = {v.sha256 for v in versions_to_keep}
-    delete_hashes = []
-
-    for old_version in versions_to_delete:
-        # Only delete if not in the "keep" set (shouldn't happen, but safety check)
-        if old_version.sha256 not in keep_hashes:
-            delete_hashes.append(old_version.sha256)
+    # Keep the newest K unique oids, delete the rest
+    keep_oids = set(unique_oids[:keep_count])
+    delete_oids = unique_oids[keep_count:]
 
     logger.info(
-        f"GC for {path_in_repo}: keeping {len(versions_to_keep)} versions, "
-        f"marking {len(delete_hashes)} for deletion"
+        f"GC for {path_in_repo}: {len(unique_oids)} unique version(s), "
+        f"keeping {len(keep_oids)}, marking {len(delete_oids)} for deletion"
     )
 
-    return delete_hashes
+    return delete_oids
 
 
 def cleanup_lfs_object(sha256: str, repo: Optional[Repository] = None) -> bool:
@@ -128,8 +147,10 @@ def cleanup_lfs_object(sha256: str, repo: Optional[Repository] = None) -> bool:
     Returns:
         True if deleted, False if still in use or deletion failed
     """
-    # Check if this object is still referenced in current files
-    query = File.select().where((File.sha256 == sha256) & (File.lfs == True))
+    # Check if this object is still referenced in current files (active files only)
+    query = File.select().where(
+        (File.sha256 == sha256) & (File.lfs == True) & (File.is_deleted == False)
+    )
     if repo:
         query = query.where(File.repository == repo)
 
@@ -137,7 +158,7 @@ def cleanup_lfs_object(sha256: str, repo: Optional[Repository] = None) -> bool:
 
     if current_uses > 0:
         logger.debug(
-            f"LFS object {sha256[:8]} still used by {current_uses} file(s), keeping"
+            f"LFS object {sha256[:8]} still used by {current_uses} active file(s), keeping"
         )
         return False
 
@@ -172,14 +193,21 @@ def cleanup_lfs_object(sha256: str, repo: Optional[Repository] = None) -> bool:
                 )
                 .execute()
             )
+            logger.warning(
+                f"[LFS_HISTORY_DELETE] Removed {deleted_count} history record(s) "
+                f"for sha256={sha256[:8]} in repo={repo.full_id}"
+            )
         else:
             deleted_count = (
                 LFSObjectHistory.delete()
                 .where(LFSObjectHistory.sha256 == sha256)
                 .execute()
             )
+            logger.warning(
+                f"[LFS_HISTORY_DELETE] Removed {deleted_count} history record(s) "
+                f"for sha256={sha256[:8]} (global cleanup)"
+            )
 
-        logger.info(f"Removed {deleted_count} history records for {sha256[:8]}")
         return True
 
     except Exception as e:
@@ -477,6 +505,7 @@ async def sync_file_table_with_commit(
                 size=size_bytes,
                 sha256=sha256,
                 lfs=is_lfs,
+                is_deleted=False,
                 owner=repo.owner,  # Denormalized owner
             ).on_conflict(
                 conflict_target=(File.repository, File.path_in_repo),
@@ -484,6 +513,7 @@ async def sync_file_table_with_commit(
                     File.sha256: sha256,
                     File.size: size_bytes,
                     File.lfs: is_lfs,
+                    File.is_deleted: False,  # File is active
                     File.updated_at: datetime.now(timezone.utc),
                 },
             ).execute()
@@ -724,6 +754,7 @@ async def track_commit_lfs_objects(
                     size=size_bytes,
                     sha256=sha256,
                     lfs=is_lfs,
+                    is_deleted=False,
                     owner=repo.owner,  # Denormalized owner
                 ).on_conflict(
                     conflict_target=(File.repository, File.path_in_repo),
@@ -731,6 +762,7 @@ async def track_commit_lfs_objects(
                         File.sha256: sha256,
                         File.size: size_bytes,
                         File.lfs: is_lfs,
+                        File.is_deleted: False,  # File is active
                         File.updated_at: datetime.now(timezone.utc),
                     },
                 ).execute()

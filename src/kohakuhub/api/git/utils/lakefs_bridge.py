@@ -177,7 +177,10 @@ class GitLakeFSBridge:
             return {}
 
         file_records = {
-            f.path_in_repo: f for f in File.select().where(File.repository == repo)
+            f.path_in_repo: f
+            for f in File.select().where(
+                (File.repository == repo) & (File.is_deleted == False)
+            )
         }
 
         # Check for .gitattributes and parse LFS patterns

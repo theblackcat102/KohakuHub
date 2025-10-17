@@ -7,7 +7,7 @@ for users and organizations with separate tracking for private and public reposi
 import asyncio
 
 from kohakuhub.config import cfg
-from kohakuhub.db import LFSObjectHistory, Repository, User
+from kohakuhub.db import File, LFSObjectHistory, Repository, User
 from kohakuhub.db_operations import get_organization
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
@@ -18,21 +18,32 @@ logger = get_logger("QUOTA")
 async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
     """Calculate total storage usage for a repository.
 
+    Storage calculation:
+    - Non-LFS files: Counted from current branch
+    - LFS files: Counted from ALL history (all versions, including deleted)
+
+    This ensures:
+    - Deleting LFS files doesn't decrease quota (LFS cache preserved)
+    - No double counting of LFS files
+
     Args:
         repo: Repository model instance
 
     Returns:
         Dict with keys:
-        - total_bytes: Total storage used
-        - current_branch_bytes: Storage in current branch
+        - total_bytes: Total storage used (non-LFS current + all LFS history)
+        - current_branch_bytes: Storage in current branch (all files)
+        - current_branch_non_lfs_bytes: Non-LFS files in current branch
         - lfs_total_bytes: Total LFS storage (all versions)
         - lfs_unique_bytes: Unique LFS storage (deduplicated by SHA256)
     """
     lakefs_repo = lakefs_repo_name(repo.repo_type, repo.full_id)
     client = get_lakefs_client()
 
-    # Calculate current branch storage
+    # Calculate current branch storage (all files)
     current_branch_bytes = 0
+    current_branch_lfs_bytes = 0
+
     try:
         # List all objects in main branch
         after = ""
@@ -49,7 +60,19 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
 
             for obj in result["results"]:
                 if obj["path_type"] == "object":
-                    current_branch_bytes += obj.get("size_bytes") or 0
+                    size = obj.get("size_bytes") or 0
+                    current_branch_bytes += size
+
+                    # Check if this file is LFS (stored in File table)
+                    path = obj.get("path")
+                    if path:
+                        file_record = File.get_or_none(
+                            (File.repository == repo)
+                            & (File.path_in_repo == path)
+                            & (File.is_deleted == False)
+                        )
+                        if file_record and file_record.lfs:
+                            current_branch_lfs_bytes += size
 
             if result.get("pagination") and result["pagination"].get("has_more"):
                 after = result["pagination"]["next_offset"]
@@ -62,8 +85,10 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
             f"Failed to calculate current branch storage for {repo.full_id}: {e}"
         )
 
-    # Calculate LFS storage from history
-    # Total LFS storage (all versions)
+    # Calculate non-LFS storage in current branch
+    current_branch_non_lfs_bytes = current_branch_bytes - current_branch_lfs_bytes
+
+    # Calculate LFS storage from history (all versions, including deleted)
     lfs_total = (
         LFSObjectHistory.select().where(LFSObjectHistory.repository == repo).count()
     )
@@ -87,12 +112,15 @@ async def calculate_repository_storage(repo: Repository) -> dict[str, int]:
 
     lfs_unique_bytes = sum(obj.size for obj in unique_lfs)
 
-    # Total storage = current branch + all LFS versions
-    total_bytes = current_branch_bytes + lfs_total_bytes
+    # Total storage = non-LFS in current branch + unique LFS storage (deduplicated)
+    # Using lfs_unique_bytes ensures global deduplication works correctly for quota
+    # This avoids counting the same SHA256 object multiple times across versions
+    total_bytes = current_branch_non_lfs_bytes + lfs_unique_bytes
 
     return {
         "total_bytes": total_bytes,
         "current_branch_bytes": current_branch_bytes,
+        "current_branch_non_lfs_bytes": current_branch_non_lfs_bytes,
         "lfs_total_bytes": lfs_total_bytes,
         "lfs_unique_bytes": lfs_unique_bytes,
     }

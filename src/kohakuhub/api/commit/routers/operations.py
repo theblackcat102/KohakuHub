@@ -120,11 +120,21 @@ async def process_regular_file(
     # Check if file unchanged (deduplication)
     existing = get_file(repo, path)
     if existing and existing.sha256 == git_blob_sha1 and existing.size == len(data):
-        logger.info(f"Skipping unchanged file: {path}")
-        return False
+        if existing.is_deleted:
+            # File was deleted, now being restored - need to re-upload to LakeFS
+            logger.info(
+                f"Restoring deleted non-LFS file: {path} (sha256={git_blob_sha1[:8]}, size={file_size:,})"
+            )
+        else:
+            # File unchanged and active, skip
+            logger.info(f"Skipping unchanged file: {path}")
+            return False
 
-    # File changed, need to upload
-    logger.info(f"Uploading regular file: {path} ({file_size} bytes)")
+    # File changed or needs restoration
+    if existing and existing.is_deleted:
+        logger.info(f"Uploading to restore non-LFS file: {path} ({file_size} bytes)")
+    else:
+        logger.info(f"Uploading regular file: {path} ({file_size} bytes)")
 
     # Upload to LakeFS
     try:
@@ -145,6 +155,7 @@ async def process_regular_file(
         size=len(data),
         sha256=git_blob_sha1,
         lfs=False,
+        is_deleted=False,
         owner=repo.owner,
     ).on_conflict(
         conflict_target=(File.repository, File.path_in_repo),
@@ -152,6 +163,7 @@ async def process_regular_file(
             File.sha256: git_blob_sha1,
             File.size: len(data),
             File.lfs: False,  # Explicitly set to False
+            File.is_deleted: False,  # File is active (un-delete if previously deleted)
             File.updated_at: datetime.now(timezone.utc),
         },
     ).execute()
@@ -188,8 +200,8 @@ async def process_lfs_file(
     if not oid:
         raise HTTPException(400, detail={"error": f"Missing OID for LFS file {path}"})
 
-    # Check for existing file
-    existing = get_file(repo, path)
+    # Check for existing file (including deleted files to detect re-upload)
+    existing = File.get_or_none((File.repository == repo) & (File.path_in_repo == path))
 
     # Track old LFS object for potential deletion
     old_lfs_oid = None
@@ -197,10 +209,86 @@ async def process_lfs_file(
         old_lfs_oid = existing.sha256
         logger.info(f"File {path} will be replaced: {old_lfs_oid} → {oid}")
 
-    # Check if file unchanged
-    if existing and existing.sha256 == oid and existing.size == size:
-        logger.info(f"Skipping unchanged LFS file: {path}")
-        return False, None
+    # Check if same content (including deleted files)
+    # If same sha256+size, DON'T create new LFSObjectHistory
+    same_content = existing and existing.sha256 == oid and existing.size == size
+
+    if same_content:
+        if existing.is_deleted:
+            logger.info(
+                f"[PROCESS_LFS_FILE] Re-uploading deleted file: {path} (sha256={oid[:8]}, size={size:,}) "
+                f"- RESTORING in LakeFS (reusing existing LFSObjectHistory)"
+            )
+            # File was deleted, now being restored
+            # Need to link physical address in LakeFS to restore the file
+            # But DON'T create new LFSObjectHistory (already exists)
+
+            # Construct S3 physical address
+            lfs_key = f"lfs/{oid[:2]}/{oid[2:4]}/{oid}"
+            physical_address = f"s3://{cfg.s3.bucket}/{lfs_key}"
+
+            # Link the physical S3 object to LakeFS to restore
+            try:
+                staging_metadata = {
+                    "staging": {
+                        "physical_address": physical_address,
+                    },
+                    "checksum": f"{algo}:{oid}",
+                    "size_bytes": size,
+                }
+
+                client = get_lakefs_client()
+                await client.link_physical_address(
+                    repository=lakefs_repo,
+                    branch=revision,
+                    path=path,
+                    staging_metadata=staging_metadata,
+                )
+
+                logger.success(
+                    f"Successfully restored LFS file in LakeFS: {path} "
+                    f"(oid: {oid[:8]}, size: {size}, physical: {physical_address})"
+                )
+
+            except Exception as e:
+                logger.exception(
+                    f"Failed to restore LFS file in LakeFS: {path} "
+                    f"(oid: {oid[:8]}, repo: {lakefs_repo}, branch: {revision})",
+                    e,
+                )
+                raise HTTPException(
+                    500,
+                    detail={
+                        "error": f"Failed to restore LFS file {path} in LakeFS: {str(e)}"
+                    },
+                )
+
+            # Update database to mark as not deleted
+            File.update(is_deleted=False, updated_at=datetime.now(timezone.utc)).where(
+                File.id == existing.id
+            ).execute()
+            logger.success(f"Restored deleted file in DB: {path} (unmarked is_deleted)")
+
+            # Return tracking info for new commit (reusing existing LFS object)
+            return True, {
+                "path": path,
+                "sha256": oid,
+                "size": size,
+                "old_sha256": None,  # No old version (same content, just restoring)
+            }
+        else:
+            logger.info(
+                f"[PROCESS_LFS_FILE] File unchanged: {path} (sha256={oid[:8]}, size={size:,}) "
+                f"- WILL TRACK in LFSObjectHistory"
+            )
+            # File exists and is active - normal case
+            # Still return tracking info for new commit
+            return False, {
+                "path": path,
+                "sha256": oid,
+                "size": size,
+                "old_sha256": None,  # No old version (file unchanged)
+            }
 
     # File changed or new
     logger.info(f"Linking LFS file: {path}")
@@ -210,13 +298,30 @@ async def process_lfs_file(
     physical_address = f"s3://{cfg.s3.bucket}/{lfs_key}"
 
     # Verify object exists in S3
-    if not await object_exists(cfg.s3.bucket, lfs_key):
+    try:
+        exists = await object_exists(cfg.s3.bucket, lfs_key)
+        if not exists:
+            logger.error(
+                f"LFS object not found in S3: {oid[:8]} "
+                f"(path: {path}, bucket: {cfg.s3.bucket}, key: {lfs_key})"
+            )
+            raise HTTPException(
+                400,
+                detail={
+                    "error": f"LFS object {oid} not found in storage. "
+                    f"Upload to S3 may have failed. Path: {lfs_key}"
+                },
+            )
+    except HTTPException:
+        raise  # Re-raise HTTPException as-is
+    except Exception as e:
+        logger.exception(
+            f"Failed to check S3 existence for LFS object {oid[:8]} "
+            f"(path: {path}, bucket: {cfg.s3.bucket}, key: {lfs_key})",
+            e,
+        )
         raise HTTPException(
-            400,
-            detail={
-                "error": f"LFS object {oid} not found in storage. "
-                f"Upload to S3 may have failed. Path: {lfs_key}"
-            },
+            500, detail={"error": f"Failed to verify LFS object in S3: {str(e)}"}
         )
 
     # Get actual size from S3 to verify
@@ -226,12 +331,19 @@ async def process_lfs_file(
 
         if actual_size != size:
             logger.warning(
-                f"Size mismatch for {path}. Expected: {size}, Got: {actual_size}"
+                f"Size mismatch for {path}. Expected: {size}, Got: {actual_size} "
+                f"(oid: {oid[:8]}, key: {lfs_key})"
             )
             size = actual_size
     except Exception as e:
-        logger.exception(f"Failed to get S3 object metadata", e)
-        logger.warning(f"Could not verify S3 object metadata: {e}")
+        logger.exception(
+            f"Failed to get S3 metadata for LFS object {oid[:8]} "
+            f"(path: {path}, bucket: {cfg.s3.bucket}, key: {lfs_key})",
+            e,
+        )
+        logger.warning(
+            f"Could not verify S3 object metadata, continuing without size check"
+        )
 
     # Link the physical S3 object to LakeFS
     try:
@@ -251,10 +363,18 @@ async def process_lfs_file(
             staging_metadata=staging_metadata,
         )
 
-        logger.success(f"Successfully linked LFS file in LakeFS: {path}")
+        logger.success(
+            f"Successfully linked LFS file in LakeFS: {path} "
+            f"(oid: {oid[:8]}, size: {size}, physical: {physical_address})"
+        )
 
     except Exception as e:
-        logger.exception(f"Failed to link LFS file in LakeFS: {path}", e)
+        logger.exception(
+            f"Failed to link LFS file in LakeFS: {path} "
+            f"(oid: {oid[:8]}, repo: {lakefs_repo}, branch: {revision}, "
+            f"physical_address: {physical_address})",
+            e,
+        )
         raise HTTPException(
             500,
             detail={"error": f"Failed to link LFS file {path} in LakeFS: {str(e)}"},
@@ -267,6 +387,7 @@ async def process_lfs_file(
         size=size,
         sha256=oid,
         lfs=True,
+        is_deleted=False,
         owner=repo.owner,
     ).on_conflict(
         conflict_target=(File.repository, File.path_in_repo),
@@ -274,6 +395,7 @@ async def process_lfs_file(
             File.sha256: oid,
             File.size: size,
             File.lfs: True,
+            File.is_deleted: False,  # File is active (un-delete if previously deleted)
             File.updated_at: datetime.now(timezone.utc),
         },
     ).execute()
@@ -281,18 +403,28 @@ async def process_lfs_file(
     logger.success(f"Updated database record for LFS file: {path}")
 
     # Return tracking info for GC
-    return True, {
+    tracking_info = {
         "path": path,
         "sha256": oid,
         "size": size,
         "old_sha256": old_lfs_oid,
     }
 
+    logger.info(
+        f"[PROCESS_LFS_FILE] File changed/new: {path} (sha256={oid[:8]}, size={size:,}) "
+        f"- WILL TRACK in LFSObjectHistory"
+    )
+
+    return True, tracking_info
+
 
 async def process_deleted_file(
     path: str, repo: Repository, lakefs_repo: str, revision: str
 ) -> bool:
     """Process file deletion.
+
+    Marks file as deleted (soft delete) instead of removing from database.
+    This preserves LFSObjectHistory FK references for quota tracking.
 
     Args:
         path: File path to delete
@@ -313,15 +445,15 @@ async def process_deleted_file(
         # File might not exist, log warning but continue
         logger.warning(f"Failed to delete {path} from LakeFS: {e}")
 
-    # Remove from database
-    deleted_count = (
-        File.delete()
+    # Mark as deleted in database (soft delete)
+    updated_count = (
+        File.update(is_deleted=True, updated_at=datetime.now(timezone.utc))
         .where((File.repository == repo) & (File.path_in_repo == path))
         .execute()
     )
 
-    if deleted_count > 0:
-        logger.success(f"Removed {path} from database")
+    if updated_count > 0:
+        logger.success(f"Marked {path} as deleted in database (soft delete)")
     else:
         logger.info(f"File {path} was not in database")
 
@@ -393,17 +525,19 @@ async def process_deleted_folder(
 
         logger.success(f"Deleted {len(deleted_files)} files from folder {folder_path}")
 
-        # Remove from database
+        # Mark as deleted in database (soft delete)
         if deleted_files:
-            deleted_count = (
-                File.delete()
+            updated_count = (
+                File.update(is_deleted=True, updated_at=datetime.now(timezone.utc))
                 .where(
                     (File.repository == repo)
                     & (File.path_in_repo.startswith(folder_path))
                 )
                 .execute()
             )
-            logger.success(f"Removed {deleted_count} records from database")
+            logger.success(
+                f"Marked {updated_count} file(s) as deleted in database (soft delete)"
+            )
 
     except Exception as e:
         logger.warning(f"Error deleting folder {folder_path}: {e}")
@@ -481,6 +615,7 @@ async def process_copy_file(
                 size=src_file.size,
                 sha256=src_file.sha256,
                 lfs=src_file.lfs,
+                is_deleted=False,
                 owner=repo.owner,
             ).on_conflict(
                 conflict_target=(File.repository, File.path_in_repo),
@@ -488,6 +623,7 @@ async def process_copy_file(
                     File.sha256: src_file.sha256,
                     File.size: src_file.size,
                     File.lfs: src_file.lfs,
+                    File.is_deleted: False,  # File is active
                     File.updated_at: datetime.now(timezone.utc),
                 },
             ).execute()
@@ -501,6 +637,7 @@ async def process_copy_file(
                 size=src_obj["size_bytes"],
                 sha256=src_obj["checksum"],
                 lfs=is_lfs,
+                is_deleted=False,
                 owner=repo.owner,
             ).on_conflict(
                 conflict_target=(File.repository, File.path_in_repo),
@@ -508,6 +645,7 @@ async def process_copy_file(
                     File.sha256: src_obj["checksum"],
                     File.size: src_obj["size_bytes"],
                     File.lfs: is_lfs,
+                    File.is_deleted: False,  # File is active
                     File.updated_at: datetime.now(timezone.utc),
                 },
             ).execute()
@@ -636,7 +774,16 @@ async def commit(
                 )
                 files_changed = files_changed or changed
                 if lfs_info:
+                    logger.debug(
+                        f"[COMMIT_OP] Adding LFS file to tracking queue: {path} "
+                        f"(sha256={lfs_info['sha256'][:8]}, size={lfs_info['size']:,})"
+                    )
                     pending_lfs_tracking.append(lfs_info)
+                else:
+                    logger.warning(
+                        f"[COMMIT_OP] process_lfs_file returned NO tracking info for: {path} "
+                        f"(oid={value.get('oid', 'MISSING')[:8]})"
+                    )
 
             case "deletedFile":
                 # Delete single file
@@ -724,7 +871,15 @@ async def commit(
 
     # Track LFS objects and run GC
     if pending_lfs_tracking:
+        logger.info(
+            f"[COMMIT_LFS_TRACKING] Processing {len(pending_lfs_tracking)} LFS file(s) "
+            f"for commit {commit_result['id'][:8]}"
+        )
         for lfs_info in pending_lfs_tracking:
+            logger.debug(
+                f"  - {lfs_info['path']}: sha256={lfs_info['sha256'][:8]}, size={lfs_info['size']:,}"
+            )
+
             track_lfs_object(
                 repo_type=repo_type.value,
                 namespace=namespace,
@@ -747,6 +902,10 @@ async def commit(
                     logger.info(
                         f"GC: Cleaned up {deleted_count} old version(s) of {lfs_info['path']}"
                     )
+    else:
+        logger.warning(
+            f"[COMMIT_LFS_TRACKING] No LFS files to track for commit {commit_result['id'][:8]}"
+        )
 
     # Update storage usage for namespace and repository after successful commit
     try:

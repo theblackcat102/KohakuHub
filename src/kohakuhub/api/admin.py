@@ -903,21 +903,23 @@ async def get_repository_admin(
     # Get owner (using FK)
     owner = repo.owner
 
-    # Count files (using FK)
-    file_count = File.select().where(File.repository == repo).count()
+    # Count active files only (using FK)
+    file_count = (
+        File.select()
+        .where((File.repository == repo) & (File.is_deleted == False))
+        .count()
+    )
 
     # Count commits (using FK)
     commit_count = Commit.select().where(Commit.repository == repo).count()
 
-    # Get total file size (using FK)
+    # Get total file size for active files only (using FK)
     total_size = (
-        File.select()
-        .where(File.repository == repo)
-        .select(File.size)
-        .scalar(as_tuple=False)
+        File.select(fn.SUM(File.size).alias("total"))
+        .where((File.repository == repo) & (File.is_deleted == False))
+        .scalar()
+        or 0
     )
-    if total_size is None:
-        total_size = 0
 
     # Get storage info
     storage_info = get_repo_storage_info(repo)
@@ -1336,9 +1338,10 @@ async def get_top_repositories(
             )
 
     else:  # by size
-        # Top repos by total file size (using FK)
+        # Top repos by total file size (active files only, using FK)
         top_repos = (
             File.select(File.repository, fn.SUM(File.size).alias("total_size"))
+            .where(File.is_deleted == False)
             .group_by(File.repository)
             .order_by(fn.SUM(File.size).desc())
             .limit(limit)

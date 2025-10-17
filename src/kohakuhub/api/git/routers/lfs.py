@@ -105,11 +105,25 @@ async def process_upload_object(
     """
     lfs_key = get_lfs_key(oid)
 
-    # Check if object already exists (deduplication)
-    existing = get_file_by_sha256(oid)
+    # Check if object exists in S3 (global dedup)
+    try:
+        s3_exists = await object_exists(cfg.s3.bucket, lfs_key)
+    except Exception as e:
+        logger.exception(
+            f"Failed to check S3 existence for {oid[:8]} (key: {lfs_key})", e
+        )
+        s3_exists = False
 
-    if existing and existing.size == size:
-        # Object exists, no upload needed
+    # Check File table (per-repository check)
+    existing_file = get_file_by_sha256(oid)
+
+    if s3_exists or (existing_file and existing_file.size == size):
+        # Object exists (either in S3 globally or in File table)
+        # Tell client to skip upload
+        logger.info(
+            f"LFS object {oid[:8]} already exists "
+            f"(s3={s3_exists}, db={existing_file is not None}), skipping upload"
+        )
         return LFSObjectResponse(
             oid=oid,
             size=size,
@@ -165,6 +179,11 @@ async def process_upload_object(
             },
         )
     except Exception as e:
+        logger.exception(
+            f"Failed to generate upload URL for LFS object {oid[:8]} "
+            f"(size: {size}, key: {lfs_key})",
+            e,
+        )
         return LFSObjectResponse(
             oid=oid,
             size=size,

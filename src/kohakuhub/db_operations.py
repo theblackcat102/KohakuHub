@@ -329,15 +329,17 @@ def list_organization_members(org: User) -> list[UserOrganization]:
 
 
 def get_file(repo: Repository, path_in_repo: str) -> File | None:
-    """Get file by repository FK and path."""
+    """Get file by repository FK and path (only active files)."""
     return File.get_or_none(
-        (File.repository == repo) & (File.path_in_repo == path_in_repo)
+        (File.repository == repo)
+        & (File.path_in_repo == path_in_repo)
+        & (File.is_deleted == False)
     )
 
 
 def get_file_by_sha256(sha256: str) -> File | None:
-    """Get file by SHA256 hash."""
-    return File.get_or_none(File.sha256 == sha256)
+    """Get file by SHA256 hash (only active files)."""
+    return File.get_or_none((File.sha256 == sha256) & (File.is_deleted == False))
 
 
 def create_file(
@@ -355,6 +357,7 @@ def create_file(
         size=size,
         sha256=sha256,
         lfs=lfs,
+        is_deleted=False,
         owner=owner,  # Denormalized from repository.owner for convenience
     )
 
@@ -477,7 +480,11 @@ def create_lfs_history(
     file: File | None = None,
 ) -> LFSObjectHistory:
     """Create LFS object history record with ForeignKeys."""
-    return LFSObjectHistory.create(
+    from kohakuhub.logger import get_logger
+
+    logger = get_logger("DB")
+
+    entry = LFSObjectHistory.create(
         repository=repository,
         path_in_repo=path_in_repo,
         sha256=sha256,
@@ -485,6 +492,14 @@ def create_lfs_history(
         commit_id=commit_id,
         file=file,  # Optional FK to File for faster lookups
     )
+
+    logger.success(
+        f"[LFS_HISTORY_CREATE] repo={repository.full_id}, "
+        f"path={path_in_repo}, sha256={sha256[:8]}, size={size:,}, "
+        f"commit={commit_id[:8]}, id={entry.id}"
+    )
+
+    return entry
 
 
 def list_lfs_history(
@@ -502,6 +517,43 @@ def list_lfs_history(
     if limit:
         query = query.limit(limit)
     return list(query)
+
+
+def get_lfs_history_entry(
+    repository: Repository,
+    path_in_repo: str,
+    sha256: str,
+) -> LFSObjectHistory | None:
+    """Get existing LFS history entry for repo/path/sha256.
+
+    Args:
+        repository: Repository FK object
+        path_in_repo: File path
+        sha256: LFS object SHA256 hash
+
+    Returns:
+        LFSObjectHistory instance or None
+    """
+    return LFSObjectHistory.get_or_none(
+        (LFSObjectHistory.repository == repository)
+        & (LFSObjectHistory.path_in_repo == path_in_repo)
+        & (LFSObjectHistory.sha256 == sha256)
+    )
+
+
+def refresh_lfs_history_timestamp(
+    lfs_entry: LFSObjectHistory,
+    commit_id: str,
+) -> None:
+    """Refresh LFS history timestamp and update commit_id.
+
+    Args:
+        lfs_entry: LFSObjectHistory instance to update
+        commit_id: New commit ID
+    """
+    lfs_entry.commit_id = commit_id
+    lfs_entry.created_at = datetime.now(timezone.utc)
+    lfs_entry.save()
 
 
 def get_effective_lfs_threshold(repo: Repository) -> int:

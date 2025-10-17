@@ -74,22 +74,29 @@ class LakeFSRestClient:
         """
         if not response.is_success:
             # Include response body in error for debugging
-            error_detail = response.text if response.text else ""
+            error_detail = response.text if response.text else "(empty response)"
+
+            # Comprehensive logging
             logger.error(
-                f"LakeFS API error: {response.status_code} {response.reason_phrase}\n"
-                f"URL: {response.url}\n"
-                f"Response: {error_detail}"
+                f"LakeFS API request failed:\n"
+                f"  Status: {response.status_code} {response.reason_phrase}\n"
+                f"  Method: {response.request.method}\n"
+                f"  URL: {response.url}\n"
+                f"  Response Body: {error_detail}"
             )
-            # Raise with enhanced error message
-            try:
-                self._check_response(response)
-            except httpx.HTTPStatusError as e:
-                # Re-raise with response text included
-                raise httpx.HTTPStatusError(
-                    f"{e.response.status_code} {e.response.reason_phrase}: {error_detail}",
-                    request=e.request,
-                    response=e.response,
-                )
+
+            # Create comprehensive error message
+            error_msg = (
+                f"LakeFS API error {response.status_code} {response.reason_phrase} "
+                f"for {response.request.method} {response.url}: {error_detail}"
+            )
+
+            # Raise HTTPStatusError with full context
+            raise httpx.HTTPStatusError(
+                error_msg,
+                request=response.request,
+                response=response,
+            )
 
     async def get_object(
         self, repository: str, ref: str, path: str, range_header: str | None = None
