@@ -98,11 +98,12 @@ export const repoAPI = {
   /**
    * Get user overview with all repositories
    * @param {string} username - Username
+   * @param {string} sort - Sort order (recent/likes/downloads)
    * @param {number} limit - Max repos per type
    * @returns {Promise} - { models: [], datasets: [], spaces: [] }
    */
-  getUserOverview: (username, limit = 100) =>
-    api.get(`/api/users/${username}/repos`, { params: { limit } }),
+  getUserOverview: (username, sort = "recent", limit = 100) =>
+    api.get(`/api/users/${username}/repos`, { params: { limit, sort } }),
 
   /**
    * List repository file tree

@@ -245,6 +245,19 @@
 
       <!-- Main Content -->
       <main class="space-y-8">
+        <!-- Sort Dropdown (applies to all sections) -->
+        <div class="card">
+          <el-select
+            v-model="sortBy"
+            placeholder="Sort by"
+            class="w-full sm:w-50"
+          >
+            <el-option label="Recently Updated" value="recent" />
+            <el-option label="Most Downloads" value="downloads" />
+            <el-option label="Most Likes" value="likes" />
+          </el-select>
+        </div>
+
         <!-- User Card (from Username/Username space repo if exists) -->
         <section v-if="userCard" class="card">
           <div class="markdown-body">
@@ -532,6 +545,7 @@ const userCard = ref("");
 const userNotFound = ref(false);
 const quotaInfo = ref(null);
 const hasAvatar = ref(true); // Assume avatar exists, will be set to false on error
+const sortBy = ref("recent"); // Sort option
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 
@@ -593,7 +607,10 @@ async function checkIfOrganization() {
 async function loadUserData() {
   try {
     // Get user overview which returns all repos and validates user exists
-    const response = await repoAPI.getUserOverview(username.value);
+    const response = await repoAPI.getUserOverview(
+      username.value,
+      sortBy.value,
+    );
     repos.value = response.data;
     return true;
   } catch (err) {
@@ -607,6 +624,11 @@ async function loadUserData() {
     return true;
   }
 }
+
+// Watch sortBy changes and reload
+watch(sortBy, () => {
+  loadUserData();
+});
 
 async function loadUserCard() {
   try {

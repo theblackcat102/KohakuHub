@@ -176,6 +176,7 @@ const rules = {
 const filteredRepos = computed(() => {
   let result = [...repos.value];
 
+  // Only filter by search query (sorting is done by backend)
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(
@@ -185,28 +186,31 @@ const filteredRepos = computed(() => {
     );
   }
 
-  result.sort((a, b) => {
-    switch (sortBy.value) {
-      case "updated":
-        return new Date(b.lastModified || 0) - new Date(a.lastModified || 0);
-      case "created":
-        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      case "downloads":
-        return (b.downloads || 0) - (a.downloads || 0);
-      case "likes":
-        return (b.likes || 0) - (a.likes || 0);
-      default:
-        return 0;
-    }
-  });
-
   return result;
 });
 
 async function loadRepos() {
   loading.value = true;
   try {
-    const { data } = await repoAPI.listRepos(repoType.value, { limit: 100 });
+    // Map frontend sort values to backend API values
+    let apiSort = "recent"; // default
+    switch (sortBy.value) {
+      case "updated":
+      case "created":
+        apiSort = "recent";
+        break;
+      case "downloads":
+        apiSort = "downloads";
+        break;
+      case "likes":
+        apiSort = "likes";
+        break;
+    }
+
+    const { data } = await repoAPI.listRepos(repoType.value, {
+      limit: 100,
+      sort: apiSort,
+    });
     repos.value = data;
   } catch (err) {
     console.error(`Failed to load ${repoType.value}s:`, err);
@@ -267,6 +271,11 @@ watch(showCreateDialog, (val) => {
     form.organization = "";
     form.private = false;
   }
+});
+
+// Reload repos when sort changes
+watch(sortBy, () => {
+  loadRepos();
 });
 
 // Reload repos when route changes

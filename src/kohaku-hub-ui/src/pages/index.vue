@@ -34,9 +34,7 @@
 
     <!-- Recent Repos - Three Columns -->
     <div class="container-main py-8">
-      <h2 class="text-2xl md:text-3xl font-bold mb-6 md:mb-8">
-        Recently Updated
-      </h2>
+      <h2 class="text-2xl md:text-3xl font-bold mb-6 md:mb-8">🔥 Trending</h2>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <!-- Models Column -->
@@ -235,24 +233,10 @@ function goToRepo(type, repo) {
 async function loadStats() {
   try {
     const [models, datasets, spaces] = await Promise.all([
-      repoAPI.listRepos("model", { limit: 100 }),
-      repoAPI.listRepos("dataset", { limit: 100 }),
-      repoAPI.listRepos("space", { limit: 100 }),
+      repoAPI.listRepos("model", { limit: 100, sort: "trending" }),
+      repoAPI.listRepos("dataset", { limit: 100, sort: "trending" }),
+      repoAPI.listRepos("space", { limit: 100, sort: "trending" }),
     ]);
-
-    // Sort by lastModified date (most recent first)
-    const sortByLastModified = (repos) => {
-      return repos.sort((a, b) => {
-        console.log(a, b);
-        const dateA = a.lastModified
-          ? new Date(a.lastModified).getTime()
-          : new Date(a.createdAt).getTime();
-        const dateB = b.lastModified
-          ? new Date(b.lastModified).getTime()
-          : new Date(b.createdAt).getTime();
-        return dateB - dateA;
-      });
-    };
 
     stats.value = {
       models: models.data.length,
@@ -260,10 +244,10 @@ async function loadStats() {
       spaces: spaces.data.length,
     };
 
-    // Get top 3 most recently updated repos for each type
-    recentModels.value = sortByLastModified([...models.data]).slice(0, 3);
-    recentDatasets.value = sortByLastModified([...datasets.data]).slice(0, 3);
-    recentSpaces.value = sortByLastModified([...spaces.data]).slice(0, 3);
+    // Get top 3 trending repos for each type (already sorted by backend)
+    recentModels.value = models.data.slice(0, 3);
+    recentDatasets.value = datasets.data.slice(0, 3);
+    recentSpaces.value = spaces.data.slice(0, 3);
   } catch (err) {
     console.error("Failed to load stats:", err);
   }

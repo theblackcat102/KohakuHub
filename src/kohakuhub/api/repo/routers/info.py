@@ -297,6 +297,7 @@ def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = No
 async def list_repos(
     author: Optional[str] = None,
     limit: int = Query(50, ge=1, le=1000),
+    sort: str = Query("recent", regex="^(recent|likes|downloads|trending)$"),
     request: Request = None,
     user: User | None = Depends(get_optional_user),
 ):
@@ -305,6 +306,7 @@ async def list_repos(
     Args:
         author: Filter by author/namespace
         limit: Maximum number of results
+        sort: Sort order (recent, likes, downloads, trending) - default: recent
         request: FastAPI request object
         user: Current authenticated user (optional)
 
@@ -335,7 +337,22 @@ async def list_repos(
     # Apply privacy filtering
     q = _filter_repos_by_privacy(q, user, author)
 
-    rows = list(q.limit(limit))
+    # Apply sorting
+    if sort == "trending":
+        # Use trending algorithm (recent activity with decay)
+        from kohakuhub.api.utils.trending import get_trending_repositories
+
+        rows = get_trending_repositories(rt, limit=limit, days=7)
+    else:
+        # Standard sorting
+        if sort == "likes":
+            q = q.order_by(Repository.likes_count.desc())
+        elif sort == "downloads":
+            q = q.order_by(Repository.downloads.desc())
+        else:  # recent (default)
+            q = q.order_by(Repository.created_at.desc())
+
+        rows = list(q.limit(limit))
 
     # Format response with lastModified from LakeFS
     client = get_lakefs_client()
@@ -374,19 +391,14 @@ async def list_repos(
                     if r.created_at
                     else None
                 ),
-                "downloads": 0,
-                "likes": 0,
+                "downloads": r.downloads,
+                "likes": r.likes_count,
                 "gated": False,
                 "tags": [],
             }
         )
 
-    # Sort by lastModified descending (newest first)
-    result.sort(
-        key=lambda x: x["lastModified"] or "",
-        reverse=True,
-    )
-
+    # Sorting already applied by database query
     return result
 
 
@@ -394,6 +406,7 @@ async def list_repos(
 async def list_user_repos(
     username: str,
     limit: int = Query(100, ge=1, le=1000),
+    sort: str = Query("recent", regex="^(recent|likes|downloads)$"),
     user: User | None = Depends(get_optional_user),
 ):
     """List all repositories for a specific user/namespace.
@@ -403,6 +416,7 @@ async def list_user_repos(
     Args:
         username: Username or organization name
         limit: Maximum number of results per type
+        sort: Sort order (recent, likes, downloads) - default: recent
         user: Current authenticated user (optional)
 
     Returns:
@@ -433,6 +447,14 @@ async def list_user_repos(
 
         # Apply privacy filtering
         q = _filter_repos_by_privacy(q, user, username)
+
+        # Apply sorting
+        if sort == "likes":
+            q = q.order_by(Repository.likes_count.desc())
+        elif sort == "downloads":
+            q = q.order_by(Repository.downloads.desc())
+        else:  # recent (default)
+            q = q.order_by(Repository.created_at.desc())
 
         rows = list(q.limit(limit))
 
@@ -473,20 +495,14 @@ async def list_user_repos(
                         if r.created_at
                         else None
                     ),
-                    "downloads": 0,
-                    "likes": 0,
+                    "downloads": r.downloads,
+                    "likes": r.likes_count,
                     "gated": False,
                     "tags": [],
                 }
             )
 
-        # Sort by lastModified descending (newest first)
-        # Repos without lastModified go to the end
-        repos_list.sort(
-            key=lambda x: x["lastModified"] or "",
-            reverse=True,
-        )
-
+        # Sorting already applied by database query
         result[key] = repos_list
 
     return result

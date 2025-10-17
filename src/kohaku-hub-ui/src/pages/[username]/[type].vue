@@ -154,16 +154,28 @@
               <el-tag type="info" size="large">{{ getCount("model") }}</el-tag>
             </div>
 
-            <el-input
-              v-model="searchQuery"
-              placeholder="Search models..."
-              style="width: 300px"
-              clearable
-            >
-              <template #prefix>
-                <div class="i-carbon-search" />
-              </template>
-            </el-input>
+            <div class="flex gap-3">
+              <el-select
+                v-model="sortBy"
+                placeholder="Sort by"
+                style="width: 200px"
+              >
+                <el-option label="Recently Updated" value="recent" />
+                <el-option label="Most Downloads" value="downloads" />
+                <el-option label="Most Likes" value="likes" />
+              </el-select>
+
+              <el-input
+                v-model="searchQuery"
+                placeholder="Search models..."
+                style="width: 300px"
+                clearable
+              >
+                <template #prefix>
+                  <div class="i-carbon-search" />
+                </template>
+              </el-input>
+            </div>
           </div>
 
           <div v-if="filteredRepos.length > 0" class="grid grid-cols-2 gap-4">
@@ -238,16 +250,28 @@
               }}</el-tag>
             </div>
 
-            <el-input
-              v-model="searchQuery"
-              placeholder="Search datasets..."
-              style="width: 300px"
-              clearable
-            >
-              <template #prefix>
-                <div class="i-carbon-search" />
-              </template>
-            </el-input>
+            <div class="flex gap-3">
+              <el-select
+                v-model="sortBy"
+                placeholder="Sort by"
+                style="width: 200px"
+              >
+                <el-option label="Recently Updated" value="recent" />
+                <el-option label="Most Downloads" value="downloads" />
+                <el-option label="Most Likes" value="likes" />
+              </el-select>
+
+              <el-input
+                v-model="searchQuery"
+                placeholder="Search datasets..."
+                style="width: 300px"
+                clearable
+              >
+                <template #prefix>
+                  <div class="i-carbon-search" />
+                </template>
+              </el-input>
+            </div>
           </div>
 
           <div v-if="filteredRepos.length > 0" class="grid grid-cols-2 gap-4">
@@ -322,16 +346,28 @@
               }}</el-tag>
             </div>
 
-            <el-input
-              v-model="searchQuery"
-              placeholder="Search spaces..."
-              style="width: 300px"
-              clearable
-            >
-              <template #prefix>
-                <div class="i-carbon-search" />
-              </template>
-            </el-input>
+            <div class="flex gap-3">
+              <el-select
+                v-model="sortBy"
+                placeholder="Sort by"
+                style="width: 200px"
+              >
+                <el-option label="Recently Updated" value="recent" />
+                <el-option label="Most Downloads" value="downloads" />
+                <el-option label="Most Likes" value="likes" />
+              </el-select>
+
+              <el-input
+                v-model="searchQuery"
+                placeholder="Search spaces..."
+                style="width: 300px"
+                clearable
+              >
+                <template #prefix>
+                  <div class="i-carbon-search" />
+                </template>
+              </el-input>
+            </div>
           </div>
 
           <div v-if="filteredRepos.length > 0" class="grid grid-cols-2 gap-4">
@@ -415,6 +451,7 @@ const currentType = computed(() => route.params.type); // 'models', 'datasets', 
 const userInfo = ref(null);
 const repos = ref({ model: [], dataset: [], space: [] });
 const searchQuery = ref("");
+const sortBy = ref("recent");
 
 // Map route type to API type
 const repoType = computed(() => {
@@ -467,9 +504,18 @@ async function checkIfOrganization() {
 async function loadRepos() {
   try {
     const [models, datasets, spaces] = await Promise.all([
-      repoAPI.listRepos("model", { author: username.value }),
-      repoAPI.listRepos("dataset", { author: username.value }),
-      repoAPI.listRepos("space", { author: username.value }),
+      repoAPI.listRepos("model", {
+        author: username.value,
+        sort: sortBy.value,
+      }),
+      repoAPI.listRepos("dataset", {
+        author: username.value,
+        sort: sortBy.value,
+      }),
+      repoAPI.listRepos("space", {
+        author: username.value,
+        sort: sortBy.value,
+      }),
     ]);
 
     repos.value = {
@@ -481,6 +527,11 @@ async function loadRepos() {
     console.error("Failed to load repos:", err);
   }
 }
+
+// Reload when sort changes
+watch(sortBy, () => {
+  loadRepos();
+});
 
 // Reset search when type changes
 watch(currentType, () => {
