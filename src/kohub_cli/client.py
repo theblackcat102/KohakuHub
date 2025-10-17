@@ -686,6 +686,9 @@ class KohubClient:
         repo_type: RepoType = "model",
         private: Optional[bool] = None,
         gated: Optional[str] = None,
+        lfs_threshold_bytes: Optional[int] = None,
+        lfs_keep_versions: Optional[int] = None,
+        lfs_suffix_rules: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         """Update repository settings.
 
@@ -694,6 +697,9 @@ class KohubClient:
             repo_type: Repository type (model, dataset, space)
             private: Whether the repository is private
             gated: Gating mode ("auto", "manual", or None)
+            lfs_threshold_bytes: LFS threshold in bytes (None = use server default)
+            lfs_keep_versions: Number of LFS versions to keep (None = use server default)
+            lfs_suffix_rules: List of file suffixes to always use LFS (None = no rules)
 
         Returns:
             Success message
@@ -713,11 +719,47 @@ class KohubClient:
             data["private"] = private
         if gated is not None:
             data["gated"] = gated
+        if lfs_threshold_bytes is not None:
+            data["lfs_threshold_bytes"] = lfs_threshold_bytes
+        if lfs_keep_versions is not None:
+            data["lfs_keep_versions"] = lfs_keep_versions
+        if lfs_suffix_rules is not None:
+            data["lfs_suffix_rules"] = lfs_suffix_rules
 
         response = self._request(
             "PUT",
             f"/api/{repo_type}s/{namespace}/{name}/settings",
             json=data,
+        )
+        return response.json()
+
+    def get_repo_lfs_settings(
+        self,
+        repo_id: str,
+        repo_type: RepoType = "model",
+    ) -> dict[str, Any]:
+        """Get repository LFS settings.
+
+        Args:
+            repo_id: Repository ID (format: "namespace/name")
+            repo_type: Repository type (model, dataset, space)
+
+        Returns:
+            LFS settings with configured and effective values
+
+        Raises:
+            AuthenticationError: If not authenticated
+            AuthorizationError: If not authorized
+            NotFoundError: If repository not found
+        """
+        if "/" not in repo_id:
+            raise ValueError("repo_id must be in format 'namespace/name'")
+
+        namespace, name = repo_id.split("/", 1)
+
+        response = self._request(
+            "GET",
+            f"/api/{repo_type}s/{namespace}/{name}/settings/lfs",
         )
         return response.json()
 

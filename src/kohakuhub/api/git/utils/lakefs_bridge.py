@@ -7,6 +7,7 @@ import hashlib
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File
+from kohakuhub.db_operations import get_repository, should_use_lfs
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.api.git.utils.objects import (
@@ -171,8 +172,6 @@ class GitLakeFSBridge:
         """
 
         # Get repository and File table records for LFS tracking
-        from kohakuhub.db_operations import get_repository
-
         repo = get_repository(self.repo_type, self.namespace, self.name)
         if not repo:
             return {}
@@ -217,11 +216,11 @@ class GitLakeFSBridge:
 
             # Should be LFS if:
             # 1. Marked in File table, OR
-            # 2. Size >= threshold, OR
+            # 2. Size >= threshold OR matches suffix rules, OR
             # 3. Matches existing LFS pattern
             should_be_lfs = (
                 (file_record and file_record.lfs)
-                or size >= cfg.app.lfs_threshold_bytes
+                or should_use_lfs(repo, path, size)
                 or self._matches_pattern(path, existing_lfs_patterns)
             )
 

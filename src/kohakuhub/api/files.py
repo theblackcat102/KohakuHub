@@ -14,7 +14,13 @@ from fastapi.responses import RedirectResponse, Response
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, Repository, User
-from kohakuhub.db_operations import get_file, get_repository, get_organization
+from kohakuhub.db_operations import (
+    get_effective_lfs_threshold,
+    get_file,
+    get_organization,
+    get_repository,
+    should_use_lfs,
+)
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.auth.permissions import (
@@ -126,7 +132,7 @@ async def process_preupload_file(
     repo_id: str,
     lakefs_repo: str,
     revision: str,
-    threshold: int,
+    threshold: int,  # Kept for backward compatibility, not used
 ) -> dict:
     """Process single file for preupload check.
 
@@ -136,7 +142,7 @@ async def process_preupload_file(
         repo_id: Repository ID (for check_file_by_sample)
         lakefs_repo: LakeFS repository name
         revision: Branch name
-        threshold: LFS size threshold
+        threshold: Deprecated - use repo.lfs_threshold_bytes instead
 
     Returns:
         Preupload result dict with path, uploadMode, shouldIgnore
@@ -146,8 +152,8 @@ async def process_preupload_file(
     sha256 = file_info.get("sha256", "")
     sample = file_info.get("sample", "")
 
-    # Determine upload mode based on size
-    upload_mode = "lfs" if size >= threshold else "regular"
+    # Determine upload mode using repo-specific LFS rules (size AND/OR suffix)
+    upload_mode = "lfs" if should_use_lfs(repo, path, size) else "regular"
     should_ignore = False
 
     # Check for existing file with same content
@@ -239,7 +245,8 @@ async def preupload(
 
     # Get LakeFS repository name
     lakefs_repo = lakefs_repo_name(repo_type.value, repo_id)
-    threshold = cfg.app.lfs_threshold_bytes
+    # Get effective LFS threshold for this repository
+    threshold = get_effective_lfs_threshold(repo_row)
 
     # Process all files in parallel
     result_files = await asyncio.gather(

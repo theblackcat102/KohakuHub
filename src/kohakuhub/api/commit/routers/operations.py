@@ -11,12 +11,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, Repository, User
-from kohakuhub.db_operations import get_organization
 from kohakuhub.db_operations import (
     create_commit,
     create_file,
     delete_file,
+    get_effective_lfs_threshold,
     get_file,
+    get_organization,
+    should_use_lfs,
     update_file,
 )
 from kohakuhub.logger import get_logger
@@ -93,17 +95,18 @@ async def process_regular_file(
     except Exception as e:
         raise HTTPException(400, detail={"error": f"Failed to decode base64: {e}"})
 
-    # Check file size against LFS threshold
+    # Check file size against LFS threshold (use repo-specific settings)
     file_size = len(data)
-    lfs_threshold = cfg.app.lfs_threshold_bytes
+    lfs_threshold = get_effective_lfs_threshold(repo)
 
-    if file_size >= lfs_threshold:
-        # File is too large for standard commit - must use LFS workflow
+    # Also check if file suffix requires LFS
+    if should_use_lfs(repo, path, file_size):
+        # File should use LFS (either by size or suffix rule)
         raise HTTPException(
             400,
             detail={
-                "error": f"File {path} is too large ({file_size} bytes) for standard commit. "
-                f"Files >= {lfs_threshold} bytes must be uploaded through Git LFS. "
+                "error": f"File {path} should use LFS (size: {file_size} bytes, threshold: {lfs_threshold} bytes). "
+                f"Files >= {lfs_threshold} bytes or matching LFS suffix rules must be uploaded through Git LFS. "
                 f"Use 'lfsFile' operation instead of 'file' operation.",
                 "file_size": file_size,
                 "lfs_threshold": lfs_threshold,
@@ -490,7 +493,8 @@ async def process_copy_file(
             ).execute()
         else:
             # If not in database, create entry based on LakeFS info
-            is_lfs = src_obj["size_bytes"] >= cfg.app.lfs_threshold_bytes
+            # Use repo-specific LFS settings
+            is_lfs = should_use_lfs(repo, dest_path, src_obj["size_bytes"])
             File.insert(
                 repository=repo,
                 path_in_repo=dest_path,

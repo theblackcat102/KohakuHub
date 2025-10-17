@@ -131,6 +131,8 @@ class Token(BaseModel):
 
 
 class Repository(BaseModel):
+    """Repository model BEFORE migration 009 (no LFS settings)."""
+
     id = AutoField()
     repo_type = CharField(index=True)
     namespace = CharField(index=True)
@@ -147,14 +149,11 @@ class Repository(BaseModel):
     )  # NULL = no specific limit, inherit from namespace
     used_bytes = BigIntegerField(default=0)
 
-    # LFS settings (NULL = use server defaults from config)
-    lfs_threshold_bytes = IntegerField(
-        null=True
-    )  # NULL = use cfg.app.lfs_threshold_bytes
-    lfs_keep_versions = IntegerField(null=True)  # NULL = use cfg.app.lfs_keep_versions
-    lfs_suffix_rules = TextField(
-        null=True
-    )  # JSON list of suffixes like [".safetensors", ".bin"], NULL = no suffix rules
+    # NOTE: LFS settings NOT present - this represents schema BEFORE migration 009
+    # Migration 009 will add:
+    # - lfs_threshold_bytes
+    # - lfs_keep_versions
+    # - lfs_suffix_rules
 
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 

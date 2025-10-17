@@ -1219,14 +1219,15 @@ def repo_tree_context(state: InteractiveState):
     from rich.tree import Tree
 
     def format_size(size_bytes):
-        if size_bytes < 1024:
+        """Format size using decimal prefixes (1KB = 1000 bytes)."""
+        if size_bytes < 1000:
             return f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.1f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        elif size_bytes < 1000 * 1000:
+            return f"{size_bytes / 1000:.1f} KB"
+        elif size_bytes < 1000 * 1000 * 1000:
+            return f"{size_bytes / (1000 * 1000):.1f} MB"
         else:
-            return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+            return f"{size_bytes / (1000 * 1000 * 1000):.1f} GB"
 
     tree_root = Tree(
         f"[bold cyan]{repo_id}[/bold cyan] [dim]({revision}/{path or 'root'})[/dim]",
@@ -1427,12 +1428,12 @@ def view_commit_diff(state: InteractiveState):
         path = file_info.get("path", "")
         size = file_info.get("size_bytes", 0)
 
-        if size < 1024:
+        if size < 1000:
             size_str = f"{size} B"
-        elif size < 1024 * 1024:
-            size_str = f"{size / 1024:.1f} KB"
+        elif size < 1000 * 1000:
+            size_str = f"{size / 1000:.1f} KB"
         else:
-            size_str = f"{size / (1024 * 1024):.1f} MB"
+            size_str = f"{size / (1000 * 1000):.1f} MB"
 
         type_icon = {
             "added": "+ ",
@@ -1966,15 +1967,15 @@ def repo_tree(state: InteractiveState):
     from rich.tree import Tree
 
     def format_size(size_bytes):
-        """Format file size."""
-        if size_bytes < 1024:
+        """Format file size using decimal prefixes (1KB = 1000 bytes)."""
+        if size_bytes < 1000:
             return f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.1f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        elif size_bytes < 1000 * 1000:
+            return f"{size_bytes / 1000:.1f} KB"
+        elif size_bytes < 1000 * 1000 * 1000:
+            return f"{size_bytes / (1000 * 1000):.1f} MB"
         else:
-            return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+            return f"{size_bytes / (1000 * 1000 * 1000):.1f} GB"
 
     tree_root = Tree(
         f"[bold cyan]{repo_id}[/bold cyan] [dim]({revision})[/dim]",

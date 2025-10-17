@@ -6,7 +6,12 @@ import asyncio
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, LFSObjectHistory, Repository
-from kohakuhub.db_operations import get_repository, create_lfs_history
+from kohakuhub.db_operations import (
+    create_lfs_history,
+    get_effective_lfs_keep_versions,
+    get_repository,
+    should_use_lfs,
+)
 from kohakuhub.logger import get_logger
 from kohakuhub.utils.lakefs import get_lakefs_client
 from kohakuhub.utils.s3 import delete_objects_with_prefix, get_s3_client, object_exists
@@ -211,7 +216,8 @@ def run_gc_for_file(
         logger.error(f"Repository not found: {repo_type}/{namespace}/{name}")
         return 0
 
-    keep_count = cfg.app.lfs_keep_versions
+    # Use repo-specific keep_versions setting
+    keep_count = get_effective_lfs_keep_versions(repo)
     old_hashes = get_old_lfs_versions(repo, path_in_repo, keep_count)
 
     if not old_hashes:
@@ -452,7 +458,8 @@ async def sync_file_table_with_commit(
             else:
                 sha256 = checksum
 
-            is_lfs = size_bytes >= cfg.app.lfs_threshold_bytes
+            # Use repo-specific LFS rules (size + suffix)
+            is_lfs = should_use_lfs(repo, path, size_bytes)
 
             logger.debug(
                 f"Syncing file: {path} (size={size_bytes}, lfs={is_lfs}, sha256={sha256[:8]})"
@@ -682,7 +689,8 @@ async def track_commit_lfs_objects(
                 )
 
                 size_bytes = obj_stat.get("size_bytes", 0)
-                is_lfs = size_bytes >= cfg.app.lfs_threshold_bytes
+                # Use repo-specific LFS rules (size + suffix)
+                is_lfs = should_use_lfs(repo, path, size_bytes)
 
                 # Extract SHA256 from checksum (format: "sha256:hash")
                 checksum = obj_stat.get("checksum", "")

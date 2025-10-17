@@ -73,6 +73,48 @@ class AppConfig(BaseModel):
     # LFS Garbage Collection settings
     lfs_keep_versions: int = 5  # Keep last K versions of each file
     lfs_auto_gc: bool = False  # Auto-delete old LFS objects on commit
+    # LFS Suffix Rules - File extensions that should ALWAYS use LFS
+    # These are server-wide defaults that apply to ALL repositories
+    # Repositories can add their own additional suffix rules
+    lfs_suffix_rules_default: list[str] = [
+        # ML Model Formats
+        ".safetensors",  # SafeTensors (most common for HF models)
+        ".bin",  # PyTorch binary weights
+        ".pt",  # PyTorch checkpoint
+        ".pth",  # PyTorch checkpoint
+        ".ckpt",  # PyTorch Lightning checkpoint
+        ".onnx",  # ONNX model
+        ".pb",  # TensorFlow protobuf
+        ".h5",  # Keras/HDF5 model
+        ".tflite",  # TensorFlow Lite
+        ".gguf",  # GGUF quantized models (llama.cpp)
+        ".ggml",  # GGML models
+        ".msgpack",  # MessagePack serialization
+        # Compressed Archives
+        ".zip",  # ZIP archive
+        ".tar",  # TAR archive
+        ".gz",  # GZIP compressed
+        ".bz2",  # BZIP2 compressed
+        ".xz",  # XZ compressed
+        ".7z",  # 7-Zip archive
+        ".rar",  # RAR archive
+        # Data Files
+        ".npy",  # NumPy array
+        ".npz",  # NumPy compressed archive
+        ".arrow",  # Apache Arrow
+        ".parquet",  # Apache Parquet
+        # Media Files
+        ".mp4",  # Video
+        ".avi",  # Video
+        ".mkv",  # Video
+        ".mov",  # Video
+        ".wav",  # Audio
+        ".mp3",  # Audio
+        ".flac",  # Audio
+        # Images (large formats)
+        ".tiff",  # TIFF image
+        ".tif",  # TIFF image
+    ]
     # Site identification
     site_name: str = "KohakuHub"  # Configurable site name (e.g., "MyCompany Hub")
 

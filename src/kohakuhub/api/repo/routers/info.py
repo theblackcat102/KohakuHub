@@ -13,6 +13,7 @@ from kohakuhub.db_operations import (
     get_organization,
     get_repository,
     get_user_by_username,
+    should_use_lfs,
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
@@ -146,11 +147,11 @@ async def get_repo_info(
             # Filter only file objects
             file_objects = [obj for obj in all_results if obj["path_type"] == "object"]
 
-            # Fetch all file records in parallel for LFS files
+            # Fetch all file records in parallel for LFS files (using repo-specific settings)
             lfs_files = [
                 obj
                 for obj in file_objects
-                if obj.get("size_bytes", 0) > cfg.app.lfs_threshold_bytes
+                if should_use_lfs(repo_row, obj["path"], obj.get("size_bytes", 0))
             ]
 
             file_records = {}
@@ -158,7 +159,7 @@ async def get_repo_info(
                 # Fetch all file records sequentially (sync DB operations)
                 for obj in lfs_files:
                     try:
-                        record = get_file(repo_id, obj["path"])
+                        record = get_file(repo_row, obj["path"])
                         if record:
                             file_records[obj["path"]] = record
                     except Exception:
@@ -172,8 +173,8 @@ async def get_repo_info(
                     "size": obj.get("size_bytes", 0),
                 }
 
-                # Add LFS info if applicable
-                if obj.get("size_bytes", 0) > cfg.app.lfs_threshold_bytes:
+                # Add LFS info if applicable (using repo-specific settings)
+                if should_use_lfs(repo_row, obj["path"], obj.get("size_bytes", 0)):
                     file_record = file_records.get(obj["path"])
                     checksum = (
                         file_record.sha256

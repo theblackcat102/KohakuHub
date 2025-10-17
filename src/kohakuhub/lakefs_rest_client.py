@@ -63,6 +63,34 @@ class LakeFSRestClient:
         self.base_url = f"{self.endpoint}/api/v1"
         self.auth = (access_key, secret_key)
 
+    def _check_response(self, response: httpx.Response) -> None:
+        """Check response status and raise detailed error if not OK.
+
+        Args:
+            response: httpx Response object
+
+        Raises:
+            httpx.HTTPStatusError: With response.text included in exception message
+        """
+        if not response.is_success:
+            # Include response body in error for debugging
+            error_detail = response.text if response.text else ""
+            logger.error(
+                f"LakeFS API error: {response.status_code} {response.reason_phrase}\n"
+                f"URL: {response.url}\n"
+                f"Response: {error_detail}"
+            )
+            # Raise with enhanced error message
+            try:
+                self._check_response(response)
+            except httpx.HTTPStatusError as e:
+                # Re-raise with response text included
+                raise httpx.HTTPStatusError(
+                    f"{e.response.status_code} {e.response.reason_phrase}: {error_detail}",
+                    request=e.request,
+                    response=e.response,
+                )
+
     async def get_object(
         self, repository: str, ref: str, path: str, range_header: str | None = None
     ) -> bytes:
@@ -90,7 +118,7 @@ class LakeFSRestClient:
                 auth=self.auth,
                 timeout=30.0,
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.content
 
     async def stat_object(
@@ -116,7 +144,7 @@ class LakeFSRestClient:
                 auth=self.auth,
                 timeout=30.0,
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def upload_object(
@@ -150,7 +178,7 @@ class LakeFSRestClient:
                 auth=self.auth,
                 timeout=60.0,
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def link_physical_address(
@@ -187,7 +215,7 @@ class LakeFSRestClient:
                 auth=self.auth,
                 timeout=30.0,
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def commit(
@@ -218,7 +246,7 @@ class LakeFSRestClient:
             response = await client.post(
                 url, json=commit_data, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def get_commit(self, repository: str, commit_id: str) -> dict[str, Any]:
@@ -235,7 +263,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(url, auth=self.auth, timeout=30.0)
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def log_commits(
@@ -267,7 +295,7 @@ class LakeFSRestClient:
             response = await client.get(
                 url, params=params, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def diff_refs(
@@ -301,7 +329,7 @@ class LakeFSRestClient:
             response = await client.get(
                 url, params=params, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def list_objects(
@@ -343,7 +371,7 @@ class LakeFSRestClient:
             response = await client.get(
                 url, params=params, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def delete_object(
@@ -363,7 +391,7 @@ class LakeFSRestClient:
             response = await client.delete(
                 url, params={"path": path, "force": force}, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
 
     async def create_repository(
         self, name: str, storage_namespace: str, default_branch: str = "main"
@@ -390,7 +418,7 @@ class LakeFSRestClient:
             response = await client.post(
                 url, json=repo_data, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def delete_repository(self, repository: str, force: bool = False) -> None:
@@ -406,7 +434,7 @@ class LakeFSRestClient:
             response = await client.delete(
                 url, params={"force": force}, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
 
     async def get_repository(self, repository: str) -> dict[str, Any]:
         """Get repository details.
@@ -424,7 +452,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(url, auth=self.auth, timeout=30.0)
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def repository_exists(self, repository: str) -> bool:
@@ -456,7 +484,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(url, auth=self.auth, timeout=30.0)
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def create_branch(self, repository: str, name: str, source: str) -> None:
@@ -478,7 +506,7 @@ class LakeFSRestClient:
             response = await client.post(
                 url, json=branch_data, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             # LakeFS returns 201 with text/html (plain string ref), not JSON
             # We don't need to return it since we already know the branch name
 
@@ -498,7 +526,7 @@ class LakeFSRestClient:
             response = await client.delete(
                 url, params={"force": force}, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
 
     async def create_tag(
         self, repository: str, id: str, ref: str, force: bool = False
@@ -522,7 +550,7 @@ class LakeFSRestClient:
             response = await client.post(
                 url, json=tag_data, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def delete_tag(self, repository: str, tag: str, force: bool = False) -> None:
@@ -539,7 +567,7 @@ class LakeFSRestClient:
             response = await client.delete(
                 url, params={"force": force}, auth=self.auth, timeout=30.0
             )
-            response.raise_for_status()
+            self._check_response(response)
 
     async def revert_branch(
         self,
@@ -585,7 +613,7 @@ class LakeFSRestClient:
             response = await client.post(
                 url, json=revert_data, auth=self.auth, timeout=60.0
             )
-            response.raise_for_status()
+            self._check_response(response)
 
     async def merge_into_branch(
         self,
@@ -634,7 +662,7 @@ class LakeFSRestClient:
             response = await client.post(
                 url, json=merge_data, auth=self.auth, timeout=120.0
             )
-            response.raise_for_status()
+            self._check_response(response)
             return response.json()
 
     async def hard_reset_branch(
@@ -670,7 +698,7 @@ class LakeFSRestClient:
             response = await client.put(
                 url, params=params, auth=self.auth, timeout=60.0
             )
-            response.raise_for_status()
+            self._check_response(response)
 
 
 def get_lakefs_rest_client() -> LakeFSRestClient:

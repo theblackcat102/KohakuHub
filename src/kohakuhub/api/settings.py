@@ -18,6 +18,7 @@ from kohakuhub.db_operations import (
     update_repository,
     update_user,
 )
+from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
@@ -244,6 +245,9 @@ class UpdateRepoSettingsPayload(BaseModel):
 
     private: Optional[bool] = None
     gated: Optional[str] = None  # "auto", "manual", or False/None
+    lfs_threshold_bytes: Optional[int] = None  # NULL = use server default
+    lfs_keep_versions: Optional[int] = None  # NULL = use server default
+    lfs_suffix_rules: Optional[list[str]] = None  # NULL = no suffix rules
 
 
 @router.put("/{repo_type}s/{namespace}/{name}/settings")
@@ -280,6 +284,44 @@ async def update_repo_settings(
     check_repo_delete_permission(repo_row, user)
 
     # Update fields if provided
+    update_fields = {}
+
+    # Validate and update LFS settings
+    if payload.lfs_threshold_bytes is not None:
+        # Validate threshold (minimum 1MB = 1,000,000 bytes)
+        if payload.lfs_threshold_bytes < 1000000:
+            raise HTTPException(
+                400,
+                detail={
+                    "error": f"LFS threshold must be at least 1 MB (1,000,000 bytes), got {payload.lfs_threshold_bytes}"
+                },
+            )
+        update_fields["lfs_threshold_bytes"] = payload.lfs_threshold_bytes
+
+    if payload.lfs_keep_versions is not None:
+        # Validate keep_versions (minimum 2)
+        if payload.lfs_keep_versions < 2:
+            raise HTTPException(
+                400,
+                detail={
+                    "error": f"LFS keep_versions must be at least 2, got {payload.lfs_keep_versions}"
+                },
+            )
+        update_fields["lfs_keep_versions"] = payload.lfs_keep_versions
+
+    if payload.lfs_suffix_rules is not None:
+        # Validate suffix rules (must start with '.')
+        for suffix in payload.lfs_suffix_rules:
+            if not suffix.startswith("."):
+                raise HTTPException(
+                    400,
+                    detail={
+                        "error": f"LFS suffix rules must start with '.', got: {suffix}"
+                    },
+                )
+        # Store as JSON string
+        update_fields["lfs_suffix_rules"] = json.dumps(payload.lfs_suffix_rules)
+
     if payload.private is not None:
         # Check if visibility is actually changing
         if repo_row.private != payload.private:
@@ -318,9 +360,90 @@ async def update_repo_settings(
                 )
 
         # Update repository visibility
-        update_repository(repo_row, private=payload.private)
+        update_fields["private"] = payload.private
+
+    # Apply all updates if there are any
+    if update_fields:
+        update_repository(repo_row, **update_fields)
 
     # Note: gated functionality not yet implemented in database schema
     # Would require adding a 'gated' field to Repository model
 
     return {"success": True, "message": "Repository settings updated successfully"}
+
+
+@router.get("/{repo_type}s/{namespace}/{name}/settings/lfs")
+async def get_repo_lfs_settings(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    user: User = Depends(get_current_user),
+):
+    """Get repository LFS settings (configured + effective values).
+
+    Args:
+        repo_type: Repository type (model/dataset/space)
+        namespace: Repository namespace
+        name: Repository name
+        user: Current authenticated user
+
+    Returns:
+        LFS settings with both configured and effective values
+    """
+    repo_id = f"{namespace}/{name}"
+
+    # Check if repository exists
+    repo_row = get_repository(repo_type, namespace, name)
+
+    if not repo_row:
+        return hf_repo_not_found(repo_id, repo_type)
+
+    # Check if user has permission to view settings
+    check_repo_delete_permission(repo_row, user)
+
+    # Get effective values from helper functions
+    from kohakuhub.db_operations import (
+        get_effective_lfs_keep_versions,
+        get_effective_lfs_suffix_rules,
+        get_effective_lfs_threshold,
+    )
+
+    effective_threshold = get_effective_lfs_threshold(repo_row)
+    effective_keep_versions = get_effective_lfs_keep_versions(repo_row)
+    effective_suffix_rules = get_effective_lfs_suffix_rules(repo_row)
+
+    # Parse suffix rules from JSON if exists
+    configured_suffix_rules = None
+    if repo_row.lfs_suffix_rules:
+        try:
+            configured_suffix_rules = json.loads(repo_row.lfs_suffix_rules)
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        # Configured values (NULL = using server default)
+        "lfs_threshold_bytes": repo_row.lfs_threshold_bytes,
+        "lfs_keep_versions": repo_row.lfs_keep_versions,
+        "lfs_suffix_rules": configured_suffix_rules,
+        # Effective values (resolved with server defaults)
+        "lfs_threshold_bytes_effective": effective_threshold,
+        "lfs_threshold_bytes_source": (
+            "repository"
+            if repo_row.lfs_threshold_bytes is not None
+            else "server_default"
+        ),
+        "lfs_keep_versions_effective": effective_keep_versions,
+        "lfs_keep_versions_source": (
+            "repository" if repo_row.lfs_keep_versions is not None else "server_default"
+        ),
+        "lfs_suffix_rules_effective": effective_suffix_rules,
+        "lfs_suffix_rules_source": (
+            "merged" if repo_row.lfs_suffix_rules is not None else "server_default"
+        ),
+        # Server defaults for reference
+        "server_defaults": {
+            "lfs_threshold_bytes": cfg.app.lfs_threshold_bytes,
+            "lfs_keep_versions": cfg.app.lfs_keep_versions,
+            "lfs_suffix_rules_default": cfg.app.lfs_suffix_rules_default,
+        },
+    }

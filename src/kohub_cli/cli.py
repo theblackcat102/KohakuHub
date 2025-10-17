@@ -540,15 +540,15 @@ def files(ctx, repo_id, repo_type, revision, path, recursive):
             from rich.tree import Tree
 
             def format_size(size_bytes):
-                """Format file size in human-readable format."""
-                if size_bytes < 1024:
+                """Format file size in human-readable format (decimal: 1KB = 1000 bytes)."""
+                if size_bytes < 1000:
                     return f"{size_bytes} B"
-                elif size_bytes < 1024 * 1024:
-                    return f"{size_bytes / 1024:.1f} KB"
-                elif size_bytes < 1024 * 1024 * 1024:
-                    return f"{size_bytes / (1024 * 1024):.1f} MB"
+                elif size_bytes < 1000 * 1000:
+                    return f"{size_bytes / 1000:.1f} KB"
+                elif size_bytes < 1000 * 1000 * 1000:
+                    return f"{size_bytes / (1000 * 1000):.1f} MB"
                 else:
-                    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+                    return f"{size_bytes / (1000 * 1000 * 1000):.1f} GB"
 
             # Create tree structure
             tree_root = Tree(
@@ -818,13 +818,13 @@ def get_commit_diff_cmd_main(ctx, repo_id, commit_id, repo_type, show_diff):
                 size = file_info.get("size_bytes", 0)
                 is_lfs = file_info.get("is_lfs", False)
 
-                # Format size
-                if size < 1024:
+                # Format size (decimal: 1KB = 1000 bytes)
+                if size < 1000:
                     size_str = f"{size} B"
-                elif size < 1024 * 1024:
-                    size_str = f"{size / 1024:.1f} KB"
+                elif size < 1000 * 1000:
+                    size_str = f"{size / 1000:.1f} KB"
                 else:
-                    size_str = f"{size / (1024 * 1024):.1f} MB"
+                    size_str = f"{size / (1000 * 1000):.1f} MB"
 
                 # Change type icon
                 type_icon = {
@@ -1256,6 +1256,287 @@ def delete_tag(ctx, repo_id, tag, repo_type):
             repo_type=repo_type,
         )
         output_result(ctx, result, f"Tag '{tag}' deleted from {repo_id}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@repo_settings.group()
+def lfs():
+    """LFS settings management."""
+    pass
+
+
+@lfs.command("get")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.pass_context
+def get_lfs_settings(ctx, repo_id, repo_type):
+    """Get repository LFS settings.
+
+    REPO_ID format: namespace/name
+    """
+    client = ctx.obj["client"]
+    try:
+        settings = client.get_repo_lfs_settings(repo_id, repo_type=repo_type)
+
+        if ctx.obj["output"] == "json":
+            output_result(ctx, settings)
+        else:
+            from rich.panel import Panel
+            from rich.text import Text
+
+            info_text = Text()
+
+            # Threshold
+            info_text.append("LFS Threshold:\n", style="bold cyan")
+            info_text.append(f"  Configured:  ")
+            if settings["lfs_threshold_bytes"] is None:
+                info_text.append("Using server default\n", style="dim")
+            else:
+                threshold_mb = settings["lfs_threshold_bytes"] / (1000 * 1000)
+                info_text.append(f"{threshold_mb:.1f} MB\n", style="yellow")
+
+            threshold_effective_mb = settings["lfs_threshold_bytes_effective"] / (
+                1000 * 1000
+            )
+            info_text.append(
+                f"  Effective:   {threshold_effective_mb:.1f} MB ", style="green"
+            )
+            info_text.append(
+                f"({settings['lfs_threshold_bytes_source']})\n", style="dim"
+            )
+
+            # Keep Versions
+            info_text.append("\nLFS Keep Versions:\n", style="bold cyan")
+            info_text.append(f"  Configured:  ")
+            if settings["lfs_keep_versions"] is None:
+                info_text.append("Using server default\n", style="dim")
+            else:
+                info_text.append(
+                    f"{settings['lfs_keep_versions']} versions\n", style="yellow"
+                )
+
+            info_text.append(
+                f"  Effective:   {settings['lfs_keep_versions_effective']} versions ",
+                style="green",
+            )
+            info_text.append(f"({settings['lfs_keep_versions_source']})\n", style="dim")
+
+            # Suffix Rules
+            info_text.append("\nLFS Suffix Rules:\n", style="bold cyan")
+            if settings["lfs_suffix_rules_effective"]:
+                info_text.append(
+                    f"  Active:      {', '.join(settings['lfs_suffix_rules_effective'])}\n",
+                    style="yellow",
+                )
+            else:
+                info_text.append("  Active:      None\n", style="dim")
+
+            # Server Defaults
+            info_text.append("\nServer Defaults:\n", style="bold cyan")
+            server_threshold_mb = settings["server_defaults"]["lfs_threshold_bytes"] / (
+                1000 * 1000
+            )
+            info_text.append(
+                f"  Threshold:   {server_threshold_mb:.1f} MB\n", style="dim"
+            )
+            info_text.append(
+                f"  Keep Versions: {settings['server_defaults']['lfs_keep_versions']} versions\n",
+                style="dim",
+            )
+
+            panel = Panel(
+                info_text,
+                title=f"[bold]LFS Settings for {repo_id}[/bold]",
+                border_style="blue",
+                padding=(1, 2),
+            )
+            console.print(panel)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@lfs.command("threshold")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option(
+    "--threshold", type=int, help="Threshold in bytes (minimum 1000000 = 1 MB)"
+)
+@click.option("--reset", is_flag=True, help="Reset to server default")
+@click.pass_context
+def set_lfs_threshold(ctx, repo_id, repo_type, threshold, reset):
+    """Set repository LFS threshold.
+
+    REPO_ID format: namespace/name
+
+    Examples:
+    \b
+        kohub-cli settings repo lfs threshold my-org/my-model --threshold 10000000  # 10 MB
+        kohub-cli settings repo lfs threshold my-org/my-model --reset
+    """
+    client = ctx.obj["client"]
+    try:
+        if reset:
+            threshold_value = None
+            message = f"LFS threshold reset to server default for {repo_id}"
+        elif threshold is None:
+            raise click.UsageError("Must specify either --threshold or --reset")
+        else:
+            if threshold < 1000000:
+                raise click.BadParameter(
+                    "Threshold must be at least 1000000 bytes (1 MB)"
+                )
+            threshold_value = threshold
+            message = f"LFS threshold set to {threshold} bytes for {repo_id}"
+
+        result = client.update_repo_settings(
+            repo_id,
+            repo_type=repo_type,
+            lfs_threshold_bytes=threshold_value,
+        )
+        output_result(ctx, result, message)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@lfs.command("versions")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option("--count", type=int, help="Number of versions to keep (minimum 2)")
+@click.option("--reset", is_flag=True, help="Reset to server default")
+@click.pass_context
+def set_lfs_versions(ctx, repo_id, repo_type, count, reset):
+    """Set repository LFS keep versions.
+
+    REPO_ID format: namespace/name
+
+    Examples:
+    \b
+        kohub-cli settings repo lfs versions my-org/my-model --count 10
+        kohub-cli settings repo lfs versions my-org/my-model --reset
+    """
+    client = ctx.obj["client"]
+    try:
+        if reset:
+            versions_value = None
+            message = f"LFS keep versions reset to server default for {repo_id}"
+        elif count is None:
+            raise click.UsageError("Must specify either --count or --reset")
+        else:
+            if count < 2:
+                raise click.BadParameter("Keep versions must be at least 2")
+            versions_value = count
+            message = f"LFS keep versions set to {count} for {repo_id}"
+
+        result = client.update_repo_settings(
+            repo_id,
+            repo_type=repo_type,
+            lfs_keep_versions=versions_value,
+        )
+        output_result(ctx, result, message)
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@lfs.command("suffix")
+@click.argument("repo_id")
+@click.option(
+    "--type",
+    "repo_type",
+    type=click.Choice(["model", "dataset", "space"]),
+    default="model",
+    help="Repository type",
+)
+@click.option(
+    "--add", "add_suffixes", multiple=True, help="Add suffix rule (e.g., .safetensors)"
+)
+@click.option("--remove", "remove_suffixes", multiple=True, help="Remove suffix rule")
+@click.option("--clear", is_flag=True, help="Clear all suffix rules")
+@click.option(
+    "--set", "set_suffixes", multiple=True, help="Set suffix rules (replaces all)"
+)
+@click.pass_context
+def manage_lfs_suffix(
+    ctx, repo_id, repo_type, add_suffixes, remove_suffixes, clear, set_suffixes
+):
+    """Manage repository LFS suffix rules.
+
+    REPO_ID format: namespace/name
+
+    Examples:
+    \b
+        kohub-cli settings repo lfs suffix my-org/my-model --add .safetensors --add .bin
+        kohub-cli settings repo lfs suffix my-org/my-model --remove .bin
+        kohub-cli settings repo lfs suffix my-org/my-model --set .safetensors --set .gguf
+        kohub-cli settings repo lfs suffix my-org/my-model --clear
+    """
+    client = ctx.obj["client"]
+    try:
+        # Get current settings
+        current_settings = client.get_repo_lfs_settings(repo_id, repo_type=repo_type)
+        current_rules = current_settings.get("lfs_suffix_rules") or []
+
+        new_rules = None
+
+        if clear:
+            new_rules = []
+            message = f"Cleared all LFS suffix rules for {repo_id}"
+        elif set_suffixes:
+            # Validate suffixes
+            for suffix in set_suffixes:
+                if not suffix.startswith("."):
+                    raise click.BadParameter(
+                        f"Suffix must start with '.', got: {suffix}"
+                    )
+            new_rules = list(set_suffixes)
+            message = f"Set LFS suffix rules for {repo_id}: {', '.join(new_rules)}"
+        elif add_suffixes or remove_suffixes:
+            new_rules = list(current_rules)
+
+            # Add new suffixes
+            for suffix in add_suffixes:
+                if not suffix.startswith("."):
+                    raise click.BadParameter(
+                        f"Suffix must start with '.', got: {suffix}"
+                    )
+                if suffix not in new_rules:
+                    new_rules.append(suffix)
+
+            # Remove suffixes
+            for suffix in remove_suffixes:
+                if suffix in new_rules:
+                    new_rules.remove(suffix)
+
+            message = f"Updated LFS suffix rules for {repo_id}: {', '.join(new_rules) if new_rules else 'none'}"
+        else:
+            raise click.UsageError(
+                "Must specify one of: --add, --remove, --set, or --clear"
+            )
+
+        result = client.update_repo_settings(
+            repo_id,
+            repo_type=repo_type,
+            lfs_suffix_rules=new_rules if new_rules else None,
+        )
+        output_result(ctx, result, message)
     except Exception as e:
         handle_error(e, ctx)
 
@@ -1739,13 +2020,13 @@ def get_commit_diff_cmd(ctx, repo_id, commit_id, repo_type, show_diff):
                 size = file_info.get("size_bytes", 0)
                 is_lfs = file_info.get("is_lfs", False)
 
-                # Format size
-                if size < 1024:
+                # Format size (decimal: 1KB = 1000 bytes)
+                if size < 1000:
                     size_str = f"{size} B"
-                elif size < 1024 * 1024:
-                    size_str = f"{size / 1024:.1f} KB"
+                elif size < 1000 * 1000:
+                    size_str = f"{size / 1000:.1f} KB"
                 else:
-                    size_str = f"{size / (1024 * 1024):.1f} MB"
+                    size_str = f"{size / (1000 * 1000):.1f} MB"
 
                 # Change type icon
                 type_icon = {

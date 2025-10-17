@@ -485,11 +485,21 @@ export const settingsAPI = {
    * @param {string} repoType - Repository type (model/dataset/space)
    * @param {string} namespace - Repository namespace
    * @param {string} name - Repository name
-   * @param {Object} data - { private?: boolean, gated?: string }
+   * @param {Object} data - { private?: boolean, gated?: string, lfs_threshold_bytes?: number, lfs_keep_versions?: number, lfs_suffix_rules?: string[] }
    * @returns {Promise} - { success: boolean, message: string }
    */
   updateRepoSettings: (repoType, namespace, name, data) =>
     api.put(`/api/${repoType}s/${namespace}/${name}/settings`, data),
+
+  /**
+   * Get repository LFS settings
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - LFS settings with configured and effective values
+   */
+  getLfsSettings: (repoType, namespace, name) =>
+    api.get(`/api/${repoType}s/${namespace}/${name}/settings/lfs`),
 
   /**
    * Move/rename repository

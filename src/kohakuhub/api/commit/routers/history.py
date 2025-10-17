@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from kohakuhub.config import cfg
 from kohakuhub.db import User
-from kohakuhub.db_operations import get_commit, get_repository
+from kohakuhub.db_operations import get_commit, get_repository, should_use_lfs
 from kohakuhub.lakefs_rest_client import get_lakefs_rest_client
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
@@ -295,14 +295,14 @@ async def get_commit_diff(
             """Process a single diff entry (file change) - runs in parallel."""
             path = diff_entry["path"]
 
-            # Check if file is LFS from our database or size threshold
+            # Check if file is LFS from our database or repo-specific rules
             file_record = file_records.get(path)
             is_lfs = (
                 file_record.lfs
                 if file_record
                 else (
                     diff_entry.get("size_bytes")
-                    and diff_entry.get("size_bytes") > cfg.app.lfs_threshold_bytes
+                    and should_use_lfs(repo_row, path, diff_entry.get("size_bytes"))
                 )
             )
 

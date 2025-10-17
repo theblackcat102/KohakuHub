@@ -16,7 +16,12 @@ from kohakuhub.db import (
     db,
     init_db,
 )
-from kohakuhub.db_operations import get_file, get_organization, get_repository
+from kohakuhub.db_operations import (
+    get_file,
+    get_organization,
+    get_repository,
+    should_use_lfs,
+)
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import (
@@ -343,7 +348,7 @@ async def _migrate_lakefs_repository(repo_type: str, from_id: str, to_id: str) -
 
             # Determine if file is LFS:
             # - Primary: Use File table record if exists (handles dynamic rules)
-            # - Fallback: Use size threshold (for edge cases where File record missing)
+            # - Fallback: Use repo-specific LFS rules (size + suffix)
             if file_record:
                 is_lfs = file_record.lfs
                 logger.debug(
@@ -351,10 +356,10 @@ async def _migrate_lakefs_repository(repo_type: str, from_id: str, to_id: str) -
                     f"(size={size_bytes}, db_lfs={file_record.lfs})"
                 )
             else:
-                # Fallback to size threshold if File record doesn't exist
-                is_lfs = size_bytes >= cfg.app.lfs_threshold_bytes
+                # Fallback to repo-specific LFS rules if File record doesn't exist
+                is_lfs = should_use_lfs(from_repo, obj_path, size_bytes)
                 logger.warning(
-                    f"File {obj_path}: No File record, using size threshold "
+                    f"File {obj_path}: No File record, using repo LFS rules "
                     f"(size={size_bytes}, is_lfs={is_lfs})"
                 )
 

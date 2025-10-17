@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, Repository, User
-from kohakuhub.db_operations import get_file, get_repository
+from kohakuhub.db_operations import get_file, get_repository, should_use_lfs
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
@@ -126,7 +126,8 @@ async def convert_file_object(obj, repository: Repository, prefix_len: int) -> d
     Returns:
         HuggingFace formatted file object
     """
-    is_lfs = obj["size_bytes"] > cfg.app.lfs_threshold_bytes
+    # Use repo-specific LFS settings
+    is_lfs = should_use_lfs(repository, obj["path"], obj["size_bytes"])
 
     # Remove prefix from path to get relative path
     relative_path = obj["path"][prefix_len:] if prefix_len else obj["path"]
@@ -344,8 +345,8 @@ async def get_paths_info(
                 path=clean_path,
             )
 
-            # It's a file
-            is_lfs = obj_stats["size_bytes"] > cfg.app.lfs_threshold_bytes
+            # It's a file - use repo-specific LFS settings
+            is_lfs = should_use_lfs(repo_row, clean_path, obj_stats["size_bytes"])
 
             # Get correct checksum from database using repository FK
             file_record = get_file(repo_row, clean_path)

@@ -30,13 +30,18 @@ ALLOWED_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "ima
 
 
 def process_avatar_image(image_bytes: bytes) -> bytes:
-    """Process uploaded image: resize and center crop to 1024x1024 JPEG.
+    """Process uploaded image: resize down (if needed), center crop to square, save as JPEG.
+
+    Workflow:
+    1. Resize down to shorter edge = 1024 if > 1024 (or keep original if smaller)
+    2. Center crop to square
+    3. Save as JPEG
 
     Args:
         image_bytes: Raw image bytes
 
     Returns:
-        Processed JPEG bytes
+        Processed JPEG bytes (up to 1024x1024)
 
     Raises:
         HTTPException: If image processing fails
@@ -57,22 +62,51 @@ def process_avatar_image(image_bytes: bytes) -> bytes:
                 background.paste(img)
             img = background
 
-        # Calculate dimensions for center crop to square
-        width, height = img.size
+        # Step 1: Resize down if shorter edge > 1024 (preserve aspect ratio)
+        orig_width, orig_height = img.size
+        shorter_edge = min(orig_width, orig_height)
+
+        if shorter_edge > AVATAR_SIZE:
+            # Need to resize down so shorter edge = 1024
+            if orig_width < orig_height:
+                # Width is shorter edge
+                new_width = AVATAR_SIZE
+                new_height = int((orig_height / orig_width) * AVATAR_SIZE)
+            else:
+                # Height is shorter edge
+                new_height = AVATAR_SIZE
+                new_width = int((orig_width / orig_height) * AVATAR_SIZE)
+
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            logger.debug(
+                f"Resized from {orig_width}x{orig_height} to {new_width}x{new_height} (shorter edge = {AVATAR_SIZE})"
+            )
+        else:
+            logger.debug(
+                f"Kept original size {orig_width}x{orig_height} (shorter edge {shorter_edge} <= {AVATAR_SIZE})"
+            )
+
+        # Step 2: Center crop to square
+        width, height = img.size  # Get current size after potential resize
         if width > height:
-            # Landscape: crop width
+            # Landscape: crop width to match height
             left = (width - height) // 2
             img = img.crop((left, 0, left + height, height))
+            logger.debug(f"Center cropped landscape to {height}x{height}")
         elif height > width:
-            # Portrait: crop height
+            # Portrait: crop height to match width
             top = (height - width) // 2
             img = img.crop((0, top, width, top + width))
+            logger.debug(f"Center cropped portrait to {width}x{width}")
         # else: already square, no crop needed
 
-        # Resize to target size with high-quality resampling
-        img = img.resize((AVATAR_SIZE, AVATAR_SIZE), Image.Resampling.LANCZOS)
+        # Final size should be square, max 1024x1024
+        final_width, final_height = img.size
+        logger.info(
+            f"Final avatar size: {final_width}x{final_height} (original was {orig_width}x{orig_height})"
+        )
 
-        # Save as JPEG with specified quality
+        # Step 3: Save as JPEG with specified quality
         output = io.BytesIO()
         img.save(output, format="JPEG", quality=AVATAR_JPEG_QUALITY, optimize=True)
         output.seek(0)

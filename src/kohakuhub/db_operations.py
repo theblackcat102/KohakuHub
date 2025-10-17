@@ -498,6 +498,106 @@ def list_lfs_history(
     return list(query)
 
 
+def get_effective_lfs_threshold(repo: Repository) -> int:
+    """Get effective LFS threshold for a repository.
+
+    Returns repository-specific threshold or server default if not set.
+
+    Args:
+        repo: Repository object
+
+    Returns:
+        LFS threshold in bytes
+    """
+    if repo.lfs_threshold_bytes is not None:
+        return repo.lfs_threshold_bytes
+    return cfg.app.lfs_threshold_bytes
+
+
+def get_effective_lfs_keep_versions(repo: Repository) -> int:
+    """Get effective LFS keep versions for a repository.
+
+    Returns repository-specific keep versions or server default if not set.
+
+    Args:
+        repo: Repository object
+
+    Returns:
+        Number of LFS versions to keep
+    """
+    if repo.lfs_keep_versions is not None:
+        return repo.lfs_keep_versions
+    return cfg.app.lfs_keep_versions
+
+
+def get_effective_lfs_suffix_rules(repo: Repository) -> list[str]:
+    """Get effective LFS suffix rules for a repository.
+
+    Returns MERGED list of:
+    1. Server-wide default suffix rules (from config)
+    2. Repository-specific suffix rules (from database)
+
+    This allows repositories to ADD additional suffixes on top of server defaults.
+    Server defaults always apply unless explicitly removed at repository level.
+
+    Args:
+        repo: Repository object
+
+    Returns:
+        List of file suffixes that should always use LFS (e.g., [".safetensors", ".bin"])
+        Duplicates are removed, order is preserved (server defaults first)
+    """
+    import json
+
+    # Start with server-wide defaults
+    effective_rules = list(cfg.app.lfs_suffix_rules_default)
+
+    # Add repository-specific rules if configured
+    if repo.lfs_suffix_rules:
+        try:
+            repo_rules = json.loads(repo.lfs_suffix_rules)
+            if isinstance(repo_rules, list):
+                # Merge: Add repo rules that aren't already in server defaults
+                for rule in repo_rules:
+                    if rule not in effective_rules:
+                        effective_rules.append(rule)
+        except json.JSONDecodeError:
+            pass
+
+    return effective_rules
+
+
+def should_use_lfs(repo: Repository, file_path: str, file_size: int) -> bool:
+    """Determine if a file should use LFS based on size AND/OR suffix rules.
+
+    A file will use LFS if EITHER:
+    1. File size >= threshold
+    2. File suffix matches one of the configured suffix rules
+
+    Args:
+        repo: Repository object
+        file_path: File path (used to check suffix)
+        file_size: File size in bytes
+
+    Returns:
+        True if file should use LFS, False otherwise
+    """
+    # Check size threshold
+    threshold = get_effective_lfs_threshold(repo)
+    if file_size >= threshold:
+        return True
+
+    # Check suffix rules
+    suffix_rules = get_effective_lfs_suffix_rules(repo)
+    if suffix_rules:
+        file_lower = file_path.lower()
+        for suffix in suffix_rules:
+            if file_lower.endswith(suffix.lower()):
+                return True
+
+    return False
+
+
 # ===== Email verification operations =====
 
 
