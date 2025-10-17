@@ -14,7 +14,6 @@ COPY ./scripts ./scripts
 COPY ./docker/startup.py /app/startup.py
 RUN chmod +x /app/startup.py
 
-RUN uv pip install --system httpx
 RUN uv pip install --system -e .
 
 EXPOSE 48888
