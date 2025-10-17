@@ -660,3 +660,89 @@ export const quotaAPI = {
   getNamespaceRepoStorage: (namespace) =>
     api.get(`/api/quota/${namespace}/repos`),
 };
+
+/**
+ * Likes API
+ */
+export const likesAPI = {
+  /**
+   * Like a repository
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - { success: boolean, likes_count: number }
+   */
+  like: (repoType, namespace, name) =>
+    api.post(`/api/${repoType}s/${namespace}/${name}/like`),
+
+  /**
+   * Unlike a repository
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - { success: boolean, likes_count: number }
+   */
+  unlike: (repoType, namespace, name) =>
+    api.delete(`/api/${repoType}s/${namespace}/${name}/like`),
+
+  /**
+   * Check if current user has liked a repository
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - { liked: boolean }
+   */
+  checkLiked: (repoType, namespace, name) =>
+    api.get(`/api/${repoType}s/${namespace}/${name}/like`),
+
+  /**
+   * Get list of users who liked a repository
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {number} limit - Max number of likers
+   * @returns {Promise} - { likers: Array, total: number }
+   */
+  getLikers: (repoType, namespace, name, limit = 50) =>
+    api.get(`/api/${repoType}s/${namespace}/${name}/likers`, {
+      params: { limit },
+    }),
+};
+
+/**
+ * Stats API
+ */
+export const statsAPI = {
+  /**
+   * Get repository statistics
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @returns {Promise} - { downloads: number, likes: number }
+   */
+  getStats: (repoType, namespace, name) =>
+    api.get(`/api/${repoType}s/${namespace}/${name}/stats`),
+
+  /**
+   * Get recent download statistics
+   * @param {string} repoType - Repository type (model/dataset/space)
+   * @param {string} namespace - Repository namespace
+   * @param {string} name - Repository name
+   * @param {number} days - Number of days to retrieve
+   * @returns {Promise} - { stats: Array, period: Object }
+   */
+  getRecentStats: (repoType, namespace, name, days = 30) =>
+    api.get(`/api/${repoType}s/${namespace}/${name}/stats/recent`, {
+      params: { days },
+    }),
+
+  /**
+   * Get trending repositories
+   * @param {string} repoType - Repository type filter
+   * @param {number} days - Trend calculation period
+   * @param {number} limit - Max repos to return
+   * @returns {Promise} - { trending: Array, period: Object }
+   */
+  getTrending: (repoType = "model", days = 7, limit = 20) =>
+    api.get("/api/trending", { params: { repo_type: repoType, days, limit } }),
+};

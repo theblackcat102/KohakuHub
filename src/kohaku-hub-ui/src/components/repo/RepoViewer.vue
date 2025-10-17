@@ -88,9 +88,27 @@
               <div class="i-carbon-download" />
               <span>{{ repoInfo?.downloads || 0 }} downloads</span>
             </div>
-            <div class="flex items-center gap-1">
+            <button
+              v-if="authStore.isAuthenticated"
+              @click="toggleLike"
+              :class="[
+                'flex items-center gap-1 transition-all hover:scale-105',
+                isLiked
+                  ? 'text-red-500 dark:text-red-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400',
+              ]"
+              :disabled="likingInProgress"
+            >
+              <div
+                :class="
+                  isLiked ? 'i-carbon-favorite-filled' : 'i-carbon-favorite'
+                "
+              />
+              <span>{{ likesCount }}</span>
+            </button>
+            <div v-else class="flex items-center gap-1">
               <div class="i-carbon-favorite" />
-              <span>{{ repoInfo?.likes || 0 }} likes</span>
+              <span>{{ likesCount }}</span>
             </div>
             <div class="flex items-center gap-1">
               <div class="i-carbon-calendar" />
@@ -649,7 +667,7 @@ huggingface-cli download {{ repoInfo?.id }}</pre
 </template>
 
 <script setup>
-import { repoAPI } from "@/utils/api";
+import { likesAPI, repoAPI } from "@/utils/api";
 import { useAuthStore } from "@/stores/auth";
 import { copyToClipboard } from "@/utils/clipboard";
 import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
@@ -695,6 +713,9 @@ const readmeContent = ref("");
 const readmeLoading = ref(true);
 const showCloneDialog = ref(false);
 const fileSearchQuery = ref("");
+const isLiked = ref(false);
+const likesCount = ref(0);
+const likingInProgress = ref(false);
 
 const baseUrl = window.location.origin;
 
@@ -818,11 +839,68 @@ async function loadRepoInfo() {
       props.name,
     );
     repoInfo.value = data;
+    likesCount.value = data.likes || 0;
+
+    // Check if current user has liked (only if authenticated)
+    if (authStore.isAuthenticated) {
+      try {
+        const { data: likeData } = await likesAPI.checkLiked(
+          props.repoType,
+          props.namespace,
+          props.name,
+        );
+        isLiked.value = likeData.liked;
+      } catch (err) {
+        console.error("Failed to check liked status:", err);
+      }
+    }
   } catch (err) {
     error.value = err.response?.data?.detail || "Failed to load repository";
     console.error("Failed to load repo info:", err);
   } finally {
     loading.value = false;
+  }
+}
+
+async function toggleLike() {
+  if (!authStore.isAuthenticated) {
+    ElMessage.warning("Please login to like repositories");
+    return;
+  }
+
+  if (likingInProgress.value) return;
+
+  likingInProgress.value = true;
+
+  try {
+    if (isLiked.value) {
+      // Unlike
+      const { data } = await likesAPI.unlike(
+        props.repoType,
+        props.namespace,
+        props.name,
+      );
+      isLiked.value = false;
+      likesCount.value = data.likes_count;
+      ElMessage.success("Repository unliked");
+    } else {
+      // Like
+      const { data } = await likesAPI.like(
+        props.repoType,
+        props.namespace,
+        props.name,
+      );
+      isLiked.value = true;
+      likesCount.value = data.likes_count;
+      ElMessage.success("Repository liked");
+    }
+  } catch (err) {
+    console.error("Failed to toggle like:", err);
+    const errorMsg =
+      err.response?.data?.detail?.error || "Failed to update like status";
+    ElMessage.error(errorMsg);
+  } finally {
+    likingInProgress.value = false;
   }
 }
 

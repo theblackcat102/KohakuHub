@@ -305,9 +305,7 @@
                   class="text-sm text-gray-600 dark:text-gray-400"
                 >
                   <strong>Currently using:</strong>
-                  {{
-                    formatSize(lfsSettings.lfs_threshold_bytes_effective)
-                  }}
+                  {{ formatSize(lfsSettings.lfs_threshold_bytes_effective) }}
                   ({{
                     lfsSettings.lfs_threshold_bytes_source === "repository"
                       ? "custom"
@@ -334,9 +332,7 @@
                       <el-radio label="server_default">
                         Use server default
                         <span class="text-sm text-gray-500 dark:text-gray-400">
-                          ({{
-                            lfsSettings.server_defaults.lfs_keep_versions
-                          }}
+                          ({{ lfsSettings.server_defaults.lfs_keep_versions }}
                           versions)
                         </span>
                       </el-radio>
