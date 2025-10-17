@@ -260,8 +260,9 @@
           <div class="card">
             <h2 class="text-xl font-semibold mb-4">LFS Threshold</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Files larger than this size will be stored using Git LFS (Large File Storage).
-              This setting affects upload performance and storage deduplication.
+              Files larger than this size will be stored using Git LFS (Large
+              File Storage). This setting affects upload performance and storage
+              deduplication.
             </p>
             <div v-if="lfsSettings" class="space-y-4">
               <el-form label-position="top">
@@ -271,7 +272,11 @@
                       <el-radio label="server_default">
                         Use server default
                         <span class="text-sm text-gray-500 dark:text-gray-400">
-                          ({{ formatSize(lfsSettings.server_defaults.lfs_threshold_bytes) }})
+                          ({{
+                            formatSize(
+                              lfsSettings.server_defaults.lfs_threshold_bytes,
+                            )
+                          }})
                         </span>
                       </el-radio>
                       <el-radio label="custom">Custom threshold</el-radio>
@@ -295,9 +300,19 @@
                   </div>
                 </el-form-item>
 
-                <div v-if="lfsSettings.lfs_threshold_bytes_effective" class="text-sm text-gray-600 dark:text-gray-400">
-                  <strong>Currently using:</strong> {{ formatSize(lfsSettings.lfs_threshold_bytes_effective) }}
-                  ({{ lfsSettings.lfs_threshold_bytes_source === 'repository' ? 'custom' : 'server default' }})
+                <div
+                  v-if="lfsSettings.lfs_threshold_bytes_effective"
+                  class="text-sm text-gray-600 dark:text-gray-400"
+                >
+                  <strong>Currently using:</strong>
+                  {{
+                    formatSize(lfsSettings.lfs_threshold_bytes_effective)
+                  }}
+                  ({{
+                    lfsSettings.lfs_threshold_bytes_source === "repository"
+                      ? "custom"
+                      : "server default"
+                  }})
                 </div>
               </el-form>
             </div>
@@ -307,8 +322,9 @@
           <div class="card">
             <h2 class="text-xl font-semibold mb-4">LFS Version History</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Number of historical versions to keep for each LFS file.
-              Older versions are garbage collected. Higher values allow more git reset/revert operations.
+              Number of historical versions to keep for each LFS file. Older
+              versions are garbage collected. Higher values allow more git
+              reset/revert operations.
             </p>
             <div v-if="lfsSettings" class="space-y-4">
               <el-form label-position="top">
@@ -318,7 +334,10 @@
                       <el-radio label="server_default">
                         Use server default
                         <span class="text-sm text-gray-500 dark:text-gray-400">
-                          ({{ lfsSettings.server_defaults.lfs_keep_versions }} versions)
+                          ({{
+                            lfsSettings.server_defaults.lfs_keep_versions
+                          }}
+                          versions)
                         </span>
                       </el-radio>
                       <el-radio label="custom">Custom version count</el-radio>
@@ -341,9 +360,16 @@
                   </div>
                 </el-form-item>
 
-                <div v-if="lfsSettings.lfs_keep_versions_effective" class="text-sm text-gray-600 dark:text-gray-400">
-                  <strong>Currently using:</strong> {{ lfsSettings.lfs_keep_versions_effective }} versions
-                  ({{ lfsSettings.lfs_keep_versions_source === 'repository' ? 'custom' : 'server default' }})
+                <div
+                  v-if="lfsSettings.lfs_keep_versions_effective"
+                  class="text-sm text-gray-600 dark:text-gray-400"
+                >
+                  <strong>Currently using:</strong>
+                  {{ lfsSettings.lfs_keep_versions_effective }} versions ({{
+                    lfsSettings.lfs_keep_versions_source === "repository"
+                      ? "custom"
+                      : "server default"
+                  }})
                 </div>
               </el-form>
             </div>
@@ -353,8 +379,9 @@
           <div class="card">
             <h2 class="text-xl font-semibold mb-4">LFS Suffix Rules</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              File extensions that should ALWAYS use LFS, regardless of file size.
-              Useful for model formats that should always be treated as large files.
+              File extensions that should ALWAYS use LFS, regardless of file
+              size. Useful for model formats that should always be treated as
+              large files.
             </p>
             <div v-if="lfsSettings" class="space-y-4">
               <el-form label-position="top">
@@ -388,12 +415,20 @@
                     </el-button>
                   </div>
                   <div class="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                    <strong>Common ML formats:</strong> .safetensors, .bin, .gguf, .pt, .pth, .onnx, .msgpack
+                    <strong>Common ML formats:</strong> .safetensors, .bin,
+                    .gguf, .pt, .pth, .onnx, .msgpack
                   </div>
                 </el-form-item>
 
-                <div v-if="lfsSettings.lfs_suffix_rules_effective && lfsSettings.lfs_suffix_rules_effective.length > 0" class="text-sm text-gray-600 dark:text-gray-400">
-                  <strong>Currently active:</strong> {{ lfsSettings.lfs_suffix_rules_effective.join(', ') }}
+                <div
+                  v-if="
+                    lfsSettings.lfs_suffix_rules_effective &&
+                    lfsSettings.lfs_suffix_rules_effective.length > 0
+                  "
+                  class="text-sm text-gray-600 dark:text-gray-400"
+                >
+                  <strong>Currently active:</strong>
+                  {{ lfsSettings.lfs_suffix_rules_effective.join(", ") }}
                 </div>
               </el-form>
             </div>
@@ -1011,9 +1046,13 @@ async function loadLfsSettings() {
       lfs_suffix_rules_source: data.lfs_suffix_rules_source,
 
       // UI state
-      threshold_mode: data.lfs_threshold_bytes === null ? 'server_default' : 'custom',
-      threshold_mb: data.lfs_threshold_bytes ? Math.round(data.lfs_threshold_bytes / (1000 * 1000)) : 5,
-      versions_mode: data.lfs_keep_versions === null ? 'server_default' : 'custom',
+      threshold_mode:
+        data.lfs_threshold_bytes === null ? "server_default" : "custom",
+      threshold_mb: data.lfs_threshold_bytes
+        ? Math.round(data.lfs_threshold_bytes / (1000 * 1000))
+        : 5,
+      versions_mode:
+        data.lfs_keep_versions === null ? "server_default" : "custom",
       keep_versions: data.lfs_keep_versions || 5,
       suffix_rules: data.lfs_suffix_rules || [],
     };
@@ -1029,21 +1068,24 @@ async function saveLfsSettings() {
     const payload = {};
 
     // Threshold
-    if (lfsSettings.value.threshold_mode === 'custom') {
-      payload.lfs_threshold_bytes = lfsSettings.value.threshold_mb * 1000 * 1000;
+    if (lfsSettings.value.threshold_mode === "custom") {
+      payload.lfs_threshold_bytes =
+        lfsSettings.value.threshold_mb * 1000 * 1000;
     } else {
       payload.lfs_threshold_bytes = null; // Use server default
     }
 
     // Keep versions
-    if (lfsSettings.value.versions_mode === 'custom') {
+    if (lfsSettings.value.versions_mode === "custom") {
       payload.lfs_keep_versions = lfsSettings.value.keep_versions;
     } else {
       payload.lfs_keep_versions = null; // Use server default
     }
 
     // Suffix rules (filter out empty strings)
-    const cleanedRules = lfsSettings.value.suffix_rules.filter(r => r && r.trim());
+    const cleanedRules = lfsSettings.value.suffix_rules.filter(
+      (r) => r && r.trim(),
+    );
     payload.lfs_suffix_rules = cleanedRules.length > 0 ? cleanedRules : null;
 
     await settingsAPI.updateRepoSettings(
@@ -1068,7 +1110,7 @@ async function saveLfsSettings() {
 }
 
 function addSuffixRule() {
-  lfsSettings.value.suffix_rules.push('');
+  lfsSettings.value.suffix_rules.push("");
 }
 
 function removeSuffixRule(index) {

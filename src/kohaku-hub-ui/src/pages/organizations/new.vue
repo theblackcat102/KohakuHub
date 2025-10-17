@@ -30,7 +30,8 @@
             />
             <div class="text-xs text-gray-500 mt-1">
               <div class="i-carbon-information inline-block mr-1" />
-              Letters (case-insensitive), numbers, hyphens and underscores allowed
+              Letters (case-insensitive), numbers, hyphens and underscores
+              allowed
             </div>
           </el-form-item>
 
