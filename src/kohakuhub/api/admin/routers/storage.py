@@ -1,5 +1,9 @@
 """S3 storage browser endpoints for admin API."""
 
+from urllib.parse import urlparse
+
+import boto3
+from botocore.config import Config as BotoConfig
 from fastapi import APIRouter, Depends, HTTPException
 
 from kohakuhub.async_utils import run_in_s3_executor
@@ -199,109 +203,92 @@ async def list_s3_objects(
     logger.info(f"S3 bucket config: {cfg.s3.bucket}")
 
     def _list_objects():
-        s3 = get_s3_client()
+        # Parse endpoint URL to extract path (for R2 with path-in-endpoint)
+        parsed = urlparse(cfg.s3.endpoint)
+        endpoint_path = parsed.path.strip("/")  # e.g., "sizigi-deepghs-grant"
 
-        # Log the actual request URL that will be constructed
-        logger.info(f"S3 client endpoint: {s3.meta.endpoint_url}")
-        logger.info(f"S3 client region: {s3.meta.region_name}")
-        logger.info(f"S3 client config: {s3.meta.config}")
+        # Determine actual bucket and endpoint
+        if endpoint_path:
+            # Endpoint has path - combine path + bucket for actual bucket name
+            root_endpoint = f"{parsed.scheme}://{parsed.netloc}"
+            actual_bucket = f"{endpoint_path}/{bucket_name}"
+            logger.info(f"Endpoint has path '{endpoint_path}'")
+            logger.info(f"Creating S3 client with root endpoint: {root_endpoint}")
+            logger.info(f"Using full bucket path: {actual_bucket}")
 
-        # Try two strategies for R2/path-style compatibility
-        strategies = [
-            {"bucket": bucket_name, "name": "with bucket name"},
-            {"bucket": "", "name": "with empty bucket (endpoint has path)"},
-        ]
+            # Create client with root endpoint
+            s3_config = {}
+            if cfg.s3.force_path_style:
+                s3_config["addressing_style"] = "path"
 
-        last_exception = None
-        for strategy in strategies:
-            try:
-                test_bucket = strategy["bucket"]
-                logger.info(
-                    f"Trying strategy '{strategy['name']}': Bucket='{test_bucket}', Prefix='{prefix}'"
+            boto_config = BotoConfig(signature_version="s3v4", s3=s3_config)
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=root_endpoint,
+                aws_access_key_id=cfg.s3.access_key,
+                aws_secret_access_key=cfg.s3.secret_key,
+                region_name=cfg.s3.region,
+                config=boto_config,
+            )
+        else:
+            # Standard S3/MinIO - use configured client as-is
+            actual_bucket = bucket_name
+            s3 = get_s3_client()
+            logger.info(f"Standard S3 endpoint - using bucket: {actual_bucket}")
+
+        try:
+            logger.info(
+                f"Calling list_objects_v2(Bucket='{actual_bucket}', Prefix='{prefix}', MaxKeys={limit})"
+            )
+
+            response = s3.list_objects_v2(
+                Bucket=actual_bucket,
+                Prefix=prefix,
+                MaxKeys=limit,
+            )
+
+            # Log ResponseMetadata
+            metadata = response.get("ResponseMetadata", {})
+            logger.info(
+                f"ResponseMetadata HTTPStatusCode: {metadata.get('HTTPStatusCode')}"
+            )
+            logger.info(f"ResponseMetadata RequestId: {metadata.get('RequestId')}")
+
+            # Log all response fields
+            logger.info(f"Response keys: {list(response.keys())}")
+            for key in ["Name", "Prefix", "KeyCount", "MaxKeys", "IsTruncated"]:
+                if key in response:
+                    logger.info(f"{key}: {response[key]}")
+
+            contents = response.get("Contents", [])
+            logger.info(f"Contents count: {len(contents)}")
+
+            if contents:
+                logger.success(f"Found {len(contents)} objects!")
+                logger.info(f"First 3 keys: {[obj['Key'] for obj in contents[:3]]}")
+
+            objects = []
+            for obj in contents:
+                objects.append(
+                    {
+                        "key": obj["Key"],
+                        "size": obj["Size"],
+                        "last_modified": obj["LastModified"].isoformat(),
+                        "storage_class": obj.get("StorageClass", "STANDARD"),
+                    }
                 )
 
-                # Log the exact parameters
-                params = {"Bucket": test_bucket, "Prefix": prefix, "MaxKeys": limit}
-                logger.info(f"list_objects_v2 params: {params}")
-
-                response = s3.list_objects_v2(**params)
-
-                # Log EVERYTHING in response
-                logger.info(f"Response type: {type(response)}")
-                logger.info(f"Response keys: {list(response.keys())}")
-
-                for key in response.keys():
-                    if key != "ResponseMetadata":
-                        logger.info(f"Response['{key}']: {response[key]}")
-
-                # Check if response has expected fields
-                expected_fields = [
-                    "Name",
-                    "Prefix",
-                    "KeyCount",
-                    "MaxKeys",
-                    "IsTruncated",
-                ]
-                for field in expected_fields:
-                    logger.info(
-                        f"Has '{field}': {field in response}, Value: {response.get(field, 'N/A')}"
-                    )
-
-                contents = response.get("Contents", [])
-                common_prefixes = response.get("CommonPrefixes", [])
-                logger.info(f"Contents count: {len(contents)}")
-                logger.info(f"CommonPrefixes count: {len(common_prefixes)}")
-
-                if common_prefixes:
-                    logger.info(f"CommonPrefixes: {common_prefixes}")
-
-                # Log first few object keys if any exist
-                if contents:
-                    sample_keys = [obj["Key"] for obj in contents[:3]]
-                    logger.success(
-                        f"✓ Strategy '{strategy['name']}' worked! Found {len(contents)} objects"
-                    )
-                    logger.info(f"Sample keys: {sample_keys}")
-
-                    # Build result and return
-                    objects = []
-                    for obj in contents:
-                        objects.append(
-                            {
-                                "key": obj["Key"],
-                                "size": obj["Size"],
-                                "last_modified": obj["LastModified"].isoformat(),
-                                "storage_class": obj.get("StorageClass", "STANDARD"),
-                            }
-                        )
-
-                    return {
-                        "objects": objects,
-                        "bucket": bucket_name,
-                        "is_truncated": response.get("IsTruncated", False),
-                        "key_count": len(objects),
-                    }
-                else:
-                    logger.warning(
-                        f"✗ Strategy '{strategy['name']}' returned 0 objects"
-                    )
-
-            except Exception as e:
-                logger.error(f"✗ Strategy '{strategy['name']}' failed: {e}")
-                last_exception = e
-
-        # If we get here, all strategies failed or returned empty
-        if last_exception:
-            logger.error(f"All strategies failed. Last error: {last_exception}")
-            raise HTTPException(500, detail={"error": str(last_exception)})
-        else:
-            logger.warning("All strategies returned 0 objects - storage might be empty")
             return {
-                "objects": [],
+                "objects": objects,
                 "bucket": bucket_name,
-                "is_truncated": False,
-                "key_count": 0,
+                "is_truncated": response.get("IsTruncated", False),
+                "key_count": len(objects),
             }
+        except Exception as e:
+            logger.error(f"Failed to list objects: {e}")
+            logger.exception("Full exception:", e)
+            raise HTTPException(500, detail={"error": str(e)})
 
     result = await run_in_s3_executor(_list_objects)
 
