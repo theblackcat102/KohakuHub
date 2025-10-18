@@ -26,10 +26,44 @@ async def list_s3_buckets(
 
     def _list_buckets():
         s3 = get_s3_client()
-        buckets = s3.list_buckets()
+
+        try:
+            buckets = s3.list_buckets()
+            logger.info(f"list_buckets() response: {buckets}")
+        except Exception as e:
+            logger.error(f"Failed to list buckets: {e}")
+            # For R2/path-style, list_buckets might not work
+            # Return configured bucket as fallback
+            from kohakuhub.config import cfg
+            return [
+                {
+                    "name": cfg.s3.bucket,
+                    "creation_date": "N/A",
+                    "total_size": 0,
+                    "object_count": 0,
+                    "note": "Using configured bucket (list_buckets not supported)",
+                }
+            ]
+
+        bucket_list = buckets.get("Buckets", [])
+        logger.info(f"Found {len(bucket_list)} buckets")
+
+        # If no buckets returned (R2 path-style issue), use configured bucket
+        if not bucket_list:
+            from kohakuhub.config import cfg
+            logger.warning("list_buckets returned empty, using configured bucket")
+            return [
+                {
+                    "name": cfg.s3.bucket,
+                    "creation_date": "N/A",
+                    "total_size": 0,
+                    "object_count": 0,
+                    "note": "Using configured bucket",
+                }
+            ]
 
         bucket_info = []
-        for bucket in buckets.get("Buckets", []):
+        for bucket in bucket_list:
             bucket_name = bucket["Name"]
 
             # Get bucket size (sum of all objects)
@@ -72,17 +106,18 @@ async def list_s3_buckets(
     return {"buckets": buckets}
 
 
+@router.get("/storage/objects")
 @router.get("/storage/objects/{bucket}")
 async def list_s3_objects(
-    bucket: str,
+    bucket: str = "",
     prefix: str = "",
-    limit: int = 100,
+    limit: int = 1000,
     _admin: bool = Depends(verify_admin_token),
 ):
-    """List S3 objects in a bucket.
+    """List S3 objects in configured bucket or specified bucket.
 
     Args:
-        bucket: Bucket name
+        bucket: Bucket name (empty = use configured bucket)
         prefix: Key prefix filter
         limit: Maximum objects to return
         _admin: Admin authentication (dependency)
@@ -90,12 +125,16 @@ async def list_s3_objects(
     Returns:
         List of S3 objects
     """
+    from kohakuhub.config import cfg
+
+    # Use configured bucket if not specified
+    bucket_name = bucket if bucket else cfg.s3.bucket
 
     def _list_objects():
         s3 = get_s3_client()
 
         try:
-            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=limit)
+            response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix, MaxKeys=limit)
 
             objects = []
             for obj in response.get("Contents", []):
@@ -110,11 +149,12 @@ async def list_s3_objects(
 
             return {
                 "objects": objects,
+                "bucket": bucket_name,
                 "is_truncated": response.get("IsTruncated", False),
                 "key_count": len(objects),
             }
         except Exception as e:
-            logger.error(f"Failed to list objects in bucket {bucket}: {e}")
+            logger.error(f"Failed to list objects in bucket {bucket_name}: {e}")
             raise HTTPException(500, detail={"error": str(e)})
 
     result = await run_in_s3_executor(_list_objects)

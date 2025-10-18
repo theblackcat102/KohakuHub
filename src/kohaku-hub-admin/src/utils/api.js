@@ -349,17 +349,19 @@ export async function listS3Buckets(token) {
 /**
  * List S3 objects in a bucket
  * @param {string} token - Admin token
- * @param {string} bucket - Bucket name
+ * @param {string} bucket - Bucket name (empty = use configured bucket)
  * @param {Object} params - Query parameters
  * @returns {Promise<Object>} Object list
  */
 export async function listS3Objects(
   token,
   bucket,
-  { prefix = "", limit = 100 } = {},
+  { prefix = "", limit = 1000 } = {},
 ) {
   const client = createAdminClient(token);
-  const response = await client.get(`/storage/objects/${bucket}`, {
+  // Use /storage/objects (no bucket) to use configured bucket
+  const url = bucket ? `/storage/objects/${bucket}` : "/storage/objects";
+  const response = await client.get(url, {
     params: { prefix, limit },
   });
   return response.data;
