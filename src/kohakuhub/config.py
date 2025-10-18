@@ -18,6 +18,7 @@ class S3Config(BaseModel):
     bucket: str = "test-bucket"
     region: str = "us-east-1"
     force_path_style: bool = True
+    signature_version: str = "s3v4"  # s3v4 (R2, AWS S3) or s3v2 (MinIO)
 
 
 class LakeFSConfig(BaseModel):

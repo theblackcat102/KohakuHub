@@ -352,24 +352,39 @@ async def check_commit_range_recoverability(
 
     # Get all commits from target to HEAD
     try:
-        commits_result = await client.log_commits(
-            repository=lakefs_repo,
-            ref=current_branch,
-            amount=1000,  # Should be enough for most cases
-        )
-
-        commit_list = commits_result.get("results", [])
-
-        # Find target commit in the list
+        # Paginate through commits to find target
+        commit_list = []
+        after = ""
+        has_more = True
         target_index = None
-        for i, commit in enumerate(commit_list):
-            if commit["id"] == target_commit:
-                target_index = i
-                break
+
+        while has_more and target_index is None:
+            commits_result = await client.log_commits(
+                repository=lakefs_repo,
+                ref=current_branch,
+                amount=1000,  # LakeFS maximum
+                after=after,
+            )
+
+            results = commits_result.get("results", [])
+            current_batch_start = len(commit_list)
+            commit_list.extend(results)
+
+            # Find target commit in current batch
+            for i, commit in enumerate(results):
+                if commit["id"] == target_commit:
+                    target_index = current_batch_start + i
+                    break
+
+            # Check pagination
+            pagination = commits_result.get("pagination", {})
+            has_more = pagination.get("has_more", False)
+            if has_more:
+                after = pagination.get("next_offset", "")
 
         if target_index is None:
             logger.warning(
-                f"Target commit {target_commit[:8]} not found in branch history"
+                f"Target commit {target_commit[:8]} not found in branch history (checked {len(commit_list)} commits)"
             )
             return False, [], []
 
@@ -457,13 +472,29 @@ async def sync_file_table_with_commit(
         commit_id = branch_info["commit_id"]
 
         # Get ALL objects at the commit (use commit ID to avoid staging issues)
-        list_result = await client.list_objects(
-            repository=lakefs_repo,
-            ref=commit_id,  # Use commit ID, not branch name!
-            amount=10000,  # Large enough for most repos
-        )
+        # LakeFS has max amount=1000, so we need to paginate
+        all_objects = []
+        after = ""
+        has_more = True
 
-        all_objects = list_result.get("results", [])
+        while has_more:
+            list_result = await client.list_objects(
+                repository=lakefs_repo,
+                ref=commit_id,  # Use commit ID, not branch name!
+                amount=1000,  # LakeFS maximum
+                after=after,
+            )
+
+            results = list_result.get("results", [])
+            all_objects.extend(results)
+
+            # Check pagination
+            pagination = list_result.get("pagination", {})
+            has_more = pagination.get("has_more", False)
+            if has_more:
+                after = pagination.get("next_offset", "")
+
+        logger.info(f"Paginated through LakeFS, got {len(all_objects)} total objects")
         logger.info(
             f"Syncing {len(all_objects)} file(s) from ref {ref} (commit {commit_id[:8]})"
         )

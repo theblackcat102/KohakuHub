@@ -48,6 +48,7 @@ services:
       - KOHAKU_HUB_S3_ACCESS_KEY=minioadmin
       - KOHAKU_HUB_S3_SECRET_KEY=minioadmin
       - KOHAKU_HUB_S3_BUCKET=hub-storage
+      - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v2  # s3v2 for MinIO, s3v4 for R2/AWS S3
 
       ## ===== LakeFS Configuration =====
       - KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:28000

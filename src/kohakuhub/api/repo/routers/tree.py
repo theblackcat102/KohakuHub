@@ -90,24 +90,37 @@ async def calculate_folder_stats(
 
     try:
         client = get_lakefs_client()
-        folder_contents = await client.list_objects(
-            repository=lakefs_repo,
-            ref=revision,
-            prefix=folder_path,
-            delimiter="",  # No delimiter = recursive
-            amount=1000,
-        )
 
-        # Calculate total size and find latest modification
-        for child_obj in folder_contents["results"]:
-            if child_obj["path_type"] == "object":
-                folder_size += child_obj.get("size_bytes") or 0
-                if child_obj.get("mtime"):
-                    if (
-                        folder_latest_mtime is None
-                        or child_obj["mtime"] > folder_latest_mtime
-                    ):
-                        folder_latest_mtime = child_obj["mtime"]
+        # Paginate through all objects in folder
+        after = ""
+        has_more = True
+
+        while has_more:
+            folder_contents = await client.list_objects(
+                repository=lakefs_repo,
+                ref=revision,
+                prefix=folder_path,
+                delimiter="",  # No delimiter = recursive
+                amount=1000,
+                after=after,
+            )
+
+            # Calculate total size and find latest modification
+            for child_obj in folder_contents["results"]:
+                if child_obj["path_type"] == "object":
+                    folder_size += child_obj.get("size_bytes") or 0
+                    if child_obj.get("mtime"):
+                        if (
+                            folder_latest_mtime is None
+                            or child_obj["mtime"] > folder_latest_mtime
+                        ):
+                            folder_latest_mtime = child_obj["mtime"]
+
+            # Check pagination
+            pagination = folder_contents.get("pagination", {})
+            has_more = pagination.get("has_more", False)
+            if has_more:
+                after = pagination.get("next_offset", "")
 
     except Exception as e:
         logger.debug(f"Could not calculate stats for folder {folder_path}: {str(e)}")
