@@ -3,9 +3,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from kohakuhub.async_utils import run_in_s3_executor
+from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
-from kohakuhub.utils.s3 import get_s3_client
 from kohakuhub.api.admin.utils import verify_admin_token
+from kohakuhub.utils.s3 import get_s3_client
 
 logger = get_logger("ADMIN")
 router = APIRouter()
@@ -34,8 +35,6 @@ async def list_s3_buckets(
             logger.error(f"Failed to list buckets: {e}")
             # For R2/path-style, list_buckets might not work
             # Return configured bucket as fallback
-            from kohakuhub.config import cfg
-
             return [
                 {
                     "name": cfg.s3.bucket,
@@ -51,8 +50,6 @@ async def list_s3_buckets(
 
         # If no buckets returned (R2 path-style issue), use configured bucket
         if not bucket_list:
-            from kohakuhub.config import cfg
-
             logger.warning("list_buckets returned empty, using configured bucket")
             return [
                 {
@@ -127,21 +124,37 @@ async def list_s3_objects(
     Returns:
         List of S3 objects
     """
-    from kohakuhub.config import cfg
 
     # Use configured bucket if not specified
     bucket_name = bucket if bucket else cfg.s3.bucket
+
+    logger.info(
+        f"Listing S3 objects: bucket={bucket_name}, prefix={prefix}, limit={limit}"
+    )
 
     def _list_objects():
         s3 = get_s3_client()
 
         try:
+            logger.debug(
+                f"Calling list_objects_v2 with Bucket={bucket_name}, Prefix={prefix}"
+            )
             response = s3.list_objects_v2(
                 Bucket=bucket_name, Prefix=prefix, MaxKeys=limit
             )
 
+            logger.info(f"S3 response keys: {response.keys()}")
+            logger.info(f"S3 response has Contents: {'Contents' in response}")
+            logger.info(
+                f"S3 response Contents count: {len(response.get('Contents', []))}"
+            )
+
+            contents = response.get("Contents", [])
+            if contents:
+                logger.info(f"First object: {contents[0]}")
+
             objects = []
-            for obj in response.get("Contents", []):
+            for obj in contents:
                 objects.append(
                     {
                         "key": obj["Key"],
@@ -151,6 +164,10 @@ async def list_s3_objects(
                     }
                 )
 
+            logger.success(
+                f"Successfully listed {len(objects)} objects from {bucket_name}"
+            )
+
             return {
                 "objects": objects,
                 "bucket": bucket_name,
@@ -159,8 +176,10 @@ async def list_s3_objects(
             }
         except Exception as e:
             logger.error(f"Failed to list objects in bucket {bucket_name}: {e}")
+            logger.exception("Full exception details:", e)
             raise HTTPException(500, detail={"error": str(e)})
 
     result = await run_in_s3_executor(_list_objects)
 
+    logger.info(f"Returning {result['key_count']} objects to client")
     return result
