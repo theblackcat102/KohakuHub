@@ -152,11 +152,13 @@ def generate_lakefs_service(config: dict) -> str:
     if config["s3_builtin"]:
         s3_endpoint = "http://minio:9000"
         force_path_style = "true"
+        s3_region = "auto"
     else:
         s3_endpoint = config["s3_endpoint"]
         # Use path-style for all non-AWS endpoints (MinIO, CloudFlare R2, custom S3)
         # Only AWS S3 (*.amazonaws.com) should use virtual-hosted style
         force_path_style = "false" if "amazonaws.com" in s3_endpoint.lower() else "true"
+        s3_region = config.get("s3_region", "auto")
 
     # Add entrypoint and volumes for database initialization
     entrypoint_config = ""
@@ -192,6 +194,7 @@ def generate_lakefs_service(config: dict) -> str:
       - LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE={force_path_style}
       - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID={config['s3_access_key']}
       - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY={config['s3_secret_key']}
+      - LAKEFS_BLOCKSTORE_S3_REGION={s3_region}
       - LAKEFS_AUTH_ENCRYPT_SECRET_KEY={config['lakefs_encrypt_key']}
       - LAKEFS_LOGGING_FORMAT=text
       - LAKEFS_LISTEN_ADDRESS=0.0.0.0:28000
@@ -237,12 +240,13 @@ def generate_hub_api_service(config: dict) -> str:
     if config["s3_builtin"]:
         s3_endpoint_internal = "http://minio:9000"
         s3_endpoint_public = "http://127.0.0.1:29001"
+        s3_region = "auto"
+        s3_sig_version = "s3v2"
     else:
         s3_endpoint_internal = config["s3_endpoint"]
         s3_endpoint_public = config["s3_endpoint"]
-
-    s3_region = config.get("s3_region", "")
-    s3_region_env = f"      - KOHAKU_HUB_S3_REGION={s3_region}\n" if s3_region else ""
+        s3_region = config.get("s3_region", "auto")
+        s3_sig_version = config.get("s3_signature_version", "s3v4")
 
     return f"""  hub-api:
     build: .
@@ -272,8 +276,9 @@ def generate_hub_api_service(config: dict) -> str:
       - KOHAKU_HUB_S3_ACCESS_KEY={config['s3_access_key']}
       - KOHAKU_HUB_S3_SECRET_KEY={config['s3_secret_key']}
       - KOHAKU_HUB_S3_BUCKET=hub-storage
-      - KOHAKU_HUB_S3_SIGNATURE_VERSION={config.get('s3_signature_version', 's3v2')}  # s3v2 for MinIO, s3v4 for R2/AWS S3
-{s3_region_env}
+      - KOHAKU_HUB_S3_REGION={s3_region}  # auto (recommended), us-east-1, or your AWS region
+      - KOHAKU_HUB_S3_SIGNATURE_VERSION={s3_sig_version}  # s3v2 for MinIO, s3v4 for R2/AWS S3
+
       ## ===== LakeFS Configuration =====
       - KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:28000
       - KOHAKU_HUB_LAKEFS_REPO_NAMESPACE=hf
@@ -416,7 +421,7 @@ def load_config_file(config_path: Path) -> dict:
         config["s3_secret_key"] = s3.get(
             "secret_key", fallback=generate_secret(48)
         )  # 64 chars
-        config["s3_region"] = s3.get("region", fallback="")
+        config["s3_region"] = s3.get("region", fallback="auto")
         config["s3_signature_version"] = s3.get(
             "signature_version", fallback="s3v2" if config["s3_builtin"] else "s3v4"
         )  # s3v2 for MinIO, s3v4 for R2/AWS S3
@@ -425,6 +430,7 @@ def load_config_file(config_path: Path) -> dict:
         config["s3_endpoint"] = "http://minio:9000"
         config["s3_access_key"] = generate_secret(24)  # 32 chars
         config["s3_secret_key"] = generate_secret(48)  # 64 chars
+        config["s3_region"] = "auto"
         config["s3_signature_version"] = "s3v2"  # Default for MinIO
 
     # Security section
@@ -487,13 +493,14 @@ builtin = true
 # endpoint = https://your-s3-endpoint.com
 # access_key = your-access-key
 # secret_key = your-secret-key
-# region = us-east-1
+# region = auto  # auto (recommended), us-east-1, or your AWS region
 # signature_version = s3v4  # s3v2 for MinIO, s3v4 for R2/AWS S3
 
 # If builtin = true, MinIO credentials are auto-generated (recommended)
 # You can override by uncommenting and setting custom values:
 # access_key = your-custom-access-key
 # secret_key = your-custom-secret-key
+# region = auto
 # signature_version = s3v2
 
 [security]
@@ -641,12 +648,13 @@ def interactive_config() -> dict:
             config["s3_secret_key"] = ask_string("MinIO secret key")
 
         config["s3_endpoint"] = "http://minio:9000"
+        config["s3_region"] = "auto"
         config["s3_signature_version"] = "s3v2"  # MinIO uses s3v2
     else:
         config["s3_endpoint"] = ask_string("S3 endpoint URL")
         config["s3_access_key"] = ask_string("S3 access key")
         config["s3_secret_key"] = ask_string("S3 secret key")
-        config["s3_region"] = ask_string("S3 region", default="us-east-1")
+        config["s3_region"] = ask_string("S3 region", default="auto")
 
         # Ask about signature version for external S3
         print()
