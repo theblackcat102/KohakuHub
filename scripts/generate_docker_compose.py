@@ -95,7 +95,6 @@ def generate_minio_service(config: dict) -> str:
     environment:
       - MINIO_ROOT_USER={config['s3_access_key']}
       - MINIO_ROOT_PASSWORD={config['s3_secret_key']}
-      - MINIO_REGION=auto
     ports:
       - "29001:9000"    # S3 API
       - "29000:29000"   # Web Console
@@ -153,13 +152,13 @@ def generate_lakefs_service(config: dict) -> str:
     if config["s3_builtin"]:
         s3_endpoint = "http://minio:9000"
         force_path_style = "true"
-        s3_region = "auto"
+        s3_region = "us-east-1"  # MinIO works with us-east-1
     else:
         s3_endpoint = config["s3_endpoint"]
         # Use path-style for all non-AWS endpoints (MinIO, CloudFlare R2, custom S3)
         # Only AWS S3 (*.amazonaws.com) should use virtual-hosted style
         force_path_style = "false" if "amazonaws.com" in s3_endpoint.lower() else "true"
-        s3_region = config.get("s3_region", "auto")
+        s3_region = config.get("s3_region", "us-east-1")
 
     # Add entrypoint and volumes for database initialization
     entrypoint_config = ""
@@ -241,13 +240,13 @@ def generate_hub_api_service(config: dict) -> str:
     if config["s3_builtin"]:
         s3_endpoint_internal = "http://minio:9000"
         s3_endpoint_public = "http://127.0.0.1:29001"
-        s3_region = "auto"
+        s3_region = "us-east-1"  # MinIO works with us-east-1
         # MinIO: Don't set signature_version (uses default/s3v2-compatible)
         s3_sig_version_line = "      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment for R2/AWS S3 (leave commented for MinIO)"
     else:
         s3_endpoint_internal = config["s3_endpoint"]
         s3_endpoint_public = config["s3_endpoint"]
-        s3_region = config.get("s3_region", "auto")
+        s3_region = config.get("s3_region", "us-east-1")
         # External S3: Use configured value or default to s3v4
         s3_sig_version = config.get("s3_signature_version", "s3v4")
         if s3_sig_version:
@@ -432,7 +431,7 @@ def load_config_file(config_path: Path) -> dict:
         config["s3_secret_key"] = s3.get(
             "secret_key", fallback=generate_secret(48)
         )  # 64 chars
-        config["s3_region"] = s3.get("region", fallback="auto")
+        config["s3_region"] = s3.get("region", fallback="us-east-1")
         config["s3_signature_version"] = s3.get(
             "signature_version", fallback="" if config["s3_builtin"] else "s3v4"
         )  # Empty for MinIO (default), s3v4 for R2/AWS S3
@@ -441,7 +440,7 @@ def load_config_file(config_path: Path) -> dict:
         config["s3_endpoint"] = "http://minio:9000"
         config["s3_access_key"] = generate_secret(24)  # 32 chars
         config["s3_secret_key"] = generate_secret(48)  # 64 chars
-        config["s3_region"] = "auto"
+        config["s3_region"] = "us-east-1"
         config["s3_signature_version"] = ""  # Empty for MinIO (default)
 
     # Security section
@@ -504,14 +503,14 @@ builtin = true
 # endpoint = https://your-s3-endpoint.com
 # access_key = your-access-key
 # secret_key = your-secret-key
-# region = auto  # auto (recommended), us-east-1, or your AWS region
+# region = us-east-1  # us-east-1 (default), auto for R2, or specific AWS region
 # signature_version = s3v4  # s3v4 for R2/AWS S3, leave empty for MinIO
 
 # If builtin = true, MinIO credentials are auto-generated (recommended)
 # You can override by uncommenting and setting custom values:
 # access_key = your-custom-access-key
 # secret_key = your-custom-secret-key
-# region = auto
+# region = us-east-1
 # signature_version =  # Leave empty for MinIO (uses default)
 
 [security]
@@ -659,13 +658,13 @@ def interactive_config() -> dict:
             config["s3_secret_key"] = ask_string("MinIO secret key")
 
         config["s3_endpoint"] = "http://minio:9000"
-        config["s3_region"] = "auto"
+        config["s3_region"] = "us-east-1"
         config["s3_signature_version"] = ""  # MinIO uses default (don't set)
     else:
         config["s3_endpoint"] = ask_string("S3 endpoint URL")
         config["s3_access_key"] = ask_string("S3 access key")
         config["s3_secret_key"] = ask_string("S3 secret key")
-        config["s3_region"] = ask_string("S3 region", default="auto")
+        config["s3_region"] = ask_string("S3 region", default="us-east-1")
 
         # Ask about signature version for external S3
         print()

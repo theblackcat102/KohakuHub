@@ -48,7 +48,7 @@ services:
       - KOHAKU_HUB_S3_ACCESS_KEY=minioadmin
       - KOHAKU_HUB_S3_SECRET_KEY=minioadmin
       - KOHAKU_HUB_S3_BUCKET=hub-storage
-      - KOHAKU_HUB_S3_REGION=auto  # auto (recommended), us-east-1, or your AWS region
+      - KOHAKU_HUB_S3_REGION=us-east-1  # S3 region (us-east-1 for MinIO, auto for R2, or specific AWS region)
       # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment for R2/AWS S3 (leave commented for MinIO default)
 
       ## ===== LakeFS Configuration =====
@@ -92,7 +92,6 @@ services:
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
-      - MINIO_REGION=auto
     ports:
       - "29001:9000"    # S3 API
       - "29000:29000"   # Web Console
@@ -111,7 +110,7 @@ services:
       - LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE=true
       - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID=minioadmin
       - LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY=minioadmin
-      - LAKEFS_BLOCKSTORE_S3_REGION=auto  # auto (recommended), us-east-1, or your AWS region
+      - LAKEFS_BLOCKSTORE_S3_REGION=us-east-1  # S3 region (us-east-1 for MinIO, auto for R2, or specific AWS region)
       - LAKEFS_AUTH_ENCRYPT_SECRET_KEY=change-me-in-production
       - LAKEFS_LOGGING_FORMAT=text
       - LAKEFS_LISTEN_ADDRESS=0.0.0.0:28000
