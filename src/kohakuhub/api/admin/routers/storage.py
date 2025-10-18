@@ -131,53 +131,84 @@ async def list_s3_objects(
     logger.info(
         f"Listing S3 objects: bucket={bucket_name}, prefix={prefix}, limit={limit}"
     )
+    logger.info(f"S3 endpoint: {cfg.s3.endpoint}")
+    logger.info(f"S3 bucket config: {cfg.s3.bucket}")
 
     def _list_objects():
         s3 = get_s3_client()
 
-        try:
-            logger.debug(
-                f"Calling list_objects_v2 with Bucket={bucket_name}, Prefix={prefix}"
-            )
-            response = s3.list_objects_v2(
-                Bucket=bucket_name, Prefix=prefix, MaxKeys=limit
-            )
+        # Try two strategies for R2/path-style compatibility
+        strategies = [
+            {"bucket": bucket_name, "name": "with bucket name"},
+            {"bucket": "", "name": "with empty bucket (endpoint has path)"},
+        ]
 
-            logger.info(f"S3 response keys: {response.keys()}")
-            logger.info(f"S3 response has Contents: {'Contents' in response}")
-            logger.info(
-                f"S3 response Contents count: {len(response.get('Contents', []))}"
-            )
-
-            contents = response.get("Contents", [])
-            if contents:
-                logger.info(f"First object: {contents[0]}")
-
-            objects = []
-            for obj in contents:
-                objects.append(
-                    {
-                        "key": obj["Key"],
-                        "size": obj["Size"],
-                        "last_modified": obj["LastModified"].isoformat(),
-                        "storage_class": obj.get("StorageClass", "STANDARD"),
-                    }
+        last_exception = None
+        for strategy in strategies:
+            try:
+                test_bucket = strategy["bucket"]
+                logger.info(
+                    f"Trying strategy '{strategy['name']}': Bucket='{test_bucket}', Prefix='{prefix}'"
                 )
 
-            logger.success(
-                f"Successfully listed {len(objects)} objects from {bucket_name}"
-            )
+                response = s3.list_objects_v2(
+                    Bucket=test_bucket,
+                    Prefix=prefix,
+                    MaxKeys=limit,
+                )
 
+                logger.info(f"Response keys: {list(response.keys())}")
+
+                contents = response.get("Contents", [])
+                logger.info(f"Contents count: {len(contents)}")
+
+                # Log first few object keys if any exist
+                if contents:
+                    sample_keys = [obj["Key"] for obj in contents[:3]]
+                    logger.success(
+                        f"✓ Strategy '{strategy['name']}' worked! Found {len(contents)} objects"
+                    )
+                    logger.info(f"Sample keys: {sample_keys}")
+
+                    # Build result and return
+                    objects = []
+                    for obj in contents:
+                        objects.append(
+                            {
+                                "key": obj["Key"],
+                                "size": obj["Size"],
+                                "last_modified": obj["LastModified"].isoformat(),
+                                "storage_class": obj.get("StorageClass", "STANDARD"),
+                            }
+                        )
+
+                    return {
+                        "objects": objects,
+                        "bucket": bucket_name,
+                        "is_truncated": response.get("IsTruncated", False),
+                        "key_count": len(objects),
+                    }
+                else:
+                    logger.warning(
+                        f"✗ Strategy '{strategy['name']}' returned 0 objects"
+                    )
+
+            except Exception as e:
+                logger.error(f"✗ Strategy '{strategy['name']}' failed: {e}")
+                last_exception = e
+
+        # If we get here, all strategies failed or returned empty
+        if last_exception:
+            logger.error(f"All strategies failed. Last error: {last_exception}")
+            raise HTTPException(500, detail={"error": str(last_exception)})
+        else:
+            logger.warning("All strategies returned 0 objects - storage might be empty")
             return {
-                "objects": objects,
+                "objects": [],
                 "bucket": bucket_name,
-                "is_truncated": response.get("IsTruncated", False),
-                "key_count": len(objects),
+                "is_truncated": False,
+                "key_count": 0,
             }
-        except Exception as e:
-            logger.error(f"Failed to list objects in bucket {bucket_name}: {e}")
-            logger.exception("Full exception details:", e)
-            raise HTTPException(500, detail={"error": str(e)})
 
     result = await run_in_s3_executor(_list_objects)
 
