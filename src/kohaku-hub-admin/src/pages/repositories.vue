@@ -150,6 +150,11 @@ async function handleViewRepo(row) {
       row.name,
     );
     activeTab.value = "overview";
+
+    // Reset data from previous repo
+    storageBreakdown.value = null;
+    repoCommits.value = [];
+
     repoDialogVisible.value = true;
 
     // Load storage breakdown in background

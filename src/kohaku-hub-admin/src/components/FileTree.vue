@@ -94,6 +94,18 @@ onMounted(() => {
   loadFiles();
 });
 
+// Watch for repository changes
+watch(
+  () => [props.repoType, props.namespace, props.name],
+  () => {
+    // Reset ref to main when switching repos
+    selectedRef.value = "main";
+    loadFiles();
+  },
+  { immediate: false },
+);
+
+// Watch for ref changes
 watch(selectedRef, () => {
   loadFiles();
 });
