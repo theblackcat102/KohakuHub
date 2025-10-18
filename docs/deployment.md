@@ -33,6 +33,7 @@ See [scripts/README.md](../scripts/README.md#docker-compose-generator) for detai
    - Change PostgreSQL password (POSTGRES_PASSWORD)
    - Change LakeFS secret key (LAKEFS_AUTH_ENCRYPT_SECRET_KEY)
    - Change session secret (KOHAKU_HUB_SESSION_SECRET)
+   - Change admin token (KOHAKU_HUB_ADMIN_SECRET_TOKEN)
    - Update BASE_URL if deploying to a domain
 
 #### Build and Start
@@ -41,7 +42,9 @@ After configuration (either option):
 
 ```bash
 npm install --prefix ./src/kohaku-hub-ui
+npm install --prefix ./src/kohaku-hub-admin
 npm run build --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-admin
 docker-compose up -d --build
 ```
 
@@ -67,23 +70,24 @@ docker-compose up -d --build
 
 ```mermaid
 graph LR
-    subgraph "Nginx (Port 28080)"
-        direction TB
-        Router[Request Router]
-        Static[Static Files Handler]
-        Proxy[API Proxy]
-    end
+    Client[Client<br/>Browser/CLI/Git] -->|Port 28080| Nginx[Nginx Container<br/>hub-ui:80]
 
-    Client[Client] -->|Request| Router
-    Router -->|"/", "/*.html", "/*.js"| Static
-    Router -->|"/api/*"| Proxy
-    Router -->|"/org/*"| Proxy
-    Router -->|"/{ns}/{repo}.git/*"| Proxy
-    Router -->|"/resolve/*"| Proxy
+    Nginx -->|"Static Files<br/>(/, *.html, *.js)"| Static[Vue Frontend<br/>Static Files]
+    Nginx -->|"/api/*"| API[FastAPI Container<br/>hub-api:48888]
+    Nginx -->|"/org/*"| API
+    Nginx -->|"/{ns}/{repo}.git/*"| API
+    Nginx -->|"/resolve/*"| API
+    Nginx -->|"/admin/*"| API
 
-    Static -->|Serve| Vue[Vue 3 Frontend]
-    Proxy -->|Forward| FastAPI["FastAPI:48888"]
+    API -->|REST API| LakeFS[LakeFS Container<br/>lakefs:28000]
+    API -->|S3 API| MinIO[MinIO Container<br/>minio:9000]
+    API -->|SQL| Postgres[PostgreSQL Container<br/>postgres:5432]
 
+    LakeFS -->|Store Objects| MinIO
+
+    Static -->|Response| Client
+    API -->|JSON Response| Nginx
+    Nginx -->|Response| Client
 ```
 
 **Nginx routing rules:**
@@ -130,36 +134,6 @@ os.environ["HF_ENDPOINT"] = "http://localhost:48888"  # Don't use backend port d
 ```
 
 ## Architecture Diagram
-
-```mermaid
-graph TB
-    subgraph "External Access"
-        Client["Client<br/>(Browser, Git, Python SDK, CLI)"]
-    end
-
-    subgraph "Nginx Container (hub-ui)<br/>Port 28080"
-        Nginx["Nginx Reverse Proxy<br/>- Static files: Vue 3 frontend<br/>- Proxy: /api, /org, resolve"]
-    end
-
-    subgraph "FastAPI Container (hub-api)<br/>Port 48888 (internal)"
-        FastAPI["FastAPI Application<br/>- HF-compatible REST API<br/>- Git Smart HTTP<br/>- LFS protocol<br/>- Authentication"]
-    end
-
-    subgraph "Storage Layer"
-        LakeFS["LakeFS Container<br/>Port 28000 (admin)<br/>- Git-like versioning<br/>- Branch management<br/>- Commit history"]
-        MinIO["MinIO Container<br/>Port 29000 (console)<br/>Port 29001 (S3 API)<br/>- S3-compatible storage<br/>- Object storage"]
-        Postgres["PostgreSQL Container<br/>Port 25432 (optional)<br/>- User data<br/>- Metadata<br/>- Quotas"]
-    end
-
-    Client -->|HTTPS/HTTP| Nginx
-    Nginx -->|Static| Client
-    Nginx -->|Proxy API| FastAPI
-    FastAPI -->|REST API| LakeFS
-    FastAPI -->|SQL| Postgres
-    FastAPI -->|S3 API| MinIO
-    LakeFS -->|Store objects| MinIO
-
-```
 
 **Port Mapping:**
 - **28080** - Public entry point (Nginx)
@@ -221,8 +195,6 @@ KohakuHub supports horizontal scaling with multiple worker processes.
 - Atomic transactions prevent race conditions
 - Simpler code without async/await complexity
 - Better compatibility with multi-worker setups
-
-**Future:** Migration to peewee-async is planned for improved concurrency.
 
 ### Running Multi-Worker
 
@@ -317,57 +289,6 @@ os.environ["HF_ENDPOINT"] = "http://localhost:48888"
 ```python
 # Correct - using nginx reverse proxy
 os.environ["HF_ENDPOINT"] = "http://localhost:28080"
-```
-
-## Data Flow Examples
-
-### Upload Flow (with LFS)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Nginx
-    participant FastAPI
-    participant LakeFS
-    participant MinIO
-
-    User->>Nginx: POST /api/models/org/model/commit/main
-    Nginx->>FastAPI: Forward request
-    FastAPI->>FastAPI: Parse NDJSON (header + files + lfsFiles)
-
-    alt Small File (<5MB)
-        FastAPI->>LakeFS: Upload object (base64 decoded)
-        LakeFS->>MinIO: Store object
-    else Large File (>5MB)
-        Note over FastAPI,MinIO: File already uploaded via presigned URL
-        FastAPI->>LakeFS: Link physical address
-    end
-
-    FastAPI->>LakeFS: Commit with message
-    LakeFS-->>FastAPI: Commit ID
-    FastAPI-->>Nginx: 200 OK + commit URL
-    Nginx-->>User: Commit successful
-```
-
-### Download Flow (Direct S3)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Nginx
-    participant FastAPI
-    participant LakeFS
-    participant MinIO
-
-    User->>Nginx: GET /org/model/resolve/main/model.safetensors
-    Nginx->>FastAPI: Forward request
-    FastAPI->>LakeFS: Stat object (get metadata)
-    LakeFS-->>FastAPI: Physical address + SHA256
-    FastAPI->>MinIO: Generate presigned URL (1 hour)
-    FastAPI-->>Nginx: 302 Redirect
-    Nginx-->>User: Redirect to presigned URL
-    User->>MinIO: Direct download
-    MinIO-->>User: File content
 ```
 
 ## Why This Architecture?

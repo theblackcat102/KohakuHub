@@ -1,4 +1,5 @@
-# Kohaku Hub - Self-hosted HuggingFace alternative
+# Kohaku Hub - Self-hosted HuggingFace Alternative
+
 ![](images/logo-banner-dark.svg)
 
 ---
@@ -30,9 +31,12 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 - **S3 Storage** - Works with MinIO, AWS S3, Cloudflare R2, etc.
 - **Large File Support** - Git LFS protocol with automatic LFS pointers (>1MB files)
 - **Organizations** - Multi-user namespaces with role-based access
+- **Quota Management** - Storage quotas for users and organizations
 - **Web UI** - Vue 3 interface with file browser, editor, commit history, Mermaid chart support
-- **CLI Tool** - Full-featured command-line interface
+- **Admin Portal** - Comprehensive admin interface for user and repository management
+- **CLI Tool** - Full-featured command-line interface with interactive TUI mode
 - **File Deduplication** - Content-addressed storage by SHA256
+- **Trending & Likes** - Repository popularity tracking
 - **Pure Python Git Server** - No native dependencies, memory-efficient
 
 ## Quick Start
@@ -159,8 +163,8 @@ See [docs/Git.md](./docs/Git.md) for complete Git clone documentation and implem
 - **Vue 3** - Modern web interface
 
 **Implementation Notes:**
-- **LakeFS:** Uses REST API directly (not the deprecated lakefs-client Python library), providing pure async operations without thread pool overhead
-- **Database:** Synchronous operations with Peewee ORM and `db.atomic()` for transaction safety. Supports multi-worker deployment (4-8 workers) for horizontal scaling. Future migration to peewee-async planned.
+- **LakeFS:** Uses REST API directly (lakefs_rest_client.py), providing pure async operations
+- **Database:** Synchronous operations with Peewee ORM and `db.atomic()` for transaction safety. Supports multi-worker deployment (4-8 workers) for horizontal scaling.
 
 **Data Flow:**
 1. Small files (<10MB) → Base64 in commit payload
@@ -190,6 +194,10 @@ KOHAKU_HUB_DATABASE_URL=postgresql://hub:pass@postgres:5432/hubdb
 # Auth
 KOHAKU_HUB_SESSION_SECRET=change-me-in-production
 KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
+
+# Admin Portal
+KOHAKU_HUB_ADMIN_ENABLED=true
+KOHAKU_HUB_ADMIN_SECRET_TOKEN=change-me-in-production
 ```
 
 See [config-example.toml](./config-example.toml) for all options.
@@ -229,6 +237,8 @@ python scripts/test_auth.py
 - [docs/ports.md](./docs/ports.md) - Port configuration reference
 - [docs/API.md](./docs/API.md) - API endpoints and workflows
 - [docs/CLI.md](./docs/CLI.md) - Command-line tool usage
+- [docs/Admin.md](./docs/Admin.md) - Admin portal guide
+- [docs/Git.md](./docs/Git.md) - Git clone support
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contributing guide & roadmap
 
 ## Security Notes
@@ -236,6 +246,7 @@ python scripts/test_auth.py
 ⚠️ **Before Production:**
 - Change all default passwords in `docker-compose.yml`
 - Set secure `KOHAKU_HUB_SESSION_SECRET`
+- Set secure `KOHAKU_HUB_ADMIN_SECRET_TOKEN`
 - Set secure `LAKEFS_AUTH_ENCRYPT_SECRET_KEY`
 - Use HTTPS with reverse proxy
 - Only expose port 28080 (Web UI)
@@ -249,12 +260,14 @@ While core features are stable for alpha release, some advanced features are sti
     - Feel free to open issue in this case, but remember to provide full information and minimal reproduction!
 - LFS strategy is not yet configurable
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md#project-status) for full roadmap and [docs/TODO.md](./docs/TODO.md) for detailed status.
+See [CONTRIBUTING.md](./CONTRIBUTING.md#project-status) for full roadmap.
 
 ## License
 
 AGPL-3.0
+
 **NOTE**: We may release some new features under non-commercial license.
+
 **Commercial Exemption**: If you need any commercial exemption licenses (to not fully open source your system built upon KohakuHub), please contact kohaku@kblueleaf.net
 
 ## Support

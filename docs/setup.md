@@ -4,18 +4,6 @@
 
 ## Quick Start
 
-```mermaid
-graph LR
-    Start[Start] --> Clone[Clone Repository]
-    Clone --> Config[Configure<br/>docker-compose.yml]
-    Config --> Build[Build Frontend]
-    Build --> Deploy[Start Docker]
-    Deploy --> Verify[Verify Installation]
-    Verify --> CreateUser[Create First User]
-    CreateUser --> Done[Ready!]
-
-```
-
 ### 1. Clone Repository
 
 ```bash
@@ -23,15 +11,11 @@ git clone https://github.com/KohakuBlueleaf/KohakuHub.git
 cd KohakuHub
 ```
 
-### 2. Copy Configuration
+### 2. Configure Docker Compose
 
-```bash
-cp docker-compose.example.yml docker-compose.yml
-```
+Choose one of the following methods:
 
-**Important:** The repository only includes `docker-compose.example.yml` as a template. You must copy it to `docker-compose.yml` and customize it for your deployment.
-
-**Alternative:** Use the interactive generator:
+**Option A: Interactive Generator (Recommended)**
 ```bash
 python scripts/generate_docker_compose.py
 ```
@@ -42,47 +26,19 @@ The generator will guide you through:
 - S3 storage (MinIO vs external)
 - Security key generation
 
-### 2. Customize Configuration
-
-**Edit `docker-compose.yml` and change these critical settings:**
-
-#### ⚠️ Security (MUST CHANGE)
-
-```yaml
-# MinIO (Object Storage)
-environment:
-  - MINIO_ROOT_USER=your_secure_username        # Change from 'minioadmin'
-  - MINIO_ROOT_PASSWORD=your_secure_password    # Change from 'minioadmin'
-
-# PostgreSQL (Database)
-environment:
-  - POSTGRES_PASSWORD=your_secure_db_password   # Change from 'hubpass'
-
-# LakeFS (Version Control)
-environment:
-  - LAKEFS_AUTH_ENCRYPT_SECRET_KEY=generate_random_32_char_key_here  # Change!
-
-# KohakuHub API
-environment:
-  - KOHAKU_HUB_SESSION_SECRET=generate_random_string_here  # Change!
-```
-
-#### 🌐 Deployment URL (Optional)
-
-If deploying to a server with a domain name:
-
-```yaml
-# KohakuHub API
-environment:
-  - KOHAKU_HUB_BASE_URL=https://your-domain.com        # Change from localhost
-  - KOHAKU_HUB_S3_PUBLIC_ENDPOINT=https://s3.your-domain.com  # For downloads
+**Option B: Manual Configuration**
+```bash
+cp docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml and change all security settings
 ```
 
 ### 3. Build Frontend
 
 ```bash
 npm install --prefix ./src/kohaku-hub-ui
+npm install --prefix ./src/kohaku-hub-admin
 npm run build --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-admin
 ```
 
 ### 4. Start Services
@@ -104,60 +60,38 @@ docker-compose logs -f hub-api
 ### 6. Access KohakuHub
 
 - **Web UI & API:** http://localhost:28080
-- **API Docs:** http://localhost:48888/docs (optional, for development)
+- **Admin Portal:** http://localhost:28080/admin
+- **API Docs (Swagger):** http://localhost:48888/docs
 
-## Configuration Reference
+## Required Configuration Changes
 
-```mermaid
-graph TD
-    subgraph "Security Settings (MUST CHANGE)"
-        MinIO["MinIO Credentials<br/>MINIO_ROOT_USER<br/>MINIO_ROOT_PASSWORD"]
-        Postgres["PostgreSQL Password<br/>POSTGRES_PASSWORD"]
-        LakeFS["LakeFS Encryption Key<br/>LAKEFS_AUTH_ENCRYPT_SECRET_KEY"]
-        Session["Session Secret<br/>KOHAKU_HUB_SESSION_SECRET"]
-        Admin["Admin Token<br/>KOHAKU_HUB_ADMIN_SECRET_TOKEN"]
-    end
-
-    subgraph "Optional Settings"
-        BaseURL["Base URL<br/>KOHAKU_HUB_BASE_URL"]
-        S3Public["S3 Public Endpoint<br/>KOHAKU_HUB_S3_PUBLIC_ENDPOINT"]
-        LFSThreshold["LFS Threshold<br/>KOHAKU_HUB_LFS_THRESHOLD_BYTES"]
-        Email["Email Verification<br/>KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION"]
-    end
-
-    Deploy[Deploy] --> Security
-    Security --> Optional
-    Optional --> Production[Production Ready]
-
-```
-
-### Required Changes
+**IMPORTANT:** You must change these security values before production deployment:
 
 | Variable | Default | Change To | Why |
 |----------|---------|-----------|-----|
-| `MINIO_ROOT_USER` | minioadmin | your_username | Security |
-| `MINIO_ROOT_PASSWORD` | minioadmin | strong_password | Security |
-| `POSTGRES_PASSWORD` | hubpass | strong_password | Security |
-| `LAKEFS_AUTH_ENCRYPT_SECRET_KEY` | change_this | random_32_chars | Security |
-| `KOHAKU_HUB_SESSION_SECRET` | change_this | random_string | Security |
+| `MINIO_ROOT_USER` | minioadmin | your_username | S3 storage security |
+| `MINIO_ROOT_PASSWORD` | minioadmin | strong_password | S3 storage security |
+| `POSTGRES_PASSWORD` | hubpass | strong_password | Database security |
+| `LAKEFS_AUTH_ENCRYPT_SECRET_KEY` | change_this | random_32_chars | LakeFS encryption |
+| `KOHAKU_HUB_SESSION_SECRET` | change_this | random_string | Session security |
 | `KOHAKU_HUB_ADMIN_SECRET_TOKEN` | change_this | random_string | Admin portal access |
 
-**Generate secure values:**
+**Generate Secure Values:**
 ```bash
-# Generate 32-character hex key
+# Generate 32-character hex key (for LAKEFS_AUTH_ENCRYPT_SECRET_KEY)
 openssl rand -hex 32
 
-# Generate 64-character random string
+# Generate 64-character random string (for SESSION_SECRET and ADMIN_TOKEN)
 openssl rand -base64 48
 ```
 
-### Optional Changes
+## Optional Configuration
 
 | Variable | Default | When to Change |
 |----------|---------|----------------|
 | `KOHAKU_HUB_BASE_URL` | http://localhost:28080 | Deploying to domain |
 | `KOHAKU_HUB_S3_PUBLIC_ENDPOINT` | http://localhost:29001 | Using external S3 |
-| `KOHAKU_HUB_LFS_THRESHOLD_BYTES` | 5242880 (5MB) | Adjust LFS threshold |
+| `KOHAKU_HUB_LFS_THRESHOLD_BYTES` | 10000000 (10MB) | Adjust LFS threshold |
 | `KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION` | false | Enable email verification |
 | `KOHAKU_HUB_LFS_KEEP_VERSIONS` | 5 | Change version retention |
 | `KOHAKU_HUB_LFS_AUTO_GC` | false | Enable auto garbage collection |
@@ -234,7 +168,7 @@ curl http://localhost:28080/api/version
 
 ### Cannot Access from External Network
 
-**If deploying on a server:**
+If deploying on a server:
 
 1. Update `KOHAKU_HUB_BASE_URL` to your domain
 2. Update `KOHAKU_HUB_S3_PUBLIC_ENDPOINT` if using external S3
@@ -260,6 +194,8 @@ server {
         proxy_pass http://localhost:28080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
@@ -269,6 +205,7 @@ server {
 - [ ] Changed all default passwords
 - [ ] Set strong SESSION_SECRET
 - [ ] Set strong LAKEFS_AUTH_ENCRYPT_SECRET_KEY
+- [ ] Set strong ADMIN_SECRET_TOKEN
 - [ ] Using HTTPS with valid certificate
 - [ ] Only port 28080 exposed (or 443 for HTTPS)
 - [ ] Firewall configured
@@ -281,29 +218,16 @@ server {
 - `hub-storage/` - MinIO object storage (or use S3)
 - `docker-compose.yml` - Your configuration
 
+**Backup command:**
 ```bash
-# Backup command
 tar -czf kohakuhub-backup-$(date +%Y%m%d).tar.gz hub-meta/ hub-storage/ docker-compose.yml
 ```
 
-## Updating
-
-### Update KohakuHub
-
+**Restore:**
 ```bash
-# Pull latest code
-git pull
-
-# Rebuild frontend
-npm install --prefix ./src/kohaku-hub-ui
-npm run build --prefix ./src/kohaku-hub-ui
-
-# Restart services
-docker-compose down
+tar -xzf kohakuhub-backup-YYYYMMDD.tar.gz
 docker-compose up -d --build
 ```
-
-**Note:** Check CHANGELOG for breaking changes before updating.
 
 ## Multi-Worker Deployment
 
@@ -316,8 +240,6 @@ KohakuHub uses **synchronous database operations** with Peewee ORM:
 - Safe for concurrent access from multiple workers
 - PostgreSQL and SQLite handle connection pooling internally
 - No async database wrappers needed
-
-**Future:** Migration to peewee-async planned for better concurrency.
 
 ### Running with Multiple Workers
 
@@ -366,6 +288,27 @@ services:
 - Cannot use `--reload` flag with multiple workers
 - In-memory caches are per-worker (use Redis for shared cache)
 - Log output from all workers (use log aggregation)
+
+## Updating
+
+### Update KohakuHub
+
+```bash
+# Pull latest code
+git pull
+
+# Rebuild frontend
+npm install --prefix ./src/kohaku-hub-ui
+npm install --prefix ./src/kohaku-hub-admin
+npm run build --prefix ./src/kohaku-hub-ui
+npm run build --prefix ./src/kohaku-hub-admin
+
+# Restart services
+docker-compose down
+docker-compose up -d --build
+```
+
+**Note:** Check CHANGELOG for breaking changes before updating.
 
 ## Uninstall
 

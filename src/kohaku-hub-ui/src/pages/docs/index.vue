@@ -25,7 +25,6 @@ const docs = [
       "Administration interface for managing users, repositories, commits, and storage. Includes quota management, statistics dashboard, and S3 browser.",
     path: "/docs/admin",
     icon: "i-carbon-security",
-    featured: true,
   },
   {
     title: "Git Clone Support",
@@ -33,7 +32,6 @@ const docs = [
       "Native Git clone/pull support with automatic LFS integration. Includes user guide, Cloudflare setup, troubleshooting, and pure Python implementation details.",
     path: "/docs/git",
     icon: "i-carbon-code",
-    featured: true,
   },
   {
     title: "Port Reference",

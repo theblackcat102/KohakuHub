@@ -7,27 +7,6 @@
 
 ---
 
-## Admin Portal Architecture
-
-```mermaid
-graph LR
-    subgraph "Admin Access"
-        Browser[Browser] -->|X-Admin-Token| Portal[Admin Portal UI]
-    end
-
-    subgraph "Admin API"
-        Portal -->|REST API| AdminAPI[Admin Endpoints]
-    end
-
-    subgraph "Data Sources"
-        AdminAPI -->|Queries| DB[PostgreSQL/SQLite]
-        AdminAPI -->|List Objects| S3[MinIO/S3]
-        AdminAPI -->|Repository Info| LakeFS[LakeFS]
-    end
-```
-
----
-
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -38,8 +17,9 @@ graph LR
 6. [Commit History Viewer](#commit-history-viewer)
 7. [S3 Storage Browser](#s3-storage-browser)
 8. [Quota Management](#quota-management)
-9. [API Reference](#api-reference)
-10. [Security Best Practices](#security-best-practices)
+9. [Invitation Management](#invitation-management)
+10. [API Reference](#api-reference)
+11. [Security Best Practices](#security-best-practices)
 
 ---
 
@@ -52,7 +32,9 @@ The Admin Portal provides a centralized interface for managing your KohakuHub in
 - **Commit History** - Track commits across all repositories
 - **Storage Browser** - Browse S3 buckets and objects
 - **Quota Management** - Set and monitor storage quotas
+- **Invitation Management** - Create and manage registration invitations
 - **Statistics Dashboard** - Real-time insights into usage
+- **Bulk Operations** - Recalculate storage for all repositories
 
 **Access URL:**
 ```
@@ -116,6 +98,9 @@ The dashboard shows real-time statistics from your database:
 - Email verified users
 - Inactive users
 
+**Organization Stats:**
+- Total organizations
+
 **Repository Stats:**
 - Total repositories
 - Private vs public repositories
@@ -126,7 +111,7 @@ The dashboard shows real-time statistics from your database:
 - Top contributors (by commit count)
 
 **Storage Stats:**
-- Total storage used
+- Total storage used (private + public)
 - Private vs public storage
 - LFS object count and size
 
@@ -136,6 +121,7 @@ The dashboard shows real-time statistics from your database:
 - View commits
 - Inspect S3 storage
 - Manage quotas
+- Manage invitations
 
 ---
 
@@ -165,6 +151,7 @@ The dashboard shows real-time statistics from your database:
 - Email (required, unique)
 - Password (required)
 - Email verified (checkbox)
+- Is active (checkbox)
 - Private quota (bytes, optional = unlimited)
 - Public quota (bytes, optional = unlimited)
 
@@ -174,8 +161,25 @@ Username: alice
 Email: alice@example.com
 Password: ********
 Email Verified: ✓
+Is Active: ✓
 Private Quota: 10737418240  (10 GB)
 Public Quota: 53687091200   (50 GB)
+```
+
+**API Endpoint:**
+```bash
+curl -X POST http://localhost:48888/admin/api/users \
+  -H "X-Admin-Token: your-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "email": "alice@example.com",
+    "password": "secure_password",
+    "email_verified": true,
+    "is_active": true,
+    "private_quota_bytes": 10737418240,
+    "public_quota_bytes": 53687091200
+  }'
 ```
 
 ### View User Details
@@ -209,11 +213,28 @@ Click "View" to see:
 3. Choose: Cancel or Force Delete
 4. Confirm force delete → All data deleted
 
+**API Endpoint:**
+```bash
+# Normal delete (fails if user owns repos)
+curl -X DELETE http://localhost:48888/admin/api/users/alice \
+  -H "X-Admin-Token: your-secret-token"
+
+# Force delete (deletes user and all their repos)
+curl -X DELETE "http://localhost:48888/admin/api/users/alice?force=true" \
+  -H "X-Admin-Token: your-secret-token"
+```
+
 ### Toggle Email Verification
 
 **Use case:** Manually verify users when email verification is disabled or failed.
 
 **Action:** Click "Verify" or "Unverify" button → Instant update
+
+**API Endpoint:**
+```bash
+curl -X PATCH http://localhost:48888/admin/api/users/alice/email-verification?verified=true \
+  -H "X-Admin-Token: your-secret-token"
+```
 
 ---
 
@@ -231,6 +252,7 @@ Click "View" to see:
 - Full repository ID (namespace/name)
 - Privacy status (Private/Public badge)
 - Owner username
+- Storage quota and usage
 - Created date
 
 **Actions:**
@@ -244,21 +266,18 @@ Click "View" to see:
 - Owner username
 - Privacy status
 - Created date
-- **File count** (from database)
+- **File count** (from database, active files only)
 - **Commit count** (from database)
-- **Total size** (sum of all files)
+- **Total size** (sum of all active files)
+- **Quota information** (quota, used, percentage, inheriting status)
 
 **Actions:**
 - View in Main App → Opens repository in main UI
 
-### API Endpoints
-
-```
-GET /admin/api/repositories
-  Query: repo_type, namespace, limit, offset
-
-GET /admin/api/repositories/{type}/{namespace}/{name}
-  Returns: Detailed repo info with stats
+**API Endpoint:**
+```bash
+curl http://localhost:48888/admin/api/repositories/model/org/my-model \
+  -H "X-Admin-Token: your-secret-token"
 ```
 
 ---
@@ -288,6 +307,21 @@ View all commits across all repositories in your instance.
 - Page size: 10, 20, 50, 100
 - Navigate through pages
 
+**API Endpoint:**
+```bash
+# List all commits
+curl http://localhost:48888/admin/api/commits?limit=100 \
+  -H "X-Admin-Token: your-secret-token"
+
+# Filter by repository
+curl "http://localhost:48888/admin/api/commits?repo_full_id=org/model&limit=50" \
+  -H "X-Admin-Token: your-secret-token"
+
+# Filter by author
+curl "http://localhost:48888/admin/api/commits?username=alice&limit=50" \
+  -H "X-Admin-Token: your-secret-token"
+```
+
 ### Use Cases
 
 - Track user activity
@@ -295,13 +329,6 @@ View all commits across all repositories in your instance.
 - Monitor repository changes
 - Debug commit issues
 - Audit trail
-
-### API Endpoint
-
-```
-GET /admin/api/commits
-  Query: repo_full_id, username, limit, offset
-```
 
 ---
 
@@ -317,13 +344,33 @@ GET /admin/api/commits
 
 **Metrics:**
 - Bucket name
-- Total size (formatted: KB, MB, GB)
+- Total size (formatted: KB, MB, GB, TB)
 - Object count
 - Creation date
 - Progress bar (relative to 100GB)
 
 **Actions:**
 - Click bucket → Browse contents
+
+**API Endpoint:**
+```bash
+curl http://localhost:48888/admin/api/storage/buckets \
+  -H "X-Admin-Token: your-secret-token"
+```
+
+**Response:**
+```json
+{
+  "buckets": [
+    {
+      "name": "hub-storage",
+      "creation_date": "2025-01-01T00:00:00Z",
+      "total_size": 107374182400,
+      "object_count": 5000
+    }
+  ]
+}
+```
 
 ### Object Browser
 
@@ -347,15 +394,11 @@ Enter prefix: hf-model-org-repo/
 → Shows objects for specific repository
 ```
 
-### API Endpoints
-
-```
-GET /admin/api/storage/buckets
-  Returns: All buckets with sizes
-
-GET /admin/api/storage/objects/{bucket}
-  Query: prefix, limit
-  Returns: Objects in bucket
+**API Endpoint:**
+```bash
+# List objects in bucket
+curl "http://localhost:48888/admin/api/storage/objects/hub-storage?prefix=lfs/&limit=100" \
+  -H "X-Admin-Token: your-secret-token"
 ```
 
 ---
@@ -372,6 +415,34 @@ GET /admin/api/storage/objects/{bucket}
 - Total usage
 - Usage percentages
 
+**API Endpoint:**
+```bash
+# Get user quota
+curl "http://localhost:48888/admin/api/quota/alice?is_org=false" \
+  -H "X-Admin-Token: your-secret-token"
+
+# Get organization quota
+curl "http://localhost:48888/admin/api/quota/my-org?is_org=true" \
+  -H "X-Admin-Token: your-secret-token"
+```
+
+**Response:**
+```json
+{
+  "namespace": "alice",
+  "is_organization": false,
+  "private_quota_bytes": 10737418240,
+  "public_quota_bytes": 53687091200,
+  "private_used_bytes": 1234567890,
+  "public_used_bytes": 5678901234,
+  "private_available_bytes": 9502850350,
+  "public_available_bytes": 47008189966,
+  "private_percentage_used": 11.5,
+  "public_percentage_used": 10.6,
+  "total_used_bytes": 6913469124
+}
+```
+
 ### Set Quota
 
 **Fields:**
@@ -385,6 +456,17 @@ GET /admin/api/storage/objects/{bucket}
 Unlimited = (empty/null)
 ```
 
+**API Endpoint:**
+```bash
+curl -X PUT http://localhost:48888/admin/api/quota/alice \
+  -H "X-Admin-Token: your-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "private_quota_bytes": 10737418240,
+    "public_quota_bytes": 53687091200
+  }'
+```
+
 ### Recalculate Storage
 
 **Purpose:** Re-scan all files and update storage usage.
@@ -395,22 +477,156 @@ Unlimited = (empty/null)
 - Quota shows incorrect values
 
 **Process:**
-1. Scans all LakeFS objects for namespace
-2. Sums file sizes
+1. Scans all files for namespace
+2. Sums file sizes (private and public separately)
 3. Updates User/Organization table
 
-### API Endpoints
-
+**API Endpoint:**
+```bash
+curl -X POST "http://localhost:48888/admin/api/quota/alice/recalculate?is_org=false" \
+  -H "X-Admin-Token: your-secret-token"
 ```
-GET /admin/api/quota/{namespace}?is_org=false
-  Returns: Quota information
 
-PUT /admin/api/quota/{namespace}
-  Body: {private_quota_bytes, public_quota_bytes}
-  Returns: Updated quota
+### Bulk Storage Recalculation
 
-POST /admin/api/quota/{namespace}/recalculate
-  Returns: Recalculated usage
+**NEW:** Recalculate storage for all repositories at once.
+
+**API Endpoint:**
+```bash
+# Recalculate all repositories
+curl -X POST http://localhost:48888/admin/api/repositories/recalculate-all \
+  -H "X-Admin-Token: your-secret-token"
+
+# Filter by type
+curl -X POST "http://localhost:48888/admin/api/repositories/recalculate-all?repo_type=model" \
+  -H "X-Admin-Token: your-secret-token"
+
+# Filter by namespace
+curl -X POST "http://localhost:48888/admin/api/repositories/recalculate-all?namespace=org" \
+  -H "X-Admin-Token: your-secret-token"
+```
+
+**Response:**
+```json
+{
+  "total": 250,
+  "success_count": 248,
+  "failure_count": 2,
+  "failures": [
+    {
+      "repo_id": "org/problem-repo",
+      "error": "Repository not found in LakeFS"
+    }
+  ],
+  "message": "Recalculated storage for 248/250 repositories"
+}
+```
+
+---
+
+## Invitation Management
+
+### Create Registration Invitation
+
+**Purpose:** Generate invitations for user registration (useful for invite-only mode).
+
+**Features:**
+- Optional organization membership after registration
+- Reusable invitations with usage limits
+- Configurable expiration
+
+**API Endpoint:**
+```bash
+curl -X POST http://localhost:48888/admin/api/invitations/register \
+  -H "X-Admin-Token: your-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "org_id": null,
+    "role": "member",
+    "max_usage": 10,
+    "expires_days": 30
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "token": "abc123xyz...",
+  "invitation_link": "http://your-hub.com/register?invitation=abc123xyz...",
+  "expires_at": "2025-02-14T12:00:00Z",
+  "max_usage": 10,
+  "is_reusable": true,
+  "action": "register_account"
+}
+```
+
+**Invitation Types:**
+- **One-time:** `max_usage: null` - Single use invitation
+- **Limited:** `max_usage: 10` - Can be used 10 times
+- **Unlimited:** `max_usage: -1` - Unlimited uses
+
+**Auto-join Organization:**
+```json
+{
+  "org_id": 5,
+  "role": "member",
+  "max_usage": 50,
+  "expires_days": 90
+}
+```
+
+Users who register with this invitation will automatically join the organization as members.
+
+### List All Invitations
+
+**API Endpoint:**
+```bash
+# List all invitations
+curl http://localhost:48888/admin/api/invitations \
+  -H "X-Admin-Token: your-secret-token"
+
+# Filter by action type
+curl "http://localhost:48888/admin/api/invitations?action=register_account" \
+  -H "X-Admin-Token: your-secret-token"
+```
+
+**Response:**
+```json
+{
+  "invitations": [
+    {
+      "id": 1,
+      "token": "abc123...",
+      "action": "register_account",
+      "org_id": null,
+      "org_name": null,
+      "role": null,
+      "email": null,
+      "created_by": 1,
+      "creator_username": "System",
+      "created_at": "2025-01-15T12:00:00Z",
+      "expires_at": "2025-02-15T12:00:00Z",
+      "max_usage": 10,
+      "usage_count": 5,
+      "is_reusable": true,
+      "is_available": true,
+      "error_message": null,
+      "used_at": null,
+      "used_by": null
+    }
+  ],
+  "limit": 100,
+  "offset": 0
+}
+```
+
+### Delete Invitation
+
+**API Endpoint:**
+```bash
+curl -X DELETE http://localhost:48888/admin/api/invitations/{token} \
+  -H "X-Admin-Token: your-secret-token"
 ```
 
 ---
@@ -441,6 +657,7 @@ PATCH  /admin/api/users/{username}/email-verification  # Set verification
 ```
 GET /admin/api/repositories                # List repositories
 GET /admin/api/repositories/{type}/{namespace}/{name}  # Get details
+POST /admin/api/repositories/recalculate-all           # Bulk storage recalc
 ```
 
 **Commit History:**
@@ -467,6 +684,13 @@ GET /admin/api/stats/top-repos?by=commits  # Top repositories
 GET  /admin/api/quota/{namespace}          # Get quota
 PUT  /admin/api/quota/{namespace}          # Set quota
 POST /admin/api/quota/{namespace}/recalculate  # Recalculate
+```
+
+**Invitations:**
+```
+POST   /admin/api/invitations/register     # Create registration invitation
+GET    /admin/api/invitations              # List all invitations
+DELETE /admin/api/invitations/{token}      # Delete invitation
 ```
 
 ### Response Formats
@@ -501,7 +725,11 @@ POST /admin/api/quota/{namespace}/recalculate  # Recalculate
   "created_at": "2025-01-01T00:00:00.000000Z",
   "file_count": 15,
   "commit_count": 8,
-  "total_size": 12345678
+  "total_size": 12345678,
+  "quota_bytes": null,
+  "used_bytes": 12345678,
+  "percentage_used": 0.12,
+  "is_inheriting": true
 }
 ```
 
@@ -615,7 +843,7 @@ Admin operations are logged with `[ADMIN]` prefix:
 ```
 [WARNING] [ADMIN] [07:05:55] Admin deleted user: testuser (deleted 5 repositories)
 [INFO] [ADMIN] [07:06:12] Admin set quota for user alice: private=10737418240, public=53687091200
-[WARNING] [ADMIN] [07:06:45] Admin deleted repository: model:org/test-model
+[WARNING] [ADMIN] [07:06:45] Admin created registration invitation (max_usage=10, expires=30d)
 ```
 
 **Monitor logs:**
@@ -642,7 +870,21 @@ docker logs khub-hub-api | grep "\[ADMIN\]"
 5. Share credentials with user
 ```
 
-### Scenario 2: Storage Cleanup
+### Scenario 2: Invite-Only Registration Mode
+
+```
+1. Dashboard → "Manage Invitations"
+2. Click "Create Registration Invitation"
+3. Configure:
+   - Max Usage: 50 (for team)
+   - Expires: 90 days
+   - Auto-join Organization: my-company (as member)
+4. Copy invitation link
+5. Share link with team members
+6. Monitor usage count
+```
+
+### Scenario 3: Storage Cleanup
 
 ```
 1. Dashboard → "Browse Storage"
@@ -653,7 +895,7 @@ docker logs khub-hub-api | grep "\[ADMIN\]"
 6. (Manually delete via CLI/API if needed)
 ```
 
-### Scenario 3: User Investigation
+### Scenario 4: User Investigation
 
 ```
 1. Dashboard → "View Commits"
@@ -663,7 +905,7 @@ docker logs khub-hub-api | grep "\[ADMIN\]"
 5. If needed: Go to Users → Delete user (with force)
 ```
 
-### Scenario 4: Quota Enforcement
+### Scenario 5: Quota Enforcement
 
 ```
 1. Dashboard → "Manage Quotas"
@@ -672,6 +914,17 @@ docker logs khub-hub-api | grep "\[ADMIN\]"
 4. Set new limits if exceeded
 5. Click "Recalculate" to verify
 6. Monitor dashboard for compliance
+```
+
+### Scenario 6: System Maintenance
+
+```
+1. Dashboard → "Bulk Operations"
+2. Click "Recalculate All Repository Storage"
+3. Optional: Filter by type or namespace
+4. Confirm operation
+5. Wait for completion (progress logged)
+6. Review success/failure report
 ```
 
 ---
@@ -700,14 +953,14 @@ docker logs khub-hub-api | grep "\[ADMIN\]"
 ### Storage Size Incorrect
 
 **Problem:** Database out of sync with S3
-**Solution:** Use "Recalculate" button in Quota Management
+**Solution:** Use "Recalculate" button in Quota Management or bulk recalculation endpoint
 
 ---
 
 ### Can't Delete User
 
 **Problem:** User owns repositories
-**Solution:** Either delete repos first, or use "Force Delete" option
+**Solution:** Either delete repos first, or use "Force Delete" option with `force=true` parameter
 
 ---
 
@@ -755,6 +1008,21 @@ curl -H "X-Admin-Token: your-token" \
   "http://localhost:48888/admin/api/stats/top-repos?by=size&limit=10"
 ```
 
+**Response:**
+```json
+{
+  "top_repositories": [
+    {
+      "repo_full_id": "org/active-model",
+      "repo_type": "model",
+      "commit_count": 150,
+      "private": false
+    }
+  ],
+  "sorted_by": "commits"
+}
+```
+
 ---
 
 ## Integration with CI/CD
@@ -783,6 +1051,31 @@ response = requests.post(
 
 user = response.json()
 print(f"Created user: {user['username']} (ID: {user['id']})")
+```
+
+### Bulk Invitation Generation
+
+```python
+import requests
+
+admin_token = "your-admin-token"
+base_url = "http://hub.example.com"
+
+# Create reusable invitation for 100 users
+response = requests.post(
+    f"{base_url}/admin/api/invitations/register",
+    headers={"X-Admin-Token": admin_token},
+    json={
+        "org_id": 5,  # Auto-join org after registration
+        "role": "member",
+        "max_usage": 100,
+        "expires_days": 90
+    }
+)
+
+invitation = response.json()
+print(f"Invitation link: {invitation['invitation_link']}")
+print(f"Can be used {invitation['max_usage']} times")
 ```
 
 ### Monitoring Script
@@ -816,13 +1109,14 @@ if stats['users']['inactive'] > 10:
 
 ### Database Queries
 
-Admin operations run synchronous queries in the DB thread pool:
+Admin operations run synchronous queries with `db.atomic()`:
 - User listings: `O(n)` where n = total users
-- Repository stats: Aggregation queries
-- Commit history: Indexed by repo_full_id and username
+- Repository stats: Aggregation queries with indexes
+- Commit history: Indexed by repository_id and username
+- Storage calculations: Aggregation over File table
 
 **Optimization:**
-- Limit page size (default: 20, max: 100)
+- Limit page size (default: 100, max: 1000)
 - Use filters to reduce result sets
 - Statistics are computed on-demand (cache in frontend if needed)
 
@@ -841,21 +1135,36 @@ Admin operations run synchronous queries in the DB thread pool:
 - Don't scan too frequently
 - Consider caching results for large buckets
 
+### Bulk Storage Recalculation
+
+**Performance:**
+- Processes repositories sequentially (safe for database)
+- Progress logged every 10 repositories
+- Can take 1-5 minutes for 1000 repositories
+- Errors don't stop the process (logged and returned)
+
+**Use case:**
+- Run during maintenance windows
+- Use filters to process subsets
+- Monitor logs for progress
+
 ---
 
 ## Comparison: Admin Portal vs CLI
 
 | Feature | Admin Portal | kohub-cli | Best For |
 |---------|--------------|-----------|----------|
-| User management | ✅ GUI | ✅ Commands | GUI: Quick actions<br>CLI: Automation |
+| User management | ✅ GUI | ❌ No | Portal: Quick actions |
 | Repository browser | ✅ Full | ⚠️ Limited | Portal: Overview<br>CLI: Specific repos |
 | Commit history | ✅ Full | ❌ No | Portal only |
 | Storage browser | ✅ Full | ❌ No | Portal only |
 | Quota management | ✅ Full | ⚠️ API only | Portal: Visual<br>CLI: Scripting |
+| Invitation management | ✅ Full | ❌ No | Portal only |
 | Statistics | ✅ Dashboard | ❌ No | Portal only |
+| Bulk operations | ✅ Full | ❌ No | Portal only |
 | Automation | ❌ Manual | ✅ Scripts | Portal: Manual<br>CLI: Automation |
 
-**Recommendation:** Use portal for exploration/monitoring, CLI for automation.
+**Recommendation:** Use portal for exploration/monitoring, API for automation.
 
 ---
 
@@ -879,8 +1188,14 @@ A: Yes, use curl/Python with `X-Admin-Token` header.
 **Q: Is audit logging enabled by default?**
 A: Yes, all admin operations are logged with `[ADMIN]` prefix.
 
+**Q: How do I create reusable invitations?**
+A: Set `max_usage` to a number (e.g., 50 for 50 uses) or -1 for unlimited.
+
+**Q: Can invitations auto-add users to organizations?**
+A: Yes, set `org_id` and `role` in the invitation. Users will automatically join after registration.
+
 ---
 
 **Last Updated:** January 2025
-**Version:** 1.0
+**Version:** 1.1
 **Status:** ✅ Production Ready

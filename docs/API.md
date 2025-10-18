@@ -2,38 +2,37 @@
 
 *Last Updated: January 2025*
 
-This document explains how Kohaku Hub's API works, the data flow, and key endpoints.
+This document explains how Kohaku Hub's API works, the data flow, and all available endpoints.
 
 ## System Architecture
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        Client["Client<br/>(huggingface_hub, git, browser)"]
+    subgraph Client["Client Layer"]
+        CLT["Client<br/>(huggingface_hub, git, browser)"]
     end
 
-    subgraph "Entry Point"
-        Nginx["Nginx (Port 28080)<br/>- Serves static files<br/>- Reverse proxy"]
+    subgraph Entry["Entry Point"]
+        NGX["Nginx (Port 28080)<br/>- Serves static files<br/>- Reverse proxy"]
     end
 
-    subgraph "Application Layer"
-        FastAPI["FastAPI (Port 48888)<br/>- Auth & Permissions<br/>- HF-compatible API<br/>- Git Smart HTTP"]
+    subgraph App["Application Layer"]
+        API["FastAPI (Port 48888)<br/>- Auth & Permissions<br/>- HF-compatible API<br/>- Git Smart HTTP"]
     end
 
-    subgraph "Storage Backend"
-        LakeFS["LakeFS<br/>- Git-like versioning<br/>- Branch management<br/>- Commit history"]
+    subgraph Storage["Storage Backend"]
+        LFS["LakeFS<br/>- Git-like versioning<br/>- Branch management<br/>- Commit history"]
         DB["PostgreSQL/SQLite<br/>- User data<br/>- Metadata<br/>- Deduplication<br/>- Synchronous with db.atomic()"]
         S3["MinIO/S3<br/>- Object storage<br/>- LFS files<br/>- Presigned URLs"]
     end
 
-    Client -->|HTTP/Git/LFS| Nginx
-    Nginx -->|Static files| Client
-    Nginx -->|/api, /org, resolve| FastAPI
-    FastAPI -->|REST API (async)| LakeFS
-    FastAPI -->|Sync queries with db.atomic()| DB
-    FastAPI -->|Async wrappers| S3
-    LakeFS -->|Stores objects| S3
-
+    CLT -->|HTTP/Git/LFS| NGX
+    NGX -->|Static files| CLT
+    NGX -->|/api, /org, resolve| API
+    API -->|REST API async| LFS
+    API -->|Sync queries with db.atomic| DB
+    API -->|Async| S3
+    LFS -->|Stores objects| S3
 ```
 
 ## Core Concepts
@@ -42,7 +41,7 @@ graph TB
 
 ```mermaid
 graph TD
-    Start[File Upload] --> Check{File size > 5MB?}
+    Start[File Upload] --> Check{File size > 10MB?}
     Check -->|No| Regular[Regular Mode]
     Check -->|Yes| LFS[LFS Mode]
     Regular --> Base64[Base64 in commit payload]
@@ -52,10 +51,9 @@ graph TD
     FastAPI --> LakeFS1[LakeFS stores object]
     Direct --> Link[FastAPI links S3 object]
     Link --> LakeFS2[LakeFS commit with physical address]
-
 ```
 
-**Note:** The LFS threshold is configurable via `KOHAKU_HUB_LFS_THRESHOLD_BYTES` (default: 5MB = 5,242,880 bytes).
+**Note:** The LFS threshold is configurable via `KOHAKU_HUB_LFS_THRESHOLD_BYTES` (default: 10MB = 10,000,000 bytes). Can also be set per-repository.
 
 ### Storage Layout
 
@@ -75,57 +73,6 @@ s3://hub-storage/
               └── abcd1234...   ← Full SHA256 hash
 ```
 
-## Git Clone Support
-
-### Overview
-
-KohakuHub supports native Git clone operations using **pure Python implementation** (no pygit2/libgit2).
-
-**Git URL Format:**
-```
-http://hub.example.com/{namespace}/{repo-name}.git
-```
-
-**Git Endpoints:**
-- `GET /{namespace}/{name}.git/info/refs?service=git-upload-pack` - Service advertisement
-- `POST /{namespace}/{name}.git/git-upload-pack` - Clone/fetch/pull
-- `GET /{namespace}/{name}.git/HEAD` - Get HEAD reference
-- `POST /{namespace}/{name}.git/git-receive-pack` - Push (in progress)
-
-### LFS Integration
-
-**Automatic LFS Pointers:**
-- Files **<1MB**: Included in Git pack as regular blobs
-- Files **>=1MB**: Converted to LFS pointers (100-byte text files)
-
-**LFS Pointer Format:**
-```
-version https://git-lfs.github.com/spec/v1
-oid sha256:abc123...
-size 10737418240
-```
-
-**Client Workflow:**
-```bash
-# 1. Clone (gets pointers for large files)
-git clone http://hub.example.com/org/repo.git
-
-# 2. Download large files via LFS
-cd repo
-git lfs install
-git lfs pull  # Uses existing /info/lfs/ endpoints
-```
-
-**Benefits:**
-- Fast clones (only metadata + small files)
-- No memory issues (LFS pointers are tiny)
-- Leverages existing HuggingFace LFS infrastructure
-- Pure Python (no native dependencies)
-
-See [Git.md](./Git.md) for complete Git clone documentation and implementation details.
-
----
-
 ## Upload Workflow
 
 ### Overview
@@ -142,12 +89,12 @@ sequenceDiagram
     API->>API: Check DB for existing SHA256
     API-->>Client: Upload mode (regular/lfs) & dedup info
 
-    alt Small Files (<5MB)
+    alt Small Files (<10MB)
         Note over Client,S3: Phase 2a: Regular Upload
         Client->>API: POST /commit (base64 content)
         API->>LakeFS: Upload object
         LakeFS->>S3: Store object
-    else Large Files (>=5MB)
+    else Large Files (>=10MB)
         Note over Client,S3: Phase 2b: LFS Upload
         Client->>API: POST /info/lfs/objects/batch
         API->>S3: Generate presigned URL
@@ -205,97 +152,7 @@ sequenceDiagram
 }
 ```
 
-**Decision Logic**:
-```
-For each file:
-  1. Check size:
-     - ≤ 5MB → "regular"
-     - > 5MB → "lfs"
-
-  2. Check if exists (deduplication):
-     - Query DB for matching SHA256 + size
-     - If match found → shouldIgnore: true
-     - If no match → shouldIgnore: false
-```
-
-### Step 2a: Regular Upload (≤5MB)
-
-Files are sent inline in the commit payload as base64.
-
-```
-┌────────┐                    ┌────────┐
-│ Client │───── base64 ──────>│ Commit │
-└────────┘    (embedded)      └────────┘
-```
-
-**No separate upload step needed** - proceed directly to Step 3.
-
-### Step 2b: LFS Upload (>5MB)
-
-#### Phase 1: Request Upload URLs
-
-**Endpoint**: `POST /{repo_id}.git/info/lfs/objects/batch`
-
-**Request**:
-```json
-{
-  "operation": "upload",
-  "transfers": ["basic", "multipart"],
-  "objects": [
-    {
-      "oid": "sha256_hash",
-      "size": 52428800
-    }
-  ]
-}
-```
-
-**Response** (if file needs upload):
-```json
-{
-  "transfer": "basic",
-  "objects": [
-    {
-      "oid": "sha256_hash",
-      "size": 52428800,
-      "actions": {
-        "upload": {
-          "href": "https://s3.../presigned_url",
-          "expires_at": "2025-10-02T00:00:00Z"
-        }
-      }
-    }
-  ]
-}
-```
-
-**Response** (if file already exists):
-```json
-{
-  "transfer": "basic",
-  "objects": [
-    {
-      "oid": "sha256_hash",
-      "size": 52428800
-      // No "actions" field = already exists
-    }
-  ]
-}
-```
-
-#### Phase 2: Upload to S3
-
-```
-┌────────┐                       ┌─────────┐
-│ Client │---- PUT file -------->│   S3    │
-└────────┘   (presigned URL)     └─────────┘
-              Direct upload       lfs/ab/cd/
-              (no proxy!)         abcd123...
-```
-
-**Key Point**: Client uploads directly to S3 using the presigned URL. Kohaku Hub server is NOT involved in data transfer.
-
-### Step 3: Commit
+### Step 2: Commit
 
 **Purpose**: Atomically commit all changes to the repository
 
@@ -316,53 +173,11 @@ Files are sent inline in the commit payload as base64.
 | Key | Description | Usage |
 |-----|-------------|-------|
 | `header` | Commit metadata | Required, must be first line |
-| `file` | Small file (inline base64) | For files ≤ 5MB |
-| `lfsFile` | Large file (LFS reference) | For files > 5MB, already uploaded to S3 |
+| `file` | Small file (inline base64) | For files ≤ 10MB |
+| `lfsFile` | Large file (LFS reference) | For files > 10MB, already uploaded to S3 |
 | `deletedFile` | Delete a single file | Remove file from repo |
 | `deletedFolder` | Delete folder recursively | Remove all files in folder |
 | `copyFile` | Copy file within repo | Duplicate file (deduplication-aware) |
-
-**Response**:
-```json
-{
-  "commitUrl": "https://hub.example.com/repo/commit/abc123",
-  "commitOid": "abc123def456",
-  "pullRequestUrl": null
-}
-```
-
-**What Happens**:
-```
-1. Regular files:
-   ┌─────────┐
-   │ Decode  │ Base64 -> Binary
-   └────┬────┘
-        |
-        v
-   ┌─────────┐
-   │ Upload  │ To LakeFS
-   └────┬────┘
-        |
-        v
-   ┌─────────┐
-   │ Update  │ Database record
-   └─────────┘
-
-2. LFS files:
-   ┌─────────┐
-   │  Link   │ S3 physical address -> LakeFS
-   └────┬────┘
-        |
-        v
-   ┌─────────┐
-   │ Update  │ Database record
-   └─────────┘
-
-3. Commit:
-   ┌─────────┐
-   │ LakeFS  │ Create commit with all changes
-   └─────────┘
-```
 
 ## Download Workflow
 
@@ -390,216 +205,6 @@ sequenceDiagram
     Note over Client: No proxy - direct S3 download
 ```
 
-### Step 1: Get Metadata (HEAD)
-
-**Endpoint**: `HEAD /{repo_id}/resolve/{revision}/{filename}`
-
-**Response Headers**:
-```
-X-Repo-Commit: abc123def456
-X-Linked-Etag: "sha256:abc123..."
-X-Linked-Size: 52428800
-ETag: "abc123..."
-Content-Length: 52428800
-Location: https://s3.../presigned_download_url
-```
-
-**Purpose**: Client checks if file needs re-download (by comparing ETag)
-
-### Step 2: Download (GET)
-
-**Endpoint**: `GET /{repo_id}/resolve/{revision}/{filename}`
-
-**Response**: HTTP 302 Redirect
-
-```
-HTTP/1.1 302 Found
-Location: https://s3.example.com/presigned_url?expires=...
-X-Repo-Commit: abc123def456
-X-Linked-Etag: "sha256:abc123..."
-```
-
-**Flow**:
-```
-┌────────┐                ┌──────────┐
-│ Client │───── GET ─────>│  Kohaku  │
-└────────┘                │    Hub   │
-     ▲                    └─────┬────┘
-     │                          │
-     │   302 Redirect           │ Generate
-     │   (presigned URL)        │ presigned
-     │<─────────────────────────┘ URL
-     │
-     │    ┌──────────┐
-     └───>│    S3    │
-          │  Direct  │
-          │ Download │
-          └──────────┘
-```
-
-**Key Point**: Client downloads directly from S3. Kohaku Hub only provides the redirect URL.
-
-## Repository Privacy & Filtering
-
-KohakuHub respects repository privacy settings when listing repositories. The visibility of repositories depends on authentication:
-
-### Privacy Rules
-
-**For Unauthenticated Users:**
-- Can only see **public** repositories
-
-**For Authenticated Users:**
-- Can see all **public** repositories
-- Can see their **own private** repositories
-- Can see **private repositories** in organizations they belong to
-
-### List Repositories Endpoint
-
-**Pattern**: `/api/{type}s` where type is `model`, `dataset`, or `space`
-
-**Query Parameters:**
-- `author`: Filter by author/namespace (username or organization)
-- `limit`: Maximum results (default: 50, max: 1000)
-
-**Examples:**
-```bash
-# List all public models
-GET /api/models
-
-# List models by author (respects privacy)
-GET /api/models?author=my-org
-
-# Authenticated user sees their private repos too
-GET /api/models?author=my-org
-Authorization: Bearer YOUR_TOKEN
-```
-
-### List User's All Repositories
-
-**Endpoint**: `GET /api/users/{username}/repos`
-
-Returns all repositories for a user/organization, grouped by type.
-
-**Response:**
-```json
-{
-  "models": [
-    {"id": "user/model-1", "private": false, ...},
-    {"id": "user/model-2", "private": true, ...}
-  ],
-  "datasets": [
-    {"id": "user/dataset-1", "private": false, ...}
-  ],
-  "spaces": []
-}
-```
-
-**Note**: Private repositories are only included if:
-1. The requesting user is the owner, OR
-2. The requesting user is a member of the organization
-
-## Repository Management
-
-### Create Repository
-
-**Endpoint**: `POST /api/repos/create`
-
-**Request**:
-```json
-{
-  "type": "model",
-  "name": "my-model",
-  "organization": "my-org",
-  "private": false
-}
-```
-
-**What Happens**:
-```
-1. Check if exists
-   └─ Query DB for repo
-
-2. Create LakeFS repo
-   └─ Repository: hf-model-my-org-my-model
-   └─ Storage: s3://bucket/hf-model-my-org-my-model
-   └─ Default branch: main
-
-3. Record in DB
-   └─ INSERT INTO repository (...)
-```
-
-**Response**:
-```json
-{
-  "url": "https://hub.example.com/models/my-org/my-model",
-  "repo_id": "my-org/my-model"
-}
-```
-
-### List Repository Files
-
-**Endpoint**: `GET /api/{repo_type}s/{repo_id}/tree/{revision}/{path}`
-
-**Query Parameters**:
-- `recursive`: List all files recursively (default: false)
-- `expand`: Include LFS metadata (default: false)
-
-**Response**:
-```json
-[
-  {
-    "type": "file",
-    "oid": "abc123",
-    "size": 1024,
-    "path": "config.json"
-  },
-  {
-    "type": "file",
-    "oid": "def456",
-    "size": 52428800,
-    "path": "model.bin",
-    "lfs": {
-      "oid": "def456",
-      "size": 52428800,
-      "pointerSize": 134
-    }
-  },
-  {
-    "type": "directory",
-    "oid": "",
-    "size": 0,
-    "path": "configs"
-  }
-]
-```
-
-### Delete Repository
-
-**Endpoint**: `DELETE /api/repos/delete`
-
-**Request**:
-```json
-{
-  "type": "model",
-  "name": "my-model",
-  "organization": "my-org"
-}
-```
-
-**What Happens**:
-```
-1. Delete from LakeFS
-   └─ Remove repository metadata
-   └─ (Objects remain in S3 for safety)
-
-2. Delete from DB
-   ├─ DELETE FROM file WHERE repo_full_id = ...
-   ├─ DELETE FROM staging_upload WHERE repo_full_id = ...
-   └─ DELETE FROM repository WHERE full_id = ...
-
-3. Return success
-```
-
 ## Database Schema
 
 ```mermaid
@@ -608,16 +213,22 @@ erDiagram
     USER ||--o{ SESSION : has
     USER ||--o{ TOKEN : has
     USER ||--o{ SSHKEY : has
-    USER }o--o{ ORGANIZATION : member_of
-    ORGANIZATION ||--o{ REPOSITORY : owns
+    USER }o--o{ USER : member_of
+    USER ||--o{ REPOSITORY_LIKE : likes
+    USER ||--o{ DOWNLOAD_SESSION : downloads
     REPOSITORY ||--o{ FILE : contains
     REPOSITORY ||--o{ COMMIT : has
-    REPOSITORY ||--o{ STAGINGUPLOAD : has
-    COMMIT ||--o{ LFSOBJECTHISTORY : references
+    REPOSITORY ||--o{ STAGING_UPLOAD : has
+    REPOSITORY ||--o{ REPOSITORY_LIKE : liked_by
+    REPOSITORY ||--o{ DOWNLOAD_SESSION : tracked
+    REPOSITORY ||--o{ DAILY_REPO_STATS : has_stats
+    COMMIT ||--o{ LFS_OBJECT_HISTORY : references
 
     USER {
         int id PK
         string username UK
+        string normalized_name UK
+        boolean is_org
         string email UK
         string password_hash
         boolean email_verified
@@ -626,6 +237,10 @@ erDiagram
         bigint public_quota_bytes
         bigint private_used_bytes
         bigint public_used_bytes
+        string full_name
+        text bio
+        blob avatar
+        datetime avatar_updated_at
         datetime created_at
     }
 
@@ -637,16 +252,25 @@ erDiagram
         string full_id
         boolean private
         int owner_id FK
+        bigint quota_bytes
+        bigint used_bytes
+        int lfs_threshold_bytes
+        int lfs_keep_versions
+        text lfs_suffix_rules
+        int downloads
+        int likes_count
         datetime created_at
     }
 
     FILE {
         int id PK
-        string repo_full_id
+        int repository_id FK
         string path_in_repo
         int size
         string sha256
         boolean lfs
+        boolean is_deleted
+        int owner_id FK
         datetime created_at
         datetime updated_at
     }
@@ -654,24 +278,14 @@ erDiagram
     COMMIT {
         int id PK
         string commit_id
-        string repo_full_id
+        int repository_id FK
         string repo_type
         string branch
-        int user_id FK
+        int author_id FK
+        int owner_id FK
         string username
         text message
         text description
-        datetime created_at
-    }
-
-    ORGANIZATION {
-        int id PK
-        string name UK
-        text description
-        bigint private_quota_bytes
-        bigint public_quota_bytes
-        bigint private_used_bytes
-        bigint public_used_bytes
         datetime created_at
     }
 
@@ -704,9 +318,9 @@ erDiagram
         datetime created_at
     }
 
-    STAGINGUPLOAD {
+    STAGING_UPLOAD {
         int id PK
-        string repo_full_id
+        int repository_id FK
         string repo_type
         string revision
         string path_in_repo
@@ -715,122 +329,50 @@ erDiagram
         string upload_id
         string storage_key
         boolean lfs
+        int uploader_id FK
         datetime created_at
     }
 
-    LFSOBJECTHISTORY {
+    LFS_OBJECT_HISTORY {
         int id PK
-        string repo_full_id
+        int repository_id FK
         string path_in_repo
         string sha256
         int size
         string commit_id
+        int file_id FK
         datetime created_at
     }
-```
 
-### Key Tables
+    REPOSITORY_LIKE {
+        int id PK
+        int repository_id FK
+        int user_id FK
+        datetime created_at
+    }
 
-**Repository Table** - Stores repository metadata:
-- Unique constraint on `(repo_type, namespace, name)`
-- Allows same `full_id` across different `repo_type`
-- Example: `model:myorg/mymodel`, `dataset:myorg/mymodel`
+    DOWNLOAD_SESSION {
+        int id PK
+        int repository_id FK
+        int user_id FK
+        string session_id
+        int time_bucket
+        int file_count
+        string first_file
+        datetime first_download_at
+        datetime last_download_at
+    }
 
-**File Table** - Deduplication and metadata:
-- Unique constraint on `(repo_full_id, path_in_repo)`
-- `sha256` indexed for fast deduplication lookups
-- `lfs` flag indicates if file uses LFS storage
-
-**Commit Table** - User commit tracking:
-- `commit_id` is LakeFS commit SHA
-- Indexed by `(repo_full_id, branch)` for fast queries
-- Denormalized `username` for performance
-
-**LFSObjectHistory Table** - LFS garbage collection:
-- Tracks which commits reference which LFS objects
-- Enables preserving K versions of each file (default: 5)
-- Used for auto-cleanup of old LFS objects
-
-**StagingUpload Table** - Multipart upload tracking:
-- Tracks ongoing multipart uploads
-- Enables upload resume
-- Cleans up failed uploads
-
-## LakeFS Integration
-
-### Repository Naming Convention
-
-```
-Pattern: {namespace}-{repo_type}-{org}-{name}
-
-Examples:
-  HuggingFace repo: "myorg/mymodel"
-  LakeFS repo:      "hf-model-myorg-mymodel"
-  
-  HuggingFace repo: "johndoe/dataset"
-  LakeFS repo:      "hf-dataset-johndoe-dataset"
-```
-
-### Implementation Notes
-
-**Database Operations:**
-- **Synchronous:** Uses Peewee ORM with synchronous operations
-- **Transactions:** `db.atomic()` ensures ACID compliance across concurrent workers
-- **Multi-Worker Safe:** Designed for horizontal scaling (4-8 workers recommended)
-- **Future:** Migration to peewee-async planned for improved concurrency
-
-**LakeFS Operations:**
-- **Pure Async:** All operations use REST API via httpx (no thread pools!)
-- **No Deprecated Library:** Uses direct REST API instead of lakefs-client
-
-### Key Operations
-
-**All LakeFS operations use pure async REST API via httpx (no thread pools!):**
-
-| Operation | LakeFS REST Endpoint | KohakuHub Method | Purpose |
-|-----------|---------------------|------------------|---------|
-| Create Repo | `POST /repositories` | `create_repository()` | Initialize new repository |
-| Upload Small File | `POST /repositories/{repo}/branches/{branch}/objects` | `upload_object()` | Direct content upload |
-| Link LFS File | `PUT /repositories/{repo}/branches/{branch}/staging/backing` | `link_physical_address()` | Link S3 object to LakeFS |
-| Commit | `POST /repositories/{repo}/branches/{branch}/commits` | `commit()` | Create atomic commit |
-| List Files | `GET /repositories/{repo}/refs/{ref}/objects/ls` | `list_objects()` | Browse repository |
-| Get File Info | `GET /repositories/{repo}/refs/{ref}/objects/stat` | `stat_object()` | Get file metadata |
-| Get File Content | `GET /repositories/{repo}/refs/{ref}/objects` | `get_object()` | Download file |
-| Delete File | `DELETE /repositories/{repo}/branches/{branch}/objects` | `delete_object()` | Remove file |
-| Create Branch | `POST /repositories/{repo}/branches` | `create_branch()` | Create new branch |
-| Delete Branch | `DELETE /repositories/{repo}/branches/{branch}` | `delete_branch()` | Delete branch |
-| Create Tag | `POST /repositories/{repo}/tags` | `create_tag()` | Create tag |
-| Delete Tag | `DELETE /repositories/{repo}/tags/{tag}` | `delete_tag()` | Delete tag |
-| Revert | `POST /repositories/{repo}/branches/{branch}/revert` | `revert_branch()` | Revert commit |
-| Merge | `POST /repositories/{repo}/refs/{source}/merge/{dest}` | `merge_into_branch()` | Merge branches |
-| Hard Reset | `PUT /repositories/{repo}/branches/{branch}/hard_reset` | `hard_reset_branch()` | Reset branch to commit |
-
-### Physical Address Linking
-
-```
-When uploading LFS file:
-
-1. Client uploads to S3:
-   s3://bucket/lfs/ab/cd/abcd1234...
-
-2. Kohaku Hub links to LakeFS:
-   ┌──────────────────────────────────┐
-   │ StagingMetadata                  │
-   ├──────────────────────────────────┤
-   │ physical_address:                │
-   │   "s3://bucket/lfs/ab/cd/abc..." │
-   │ checksum: "sha256:abc..."        │
-   │ size_bytes: 52428800             │
-   └──────────────────────────────────┘
-              │
-              ▼
-   ┌──────────────────────────────────┐
-   │ LakeFS: model.bin                │
-   │ → Points to S3 object            │
-   └──────────────────────────────────┘
-
-3. On commit:
-   LakeFS records this link in its metadata
+    DAILY_REPO_STATS {
+        int id PK
+        int repository_id FK
+        date date
+        int download_sessions
+        int authenticated_downloads
+        int anonymous_downloads
+        int total_files
+        datetime created_at
+    }
 ```
 
 ## API Endpoint Summary
@@ -886,9 +428,77 @@ When uploading LFS file:
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/users/{username}/settings` | PUT | ✓ | Update user settings |
-| `/organizations/{org_name}/settings` | PUT | ✓ | Update organization settings |
-| `/{type}s/{namespace}/{name}/settings` | PUT | ✓ | Update repository settings (private, gated) |
+| `/api/users/{username}/settings` | PUT | ✓ | Update user settings |
+| `/api/organizations/{org_name}/settings` | PUT | ✓ | Update organization settings |
+| `/{type}s/{namespace}/{name}/settings` | PUT | ✓ | Update repository settings (private, gated, LFS settings) |
+| `/api/{type}s/{namespace}/{name}/lfs/settings` | GET | ○ | Get repository LFS settings |
+
+### Social Features
+
+**Likes:**
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/{type}s/{namespace}/{name}/like` | POST | ✓ | Like a repository |
+| `/api/{type}s/{namespace}/{name}/like` | DELETE | ✓ | Unlike a repository |
+| `/api/{type}s/{namespace}/{name}/like` | GET | ○ | Check if current user liked repository |
+| `/api/{type}s/{namespace}/{name}/likers` | GET | ○ | List users who liked repository |
+| `/api/users/{username}/likes` | GET | ○ | List repositories user has liked |
+
+**Statistics & Trending:**
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/{type}s/{namespace}/{name}/stats` | GET | ○ | Get repository statistics (downloads, likes) |
+| `/api/{type}s/{namespace}/{name}/stats/recent` | GET | ○ | Get recent download statistics (time series) |
+| `/api/trending` | GET | ○ | Get trending repositories |
+
+**Avatars:**
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/users/{username}/avatar` | POST | ✓ | Upload user avatar |
+| `/api/users/{username}/avatar` | GET | ○ | Get user avatar image |
+| `/api/users/{username}/avatar` | DELETE | ✓ | Delete user avatar |
+| `/api/organizations/{org_name}/avatar` | POST | ✓ | Upload organization avatar |
+| `/api/organizations/{org_name}/avatar` | GET | ○ | Get organization avatar image |
+| `/api/organizations/{org_name}/avatar` | DELETE | ✓ | Delete organization avatar |
+
+### Quota Management
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/quota/{namespace}` | GET | ✓ | Get namespace quota information |
+| `/api/quota/{namespace}` | PUT | ✓ | Set namespace quota |
+| `/api/quota/{namespace}/recalculate` | POST | ✓ | Recalculate namespace storage usage |
+| `/api/quota/{namespace}/public` | GET | ○ | Get public quota info (permission-based) |
+| `/api/quota/{namespace}/repos` | GET | ✓ | List namespace repositories with storage breakdown |
+| `/api/quota/repo/{type}/{namespace}/{name}` | GET | ○ | Get repository quota information |
+| `/api/quota/repo/{type}/{namespace}/{name}` | PUT | ✓ | Set repository quota |
+| `/api/quota/repo/{type}/{namespace}/{name}/recalculate` | POST | ✓ | Recalculate repository storage |
+
+### Invitations
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/invitations/org/{org_name}/create` | POST | ✓ | Create organization invitation |
+| `/api/invitations/{token}` | GET | ✗ | Get invitation details |
+| `/api/invitations/{token}/accept` | POST | ✓ | Accept invitation |
+| `/api/invitations/{token}` | DELETE | ✓ | Delete/cancel invitation |
+| `/api/invitations/org/{org_name}/list` | GET | ✓ | List organization invitations |
+
+### SSH Keys
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/user/keys` | GET | ✓ | List user's SSH keys |
+| `/api/user/keys` | POST | ✓ | Add new SSH key |
+| `/api/user/keys/{key_id}` | GET | ✓ | Get SSH key details |
+| `/api/user/keys/{key_id}` | DELETE | ✓ | Delete SSH key |
+
+### Validation
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/validate/check-name` | POST | ✗ | Check if username/org/repo name is available |
+| `/api/validate-yaml` | POST | ✗ | Validate YAML content |
 
 ### Authentication Operations
 
@@ -915,11 +525,19 @@ When uploading LFS file:
 | `/org/{org_name}/members/{username}` | PUT | ✓ | Update member role |
 | `/org/users/{username}/orgs` | GET | ✗ | List user's organizations |
 
+### Git Operations
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/{namespace}/{name}.git/info/refs` | GET | ○ | Git service advertisement |
+| `/{namespace}/{name}.git/HEAD` | GET | ○ | Get HEAD reference |
+| `/{namespace}/{name}.git/git-upload-pack` | POST | ○ | Clone/fetch/pull |
+| `/{namespace}/{name}.git/git-receive-pack` | POST | ✓ | Push (in development) |
+
 ### Utility Operations
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/api/validate-yaml` | POST | ✗ | Validate YAML content |
 | `/api/whoami-v2` | GET | ✓ | Get detailed current user info |
 | `/api/version` | GET | ✗ | Get API version information |
 | `/health` | GET | ✗ | Health check |
@@ -932,345 +550,386 @@ When uploading LFS file:
 
 ---
 
-## Detailed Endpoint Documentation
+## New Features Documentation
 
-### Commit History API
+### Repository Likes
 
-The commit history API allows you to retrieve the commit log for a specific branch in a repository.
-
-**Endpoint**: `GET /{repo_type}s/{namespace}/{name}/commits/{branch}`
-
-**Query Parameters**:
-- `page`: Page number for pagination (default: 1)
-- `limit`: Number of commits per page (default: 20)
-
-**Example Request**:
+**Like a repository:**
 ```bash
-GET /models/myorg/mymodel/commits/main?page=1&limit=20
+POST /api/models/org/model/like
+Authorization: Bearer YOUR_TOKEN
 ```
 
-**Response**:
+**Response:**
 ```json
 {
-  "commits": [
+  "success": true,
+  "message": "Repository liked successfully",
+  "likes_count": 42
+}
+```
+
+**Check if liked:**
+```bash
+GET /api/models/org/model/like
+```
+
+**Response:**
+```json
+{
+  "liked": true
+}
+```
+
+**List likers:**
+```bash
+GET /api/models/org/model/likers?limit=50
+```
+
+**Response:**
+```json
+{
+  "likers": [
     {
-      "id": "abc123def456",
-      "message": "Update model config",
-      "author": "john@example.com",
-      "committer": "john@example.com",
-      "createdAt": "2025-10-05T12:00:00Z",
-      "parents": ["parent123"]
+      "username": "alice",
+      "full_name": "Alice Developer"
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 150,
-    "hasMore": true
-  }
+  "total": 42
 }
 ```
 
-### Branch and Tag Management
+### Statistics and Trending
 
-#### Create Branch
+**Get repository stats:**
+```bash
+GET /api/models/org/model/stats
+```
 
-**Endpoint**: `POST /{repo_type}s/{namespace}/{name}/branch`
-
-**Request**:
+**Response:**
 ```json
 {
-  "branch": "feature-branch",
-  "startPoint": "main"
+  "downloads": 1234,
+  "likes": 42
 }
 ```
 
-**Response**:
-```json
-{
-  "success": true,
-  "branch": "feature-branch",
-  "ref": "refs/heads/feature-branch"
-}
+**Get recent statistics (time series):**
+```bash
+GET /api/models/org/model/stats/recent?days=30
 ```
 
-#### Delete Branch
-
-**Endpoint**: `DELETE /{repo_type}s/{namespace}/{name}/branch/{branch}`
-
-**Example**: `DELETE /models/myorg/mymodel/branch/feature-branch`
-
-**Response**:
+**Response:**
 ```json
 {
-  "success": true,
-  "deleted": "feature-branch"
-}
-```
-
-**Note**: Cannot delete the default branch (usually `main`).
-
-#### Create Tag
-
-**Endpoint**: `POST /{repo_type}s/{namespace}/{name}/tag`
-
-**Request**:
-```json
-{
-  "tag": "v1.0.0",
-  "ref": "main",
-  "message": "Release version 1.0.0"
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "tag": "v1.0.0",
-  "ref": "refs/tags/v1.0.0"
-}
-```
-
-#### Delete Tag
-
-**Endpoint**: `DELETE /{repo_type}s/{namespace}/{name}/tag/{tag}`
-
-**Example**: `DELETE /models/myorg/mymodel/tag/v1.0.0`
-
-**Response**:
-```json
-{
-  "success": true,
-  "deleted": "v1.0.0"
-}
-```
-
-### Settings Management
-
-#### Update User Settings
-
-**Endpoint**: `PUT /users/{username}/settings`
-
-**Request**:
-```json
-{
-  "email": "newemail@example.com",
-  "displayName": "John Doe",
-  "bio": "ML Engineer",
-  "website": "https://example.com"
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "user": {
-    "username": "johndoe",
-    "email": "newemail@example.com",
-    "displayName": "John Doe"
-  }
-}
-```
-
-#### Update Organization Settings
-
-**Endpoint**: `PUT /organizations/{org_name}/settings`
-
-**Request**:
-```json
-{
-  "displayName": "My Organization",
-  "description": "Building amazing ML models",
-  "website": "https://example.com",
-  "avatar": "https://cdn.example.com/avatar.png"
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "organization": {
-    "name": "my-org",
-    "displayName": "My Organization",
-    "description": "Building amazing ML models"
-  }
-}
-```
-
-#### Update Repository Settings
-
-**Endpoint**: `PUT /{repo_type}s/{namespace}/{name}/settings`
-
-**Request**:
-```json
-{
-  "private": true,
-  "gated": false,
-  "description": "A state-of-the-art language model",
-  "tags": ["nlp", "transformers", "llm"]
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "repository": {
-    "id": "myorg/mymodel",
-    "private": true,
-    "gated": false,
-    "description": "A state-of-the-art language model"
-  }
-}
-```
-
-**Privacy Options**:
-- `private: false` - Public repository, visible to everyone
-- `private: true` - Private repository, only visible to owner and organization members
-- `gated: true` - Requires explicit permission to access (for controlled releases)
-
-#### Move/Rename Repository
-
-**Endpoint**: `POST /api/repos/move`
-
-**Request**:
-```json
-{
-  "fromRepo": {
-    "type": "model",
-    "namespace": "oldorg",
-    "name": "oldname"
-  },
-  "toRepo": {
-    "type": "model",
-    "namespace": "neworg",
-    "name": "newname"
-  }
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "url": "https://hub.example.com/models/neworg/newname",
-  "message": "Repository moved successfully"
-}
-```
-
-**What Happens**:
-1. Validates that source repository exists and user has permission
-2. Checks that destination doesn't already exist
-3. Updates LakeFS repository name
-4. Updates all database records
-5. Creates redirect from old URL to new URL
-
-**Note**: This operation is atomic - either everything succeeds or everything rolls back.
-
-### Version and Utility Endpoints
-
-#### Get API Version
-
-**Endpoint**: `GET /api/version`
-
-**Response**:
-```json
-{
-  "version": "1.0.0",
-  "apiVersion": "v1",
-  "lfsVersion": "2.0",
-  "features": {
-    "lfs": true,
-    "multipart": true,
-    "deduplication": true,
-    "organizations": true
-  },
-  "limits": {
-    "maxFileSize": 107374182400,
-    "lfsThreshold": 10485760
-  }
-}
-```
-
-#### Validate YAML
-
-**Endpoint**: `POST /api/validate-yaml`
-
-**Request**:
-```json
-{
-  "content": "model:\n  name: gpt-2\n  version: 1.0"
-}
-```
-
-**Response** (if valid):
-```json
-{
-  "valid": true,
-  "parsed": {
-    "model": {
-      "name": "gpt-2",
-      "version": "1.0"
-    }
-  }
-}
-```
-
-**Response** (if invalid):
-```json
-{
-  "valid": false,
-  "error": "Invalid YAML syntax at line 2: unexpected character",
-  "line": 2,
-  "column": 10
-}
-```
-
-**Use Case**: Validate README.md frontmatter, model card YAML, or configuration files before upload.
-
-#### Get Detailed User Info (whoami-v2)
-
-**Endpoint**: `GET /api/whoami-v2`
-
-**Response**:
-```json
-{
-  "type": "user",
-  "id": "12345",
-  "name": "johndoe",
-  "fullname": "John Doe",
-  "email": "john@example.com",
-  "emailVerified": true,
-  "canPay": true,
-  "isPro": false,
-  "periodEnd": null,
-  "avatarUrl": "https://cdn.example.com/avatars/johndoe.png",
-  "orgs": [
+  "stats": [
     {
-      "name": "my-org",
-      "fullname": "My Organization",
-      "email": "contact@my-org.com",
-      "avatarUrl": "https://cdn.example.com/orgs/my-org.png",
-      "roleInOrg": "admin"
+      "date": "2025-01-15",
+      "downloads": 45,
+      "authenticated": 30,
+      "anonymous": 15,
+      "files": 120
     }
   ],
-  "auth": {
-    "accessToken": {
-      "displayName": "API Token",
-      "role": "write"
-    }
+  "period": {
+    "start": "2024-12-16",
+    "end": "2025-01-15",
+    "days": 30
   }
 }
 ```
 
-**Compared to `/api/auth/me`**: This endpoint provides more detailed information including:
-- Organization memberships with roles
-- Token information
-- Subscription/payment status
-- Email verification status
+**Get trending repositories:**
+```bash
+GET /api/trending?repo_type=model&days=7&limit=20
+```
+
+**Response:**
+```json
+{
+  "trending": [
+    {
+      "id": "org/hot-model",
+      "type": "model",
+      "downloads": 5000,
+      "likes": 200,
+      "recent_downloads": 1500,
+      "private": false
+    }
+  ],
+  "period": {
+    "start": "2025-01-08",
+    "end": "2025-01-15",
+    "days": 7
+  }
+}
+```
+
+### Avatar Management
+
+**Upload avatar:**
+```bash
+POST /api/users/alice/avatar
+Authorization: Bearer YOUR_TOKEN
+Content-Type: multipart/form-data
+
+file: [image binary data]
+```
+
+**Features:**
+- Accepts JPEG, PNG, WebP, GIF
+- Maximum input size: 10MB
+- Automatically resizes to fit 1024x1024
+- Center crops to square
+- Converts to JPEG format
+- Output quality: 95%
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Avatar uploaded successfully",
+  "size_bytes": 245678
+}
+```
+
+**Get avatar:**
+```bash
+GET /api/users/alice/avatar
+```
+
+Returns JPEG image with cache headers.
+
+### Quota Management
+
+**Get quota information:**
+```bash
+GET /api/quota/alice
+Authorization: Bearer YOUR_TOKEN
+```
+
+**Response:**
+```json
+{
+  "namespace": "alice",
+  "is_organization": false,
+  "quota_bytes": 10737418240,
+  "used_bytes": 1234567890,
+  "available_bytes": 9502850350,
+  "percentage_used": 11.5
+}
+```
+
+**Set quota:**
+```bash
+PUT /api/quota/alice
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+
+{
+  "quota_bytes": 10737418240
+}
+```
+
+**Repository-specific quota:**
+```bash
+GET /api/quota/repo/model/org/my-model
+```
+
+**Response:**
+```json
+{
+  "repo_id": "org/my-model",
+  "repo_type": "model",
+  "namespace": "org",
+  "quota_bytes": 1073741824,
+  "used_bytes": 524288000,
+  "available_bytes": 549453824,
+  "percentage_used": 48.8,
+  "effective_quota_bytes": 1073741824,
+  "namespace_quota_bytes": 10737418240,
+  "namespace_used_bytes": 5368709120,
+  "namespace_available_bytes": 5368709120,
+  "is_inheriting": false
+}
+```
+
+**Storage breakdown for namespace:**
+```bash
+GET /api/quota/org/repos
+Authorization: Bearer YOUR_TOKEN
+```
+
+**Response:**
+```json
+{
+  "namespace": "org",
+  "is_organization": true,
+  "total_repos": 15,
+  "repositories": [
+    {
+      "repo_id": "org/large-model",
+      "repo_type": "model",
+      "name": "large-model",
+      "private": false,
+      "quota_bytes": null,
+      "used_bytes": 5368709120,
+      "percentage_used": 50.0,
+      "is_inheriting": true,
+      "created_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Invitations
+
+**Create organization invitation:**
+```bash
+POST /api/invitations/org/my-org/create
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "role": "member",
+  "max_usage": null,
+  "expires_days": 7
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "token": "abc123...",
+  "invitation_link": "http://hub.example.com/invite/abc123...",
+  "expires_at": "2025-01-22T12:00:00Z",
+  "max_usage": null,
+  "is_reusable": false
+}
+```
+
+**Reusable invitation (10 uses):**
+```json
+{
+  "role": "member",
+  "max_usage": 10,
+  "expires_days": 30
+}
+```
+
+**Accept invitation:**
+```bash
+POST /api/invitations/{token}/accept
+Authorization: Bearer YOUR_TOKEN
+```
+
+### SSH Keys
+
+**Add SSH key:**
+```bash
+POST /api/user/keys
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+
+{
+  "title": "My Laptop",
+  "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB... user@host"
+}
+```
+
+**Response:**
+```json
+{
+  "id": 42,
+  "title": "My Laptop",
+  "key_type": "ssh-ed25519",
+  "fingerprint": "SHA256:abc123...",
+  "created_at": "2025-01-15T12:00:00.000000Z",
+  "last_used": null
+}
+```
+
+**Supported key types:**
+- `ssh-rsa`
+- `ssh-dss`
+- `ecdsa-sha2-nistp256`
+- `ecdsa-sha2-nistp384`
+- `ecdsa-sha2-nistp521`
+- `ssh-ed25519`
+
+### Name Validation
+
+**Check if name is available:**
+```bash
+POST /api/validate/check-name
+Content-Type: application/json
+
+{
+  "name": "my-new-repo",
+  "namespace": "org",
+  "type": "model"
+}
+```
+
+**Response (available):**
+```json
+{
+  "available": true,
+  "normalized_name": "my_new_repo",
+  "conflict_with": null,
+  "message": "Repository name is available"
+}
+```
+
+**Response (conflict):**
+```json
+{
+  "available": false,
+  "normalized_name": "my_new_repo",
+  "conflict_with": "org/My-New-Repo",
+  "message": "Repository name conflicts with existing repository: My-New-Repo (case-insensitive)"
+}
+```
+
+### LFS Settings
+
+**Get repository LFS settings:**
+```bash
+GET /api/models/org/model/lfs/settings
+```
+
+**Response:**
+```json
+{
+  "lfs_threshold_bytes": 5000000,
+  "lfs_threshold_bytes_effective": 5000000,
+  "lfs_threshold_bytes_source": "repository",
+  "lfs_keep_versions": 10,
+  "lfs_keep_versions_effective": 10,
+  "lfs_keep_versions_source": "repository",
+  "lfs_suffix_rules": [".safetensors", ".bin"],
+  "lfs_suffix_rules_effective": [".safetensors", ".bin"],
+  "server_defaults": {
+    "lfs_threshold_bytes": 10000000,
+    "lfs_keep_versions": 5
+  }
+}
+```
+
+**Update repository settings with LFS:**
+```bash
+PUT /models/org/model/settings
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+
+{
+  "lfs_threshold_bytes": 5000000,
+  "lfs_keep_versions": 10,
+  "lfs_suffix_rules": [".safetensors", ".bin", ".gguf"]
+}
+```
 
 ## Content Deduplication
 
@@ -1298,12 +957,6 @@ Benefits:
   - Efficient for model variants
 ```
 
-**Deduplication Points**:
-
-1. **Preupload Check**: Query DB by SHA256
-2. **LFS Batch API**: Check if OID exists
-3. **Commit**: Link existing S3 object instead of uploading
-
 ## Error Handling
 
 Kohaku Hub uses HuggingFace-compatible error headers:
@@ -1330,31 +983,19 @@ These error codes are parsed by `huggingface_hub` client to raise appropriate Py
 
 ## Performance Considerations
 
-### Upload Performance
+### Download Tracking
 
-```
-Small Files (≤10MB):
-  Client → FastAPI → LakeFS → S3
-  (Proxied through server)
+KohakuHub implements smart download tracking:
 
-Large Files (>10MB):
-  Client ─────────────────────→ S3
-  (Direct upload, no proxy)
-         ↓
-  Kohaku Hub (only metadata link)
-```
+**Session Deduplication:**
+- Downloads are grouped into 15-minute sessions
+- Multiple files downloaded in the same session count as 1 download
+- Uses session ID + time bucket for deduplication
 
-**Why this matters**: Large files bypass the application server entirely, allowing unlimited throughput limited only by client and S3 bandwidth.
-
-### Download Performance
-
-```
-All Downloads:
-  Client → Kohaku Hub → 302 Redirect → S3
-                         (metadata)    (direct)
-```
-
-**Why this matters**: After initial redirect, all data transfer is direct from S3/CDN. Server only generates presigned URLs.
+**Benefits:**
+- Accurate download counts (git clone = 1 download, not N file downloads)
+- Trending calculations based on unique sessions
+- Efficient storage (one record per session)
 
 ### Recommended S3 Providers
 
