@@ -478,7 +478,44 @@ onMounted(() => {
 }
 
 code {
-  font-family: monospace;
-  font-size: 0.9em;
+  font-family: "SF Mono", "Monaco", "Consolas", monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+:deep(.el-card) {
+  background-color: var(--bg-card);
+  border-color: var(--border-default);
+  border-radius: 12px;
+}
+
+:deep(.el-table) {
+  background-color: var(--bg-card);
+}
+
+:deep(.el-table th) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:deep(.el-table td) {
+  color: var(--text-primary);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: var(--bg-hover) !important;
+}
+
+:deep(.text-gray-500) {
+  color: var(--text-secondary);
+}
+
+:deep(.text-green-600) {
+  color: var(--color-success);
+  font-weight: 600;
 }
 </style>

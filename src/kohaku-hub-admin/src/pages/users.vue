@@ -22,6 +22,10 @@ const dialogVisible = ref(false);
 const userDialogVisible = ref(false);
 const selectedUser = ref(null);
 
+// Search
+const searchQuery = ref("");
+const searchDebounceTimer = ref(null);
+
 // Pagination
 const currentPage = ref(1);
 const pageSize = ref(20);
@@ -98,6 +102,7 @@ async function loadUsers() {
   loading.value = true;
   try {
     const response = await listUsers(adminStore.token, {
+      search: searchQuery.value || undefined,
       limit: pageSize.value,
       offset: (currentPage.value - 1) * pageSize.value,
     });
@@ -116,6 +121,24 @@ async function loadUsers() {
   } finally {
     loading.value = false;
   }
+}
+
+function handleSearchInput() {
+  // Clear existing timer
+  if (searchDebounceTimer.value) {
+    clearTimeout(searchDebounceTimer.value);
+  }
+
+  // Set new timer - wait 500ms after last input before searching
+  searchDebounceTimer.value = setTimeout(() => {
+    currentPage.value = 1; // Reset to first page when searching
+    loadUsers();
+  }, 500);
+}
+
+function clearSearch() {
+  searchQuery.value = "";
+  loadUsers();
 }
 
 async function handleViewUser(row) {
@@ -276,6 +299,27 @@ onMounted(() => {
           Create User
         </el-button>
       </div>
+
+      <!-- Search Bar -->
+      <el-card class="mb-4">
+        <div class="flex gap-4 items-center">
+          <el-input
+            v-model="searchQuery"
+            placeholder="Search users by username or email..."
+            clearable
+            @input="handleSearchInput"
+            @clear="clearSearch"
+            style="max-width: 500px"
+          >
+            <template #prefix>
+              <div class="i-carbon-search text-gray-400" />
+            </template>
+          </el-input>
+          <span v-if="searchQuery" class="text-sm text-gray-500">
+            Searching for: "{{ searchQuery }}"
+          </span>
+        </div>
+      </el-card>
 
       <!-- Users Table -->
       <el-card>
@@ -550,6 +594,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.page-container {
+  padding: 24px;
+}
+
 .user-details {
   padding: 12px 0;
 }
@@ -558,15 +606,56 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  line-height: 1.4;
+  line-height: 1.5;
+  gap: 2px;
+}
+
+.storage-cell span:first-child {
+  font-weight: 600;
+  font-family: "SF Mono", "Monaco", "Consolas", monospace;
 }
 
 .text-danger {
-  color: #f56c6c;
-  font-weight: 600;
+  color: var(--color-error) !important;
+  font-weight: 700;
 }
 
 .text-gray-400 {
-  color: #909399;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Search bar styling */
+:deep(.el-card) {
+  background-color: var(--bg-card);
+  border-color: var(--border-default);
+}
+
+:deep(.el-input__wrapper) {
+  background-color: var(--bg-hover);
+  border-color: var(--border-default);
+  transition: all 0.2s ease;
+}
+
+:deep(.el-input__wrapper:hover) {
+  border-color: var(--color-info);
+}
+
+:deep(.el-table) {
+  background-color: var(--bg-card);
+}
+
+:deep(.el-table th) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:deep(.el-table td) {
+  color: var(--text-primary);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: var(--bg-hover) !important;
 }
 </style>

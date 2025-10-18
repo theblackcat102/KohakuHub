@@ -3,8 +3,14 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import AdminLayout from "@/components/AdminLayout.vue";
 import StatsCard from "@/components/StatsCard.vue";
+import ChartCard from "@/components/ChartCard.vue";
 import { useAdminStore } from "@/stores/admin";
-import { getDetailedStats, getTopRepositories } from "@/utils/api";
+import {
+  getDetailedStats,
+  getTopRepositories,
+  getTimeseriesStats,
+  getQuotaOverview,
+} from "@/utils/api";
 import { formatBytes } from "@/utils/api";
 import { ElMessage } from "element-plus";
 
@@ -13,6 +19,9 @@ const adminStore = useAdminStore();
 const stats = ref(null);
 const topRepos = ref([]);
 const loading = ref(false);
+const timeseriesData = ref(null);
+const chartDays = ref(30);
+const quotaOverview = ref(null);
 
 const hasData = computed(() => stats.value !== null);
 
@@ -24,13 +33,18 @@ async function loadStats() {
 
   loading.value = true;
   try {
-    stats.value = await getDetailedStats(adminStore.token);
-    const topReposData = await getTopRepositories(
-      adminStore.token,
-      5,
-      "commits",
-    );
+    const [statsData, topReposData, timeseriesResult, quotaData] =
+      await Promise.all([
+        getDetailedStats(adminStore.token),
+        getTopRepositories(adminStore.token, 5, "commits"),
+        getTimeseriesStats(adminStore.token, chartDays.value),
+        getQuotaOverview(adminStore.token),
+      ]);
+
+    stats.value = statsData;
     topRepos.value = topReposData.top_repositories;
+    timeseriesData.value = timeseriesResult;
+    quotaOverview.value = quotaData;
   } catch (error) {
     console.error("Failed to load stats:", error);
     if (error.response?.status === 401 || error.response?.status === 403) {
@@ -46,6 +60,93 @@ async function loadStats() {
     loading.value = false;
   }
 }
+
+// Computed chart data for user growth
+const userGrowthChart = computed(() => {
+  if (!timeseriesData.value) return null;
+
+  const dates = Object.keys(timeseriesData.value.users_by_day).sort();
+  const values = dates.map((date) => timeseriesData.value.users_by_day[date]);
+
+  return {
+    labels: dates,
+    datasets: [
+      {
+        label: "New Users",
+        data: values,
+        borderColor: "#409EFF",
+        backgroundColor: "rgba(64, 158, 255, 0.1)",
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
+});
+
+// Computed chart data for repository growth
+const repoGrowthChart = computed(() => {
+  if (!timeseriesData.value) return null;
+
+  const dates = Object.keys(timeseriesData.value.repositories_by_day).sort();
+  const modelData = dates.map(
+    (date) => timeseriesData.value.repositories_by_day[date]?.model || 0,
+  );
+  const datasetData = dates.map(
+    (date) => timeseriesData.value.repositories_by_day[date]?.dataset || 0,
+  );
+  const spaceData = dates.map(
+    (date) => timeseriesData.value.repositories_by_day[date]?.space || 0,
+  );
+
+  return {
+    labels: dates,
+    datasets: [
+      {
+        label: "Models",
+        data: modelData,
+        borderColor: "#409EFF",
+        backgroundColor: "rgba(64, 158, 255, 0.1)",
+        fill: true,
+      },
+      {
+        label: "Datasets",
+        data: datasetData,
+        borderColor: "#67C23A",
+        backgroundColor: "rgba(103, 194, 58, 0.1)",
+        fill: true,
+      },
+      {
+        label: "Spaces",
+        data: spaceData,
+        borderColor: "#E6A23C",
+        backgroundColor: "rgba(230, 162, 60, 0.1)",
+        fill: true,
+      },
+    ],
+  };
+});
+
+// Computed chart data for commit activity
+const commitActivityChart = computed(() => {
+  if (!timeseriesData.value) return null;
+
+  const dates = Object.keys(timeseriesData.value.commits_by_day).sort();
+  const values = dates.map((date) => timeseriesData.value.commits_by_day[date]);
+
+  return {
+    labels: dates,
+    datasets: [
+      {
+        label: "Commits",
+        data: values,
+        borderColor: "#F56C6C",
+        backgroundColor: "rgba(245, 108, 108, 0.1)",
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
+});
 
 function getRepoTypeColor(type) {
   switch (type) {
@@ -119,6 +220,146 @@ onMounted(() => {
           color="pink"
         />
       </div>
+
+      <!-- Activity Charts -->
+      <div v-if="timeseriesData" class="charts-grid mb-6">
+        <ChartCard
+          v-if="userGrowthChart"
+          title="User Growth (Last 30 Days)"
+          :labels="userGrowthChart.labels"
+          :datasets="userGrowthChart.datasets"
+          :height="220"
+        />
+
+        <ChartCard
+          v-if="repoGrowthChart"
+          title="Repository Creation (Last 30 Days)"
+          :labels="repoGrowthChart.labels"
+          :datasets="repoGrowthChart.datasets"
+          :height="220"
+        />
+
+        <ChartCard
+          v-if="commitActivityChart"
+          title="Commit Activity (Last 30 Days)"
+          :labels="commitActivityChart.labels"
+          :datasets="commitActivityChart.datasets"
+          :height="220"
+        />
+      </div>
+
+      <!-- Quota Warnings -->
+      <el-card
+        v-if="
+          quotaOverview &&
+          (quotaOverview.users_over_quota.length > 0 ||
+            quotaOverview.repos_over_quota.length > 0)
+        "
+        class="mb-6"
+      >
+        <template #header>
+          <div class="flex items-center gap-2">
+            <div class="i-carbon-warning text-orange-600" />
+            <span class="font-bold">Quota Warnings</span>
+            <el-tag type="warning" size="small">
+              {{
+                quotaOverview.users_over_quota.length +
+                quotaOverview.repos_over_quota.length
+              }}
+            </el-tag>
+          </div>
+        </template>
+
+        <div v-if="quotaOverview.users_over_quota.length > 0" class="mb-4">
+          <h3 class="text-sm font-semibold mb-2 text-red-600">
+            Users Over Quota ({{ quotaOverview.users_over_quota.length }})
+          </h3>
+          <el-table
+            :data="quotaOverview.users_over_quota.slice(0, 5)"
+            size="small"
+            stripe
+          >
+            <el-table-column prop="username" label="Username" width="150" />
+            <el-table-column label="Private" width="150" align="right">
+              <template #default="{ row }">
+                <span
+                  :class="{
+                    'text-red-600 font-semibold':
+                      row.private_percentage > 100,
+                  }"
+                >
+                  {{ row.private_percentage }}%
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Public" width="150" align="right">
+              <template #default="{ row }">
+                <span
+                  :class="{
+                    'text-red-600 font-semibold': row.public_percentage > 100,
+                  }"
+                >
+                  {{ row.public_percentage }}%
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Action" width="150" align="right">
+              <template #default="{ row }">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="$router.push(`/users`)"
+                >
+                  Manage
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div v-if="quotaOverview.repos_over_quota.length > 0">
+          <h3 class="text-sm font-semibold mb-2 text-red-600">
+            Repositories Over Quota ({{ quotaOverview.repos_over_quota.length }})
+          </h3>
+          <el-table
+            :data="quotaOverview.repos_over_quota.slice(0, 5)"
+            size="small"
+            stripe
+          >
+            <el-table-column label="Repository" min-width="200">
+              <template #default="{ row }">
+                <el-tag :type="getRepoTypeColor(row.repo_type)" size="small">
+                  {{ row.repo_type }}
+                </el-tag>
+                <span class="ml-2 font-mono text-sm">{{ row.full_id }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Usage" width="120" align="right">
+              <template #default="{ row }">
+                <span class="text-red-600 font-semibold">
+                  {{ row.percentage }}%
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Size" width="120" align="right">
+              <template #default="{ row }">
+                {{ formatBytes(row.used_bytes) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="Action" width="150" align="right">
+              <template #default="{ row }">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="$router.push(`/repositories`)"
+                >
+                  View
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-card>
 
       <!-- Top Contributors -->
       <el-card class="mb-6" v-if="stats?.commits?.top_contributors?.length > 0">
@@ -215,5 +456,66 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 24px;
+}
+
+/* Enhanced card styling */
+:deep(.el-card) {
+  background-color: var(--bg-card);
+  border-color: var(--border-default);
+  transition: all 0.3s ease;
+  border-radius: 12px;
+}
+
+:deep(.el-card:hover) {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+
+:deep(.el-card__header) {
+  background-color: var(--bg-hover);
+  border-bottom-color: var(--border-default);
+  padding: 16px 20px;
+}
+
+:deep(.el-card__header .font-bold) {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+/* Table styling */
+:deep(.el-table) {
+  background-color: var(--bg-card);
+}
+
+:deep(.el-table th) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+  border-color: var(--border-default);
+}
+
+:deep(.el-table td) {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Warning colors */
+:deep(.text-red-600) {
+  color: var(--color-error) !important;
+  font-weight: 700;
+}
+
+:deep(.text-sm.text-gray-500) {
+  color: var(--text-secondary);
 }
 </style>

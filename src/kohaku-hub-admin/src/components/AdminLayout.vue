@@ -1,18 +1,28 @@
 <script setup>
+import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAdminStore } from "@/stores/admin";
 import { useThemeStore } from "@/stores/theme";
 import { ElMessage } from "element-plus";
+import GlobalSearch from "@/components/GlobalSearch.vue";
 
 const router = useRouter();
 const route = useRoute();
 const adminStore = useAdminStore();
 const themeStore = useThemeStore();
 
+const globalSearchRef = ref(null);
+
 function handleLogout() {
   adminStore.logout();
   ElMessage.success("Logged out successfully");
   router.push("/login");
+}
+
+function openGlobalSearch() {
+  if (globalSearchRef.value) {
+    globalSearchRef.value.openDialog();
+  }
 }
 
 const menuItems = [
@@ -22,7 +32,16 @@ const menuItems = [
   { path: "/repositories", label: "Repositories", icon: "i-carbon-data-base" },
   { path: "/commits", label: "Commits", icon: "i-carbon-version" },
   { path: "/storage", label: "Storage", icon: "i-carbon-data-volume" },
-  { path: "/quotas", label: "Quotas", icon: "i-carbon-meter" },
+  {
+    path: "/QuotaOverview",
+    label: "Quota Overview",
+    icon: "i-carbon-meter",
+  },
+  {
+    path: "/DatabaseViewer",
+    label: "Database",
+    icon: "i-carbon-data-table",
+  },
 ];
 </script>
 
@@ -69,6 +88,13 @@ const menuItems = [
         </div>
 
         <div class="header-actions">
+          <el-button @click="openGlobalSearch" class="search-button">
+            <div class="i-carbon-search text-lg" />
+            <span class="ml-2 hidden sm:inline">Search</span>
+            <el-tag size="small" effect="plain" class="ml-2 hidden md:inline">
+              Ctrl+K
+            </el-tag>
+          </el-button>
           <el-button circle @click="themeStore.toggle()" class="mr-2">
             <div v-if="themeStore.isDark" class="i-carbon-moon text-lg" />
             <div v-else class="i-carbon-asleep text-lg" />
@@ -84,53 +110,51 @@ const menuItems = [
         <slot />
       </el-main>
     </el-container>
+
+    <!-- Global Search Modal -->
+    <GlobalSearch ref="globalSearchRef" />
   </el-container>
 </template>
 
 <style scoped>
 .admin-layout {
   min-height: 100vh;
+  background-color: var(--bg-base);
 }
 
 .sidebar {
-  background-color: white;
-  border-right: 1px solid #e5e7eb;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
-}
-
-html.dark .sidebar {
-  background-color: #1f1f1f;
-  border-right-color: #374151;
+  background-color: var(--bg-elevated);
+  border-right: 1px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
 }
 
 .sidebar-header {
   display: flex;
   align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-html.dark .sidebar-header {
-  border-bottom-color: #374151;
+.sidebar-header h2 {
+  color: white !important;
 }
 
 .sidebar-menu {
   border-right: none;
+  background-color: var(--bg-elevated) !important;
 }
 
 .header {
-  background-color: white;
-  border-bottom: 1px solid #e5e7eb;
+  background-color: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-}
-
-html.dark .header {
-  background-color: #1f1f1f;
-  border-bottom-color: #374151;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
 }
 
 .header-title {
@@ -140,14 +164,22 @@ html.dark .header {
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 12px;
+}
+
+.search-button {
+  border-color: var(--border-default);
+  background-color: var(--bg-hover);
+  transition: all 0.2s ease;
+}
+
+.search-button:hover {
+  border-color: var(--color-info);
+  background-color: var(--bg-active);
 }
 
 .main-content {
-  background-color: #f5f5f5;
+  background-color: var(--bg-base);
   min-height: calc(100vh - 60px);
-}
-
-html.dark .main-content {
-  background-color: #0a0a0a;
 }
 </style>

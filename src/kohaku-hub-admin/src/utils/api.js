@@ -25,13 +25,19 @@ function createAdminClient(token) {
  * List all users
  * @param {string} token - Admin token
  * @param {Object} params - Query parameters
+ * @param {string} params.search - Search by username or email
  * @param {number} params.limit - Max users to return
  * @param {number} params.offset - Offset for pagination
  * @returns {Promise<Object>} User list response
  */
-export async function listUsers(token, { limit = 100, offset = 0 } = {}) {
+export async function listUsers(
+  token,
+  { search, limit = 100, offset = 0 } = {},
+) {
   const client = createAdminClient(token);
-  const response = await client.get("/users", { params: { limit, offset } });
+  const response = await client.get("/users", {
+    params: { search, limit, offset },
+  });
   return response.data;
 }
 
@@ -143,6 +149,17 @@ export async function recalculateQuota(token, namespace, isOrg = false) {
   return response.data;
 }
 
+/**
+ * Get quota overview with warnings
+ * @param {string} token - Admin token
+ * @returns {Promise<Object>} Quota overview data
+ */
+export async function getQuotaOverview(token) {
+  const client = createAdminClient(token);
+  const response = await client.get("/quota/overview");
+  return response.data;
+}
+
 // ===== System Stats =====
 
 /**
@@ -218,15 +235,20 @@ export async function verifyAdminToken(token) {
  * List all repositories
  * @param {string} token - Admin token
  * @param {Object} params - Query parameters
+ * @param {string} params.search - Search by repository full_id or name
+ * @param {string} params.repo_type - Filter by type (model/dataset/space)
+ * @param {string} params.namespace - Filter by namespace
+ * @param {number} params.limit - Max repositories to return
+ * @param {number} params.offset - Offset for pagination
  * @returns {Promise<Object>} Repository list
  */
 export async function listRepositories(
   token,
-  { repo_type, namespace, limit = 100, offset = 0 } = {},
+  { search, repo_type, namespace, limit = 100, offset = 0 } = {},
 ) {
   const client = createAdminClient(token);
   const response = await client.get("/repositories", {
-    params: { repo_type, namespace, limit, offset },
+    params: { search, repo_type, namespace, limit, offset },
   });
   return response.data;
 }
@@ -243,6 +265,51 @@ export async function getRepositoryDetails(token, repo_type, namespace, name) {
   const client = createAdminClient(token);
   const response = await client.get(
     `/repositories/${repo_type}/${namespace}/${name}`,
+  );
+  return response.data;
+}
+
+/**
+ * Get repository files with LFS metadata
+ * @param {string} token - Admin token
+ * @param {string} repo_type - Repository type
+ * @param {string} namespace - Namespace
+ * @param {string} name - Repository name
+ * @param {string} ref - Branch or commit reference
+ * @returns {Promise<Object>} File list with LFS info
+ */
+export async function getRepositoryFiles(
+  token,
+  repo_type,
+  namespace,
+  name,
+  ref = "main",
+) {
+  const client = createAdminClient(token);
+  const response = await client.get(
+    `/repositories/${repo_type}/${namespace}/${name}/files`,
+    { params: { ref } },
+  );
+  return response.data;
+}
+
+/**
+ * Get repository storage breakdown
+ * @param {string} token - Admin token
+ * @param {string} repo_type - Repository type
+ * @param {string} namespace - Namespace
+ * @param {string} name - Repository name
+ * @returns {Promise<Object>} Storage analytics
+ */
+export async function getRepositoryStorageBreakdown(
+  token,
+  repo_type,
+  namespace,
+  name,
+) {
+  const client = createAdminClient(token);
+  const response = await client.get(
+    `/repositories/${repo_type}/${namespace}/${name}/storage-breakdown`,
   );
   return response.data;
 }
@@ -411,5 +478,64 @@ export async function listInvitations(
 export async function deleteInvitation(token, invitationToken) {
   const client = createAdminClient(token);
   const response = await client.delete(`/invitations/${invitationToken}`);
+  return response.data;
+}
+
+// ===== Global Search =====
+
+/**
+ * Global search across users, repositories, and commits
+ * @param {string} token - Admin token
+ * @param {string} q - Search query
+ * @param {Array<string>} types - Types to search (users, repos, commits)
+ * @param {number} limit - Max results per type
+ * @returns {Promise<Object>} Grouped search results
+ */
+export async function globalSearch(
+  token,
+  q,
+  types = ["users", "repos", "commits"],
+  limit = 20,
+) {
+  const client = createAdminClient(token);
+  const response = await client.get("/search", {
+    params: { q, types, limit },
+  });
+  return response.data;
+}
+
+// ===== Database Viewer =====
+
+/**
+ * List database tables
+ * @param {string} token - Admin token
+ * @returns {Promise<Object>} Tables with schemas
+ */
+export async function listDatabaseTables(token) {
+  const client = createAdminClient(token);
+  const response = await client.get("/database/tables");
+  return response.data;
+}
+
+/**
+ * Get query templates
+ * @param {string} token - Admin token
+ * @returns {Promise<Object>} Pre-defined query templates
+ */
+export async function getDatabaseQueryTemplates(token) {
+  const client = createAdminClient(token);
+  const response = await client.get("/database/templates");
+  return response.data;
+}
+
+/**
+ * Execute SQL query (read-only)
+ * @param {string} token - Admin token
+ * @param {string} sql - SQL query string
+ * @returns {Promise<Object>} Query results
+ */
+export async function executeDatabaseQuery(token, sql) {
+  const client = createAdminClient(token);
+  const response = await client.post("/database/query", { sql });
   return response.data;
 }

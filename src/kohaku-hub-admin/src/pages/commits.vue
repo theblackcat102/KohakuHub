@@ -277,4 +277,28 @@ onMounted(() => {
 .page-container {
   padding: 24px;
 }
+
+:deep(.el-card) {
+  background-color: var(--bg-card);
+  border-color: var(--border-default);
+  border-radius: 12px;
+}
+
+:deep(.el-table) {
+  background-color: var(--bg-card);
+}
+
+:deep(.el-table th) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:deep(.el-table td) {
+  color: var(--text-primary);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: var(--bg-hover) !important;
+}
 </style>

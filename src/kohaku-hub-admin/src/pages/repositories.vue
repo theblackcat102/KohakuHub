@@ -2,11 +2,14 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import AdminLayout from "@/components/AdminLayout.vue";
+import FileTree from "@/components/FileTree.vue";
 import { useAdminStore } from "@/stores/admin";
 import {
   listRepositories,
   getRepositoryDetails,
+  getRepositoryStorageBreakdown,
   recalculateAllRepoStorage,
+  listCommits,
 } from "@/utils/api";
 import { formatBytes } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -19,6 +22,15 @@ const loading = ref(false);
 const recalculating = ref(false);
 const selectedRepo = ref(null);
 const repoDialogVisible = ref(false);
+const activeTab = ref("overview");
+const storageBreakdown = ref(null);
+const repoCommits = ref([]);
+const loadingStorage = ref(false);
+const loadingCommits = ref(false);
+
+// Search
+const searchQuery = ref("");
+const searchDebounceTimer = ref(null);
 
 // Filters
 const filterRepoType = ref("");
@@ -86,6 +98,7 @@ async function loadRepositories() {
   loading.value = true;
   try {
     const response = await listRepositories(adminStore.token, {
+      search: searchQuery.value || undefined,
       repo_type: filterRepoType.value || undefined,
       namespace: filterNamespace.value || undefined,
       limit: pageSize.value,
@@ -108,6 +121,24 @@ async function loadRepositories() {
   }
 }
 
+function handleSearchInput() {
+  // Clear existing timer
+  if (searchDebounceTimer.value) {
+    clearTimeout(searchDebounceTimer.value);
+  }
+
+  // Set new timer - wait 500ms after last input before searching
+  searchDebounceTimer.value = setTimeout(() => {
+    currentPage.value = 1; // Reset to first page when searching
+    loadRepositories();
+  }, 500);
+}
+
+function clearSearch() {
+  searchQuery.value = "";
+  loadRepositories();
+}
+
 async function handleViewRepo(row) {
   if (!checkAuth()) return;
 
@@ -118,12 +149,51 @@ async function handleViewRepo(row) {
       row.namespace,
       row.name,
     );
+    activeTab.value = "overview";
     repoDialogVisible.value = true;
+
+    // Load storage breakdown in background
+    loadStorageBreakdown();
   } catch (error) {
     ElMessage.error(
       error.response?.data?.detail?.error ||
         "Failed to load repository details",
     );
+  }
+}
+
+async function loadStorageBreakdown() {
+  if (!selectedRepo.value) return;
+
+  loadingStorage.value = true;
+  try {
+    storageBreakdown.value = await getRepositoryStorageBreakdown(
+      adminStore.token,
+      selectedRepo.value.repo_type,
+      selectedRepo.value.namespace,
+      selectedRepo.value.name,
+    );
+  } catch (error) {
+    console.error("Failed to load storage breakdown:", error);
+  } finally {
+    loadingStorage.value = false;
+  }
+}
+
+async function loadRepoCommits() {
+  if (!selectedRepo.value) return;
+
+  loadingCommits.value = true;
+  try {
+    const response = await listCommits(adminStore.token, {
+      repo_full_id: selectedRepo.value.full_id,
+      limit: 20,
+    });
+    repoCommits.value = response.commits || [];
+  } catch (error) {
+    console.error("Failed to load commits:", error);
+  } finally {
+    loadingCommits.value = false;
   }
 }
 
@@ -234,6 +304,27 @@ onMounted(() => {
           Recalculate All Storage
         </el-button>
       </div>
+
+      <!-- Search Bar -->
+      <el-card class="mb-4">
+        <div class="flex gap-4 items-center">
+          <el-input
+            v-model="searchQuery"
+            placeholder="Search repositories by name or full ID..."
+            clearable
+            @input="handleSearchInput"
+            @clear="clearSearch"
+            style="max-width: 500px"
+          >
+            <template #prefix>
+              <div class="i-carbon-search text-gray-400" />
+            </template>
+          </el-input>
+          <span v-if="searchQuery" class="text-sm text-gray-500">
+            Searching for: "{{ searchQuery }}"
+          </span>
+        </div>
+      </el-card>
 
       <!-- Filters -->
       <el-card class="mb-4">
@@ -383,75 +474,208 @@ onMounted(() => {
         </div>
       </el-card>
 
-      <!-- Repository Details Dialog -->
+      <!-- Repository Details Dialog with Tabs -->
       <el-dialog
         v-model="repoDialogVisible"
-        title="Repository Details"
-        width="800px"
+        width="900px"
+        :title="selectedRepo ? selectedRepo.full_id : 'Repository Details'"
       >
         <div v-if="selectedRepo" class="repo-details">
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="ID">{{
-              selectedRepo.id
-            }}</el-descriptions-item>
-            <el-descriptions-item label="Type">
-              <el-tag :type="getRepoTypeColor(selectedRepo.repo_type)">
-                {{ selectedRepo.repo_type }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Full ID" :span="2">
-              <code class="font-mono">{{ selectedRepo.full_id }}</code>
-            </el-descriptions-item>
-            <el-descriptions-item label="Namespace">{{
-              selectedRepo.namespace
-            }}</el-descriptions-item>
-            <el-descriptions-item label="Name">{{
-              selectedRepo.name
-            }}</el-descriptions-item>
-            <el-descriptions-item label="Owner">{{
-              selectedRepo.owner_username
-            }}</el-descriptions-item>
-            <el-descriptions-item label="Visibility">
-              <el-tag :type="selectedRepo.private ? 'warning' : 'success'">
-                {{ selectedRepo.private ? "Private" : "Public" }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Created">{{
-              formatDate(selectedRepo.created_at)
-            }}</el-descriptions-item>
-            <el-descriptions-item label="Files">
-              <strong>{{ selectedRepo.file_count }}</strong>
-            </el-descriptions-item>
-            <el-descriptions-item label="Commits">
-              <strong>{{ selectedRepo.commit_count }}</strong>
-            </el-descriptions-item>
-            <el-descriptions-item label="Total Size">
-              <strong>{{ formatBytes(selectedRepo.total_size) }}</strong>
-            </el-descriptions-item>
-            <el-descriptions-item label="Storage Used (Tracked)">
-              <strong>{{ formatBytes(selectedRepo.used_bytes) }}</strong>
-            </el-descriptions-item>
-            <el-descriptions-item label="Repository Quota">
-              <span v-if="selectedRepo.quota_bytes">
-                <strong>{{ formatBytes(selectedRepo.quota_bytes) }}</strong>
-              </span>
-              <span v-else class="text-gray-400">Inherit from namespace</span>
-            </el-descriptions-item>
-          </el-descriptions>
+          <el-tabs v-model="activeTab">
+            <!-- Overview Tab -->
+            <el-tab-pane label="Overview" name="overview">
+              <div class="mb-4">
+                <el-tag :type="getRepoTypeColor(selectedRepo.repo_type)" class="mr-2">
+                  {{ selectedRepo.repo_type }}
+                </el-tag>
+                <el-tag
+                  :type="selectedRepo.private ? 'warning' : 'success'"
+                  effect="plain"
+                >
+                  {{ selectedRepo.private ? "Private" : "Public" }}
+                </el-tag>
+              </div>
+
+              <el-descriptions :column="2" border>
+                <el-descriptions-item label="ID">{{
+                  selectedRepo.id
+                }}</el-descriptions-item>
+                <el-descriptions-item label="Owner">{{
+                  selectedRepo.owner_username
+                }}</el-descriptions-item>
+                <el-descriptions-item label="Namespace">{{
+                  selectedRepo.namespace
+                }}</el-descriptions-item>
+                <el-descriptions-item label="Name">{{
+                  selectedRepo.name
+                }}</el-descriptions-item>
+                <el-descriptions-item label="Created">{{
+                  formatDate(selectedRepo.created_at)
+                }}</el-descriptions-item>
+                <el-descriptions-item label="Files">
+                  <strong>{{ selectedRepo.file_count }}</strong>
+                </el-descriptions-item>
+                <el-descriptions-item label="Commits">
+                  <strong>{{ selectedRepo.commit_count }}</strong>
+                </el-descriptions-item>
+                <el-descriptions-item label="Total Size">
+                  <strong>{{ formatBytes(selectedRepo.total_size) }}</strong>
+                </el-descriptions-item>
+                <el-descriptions-item label="Storage Used">
+                  <strong>{{ formatBytes(selectedRepo.used_bytes) }}</strong>
+                </el-descriptions-item>
+                <el-descriptions-item label="Repository Quota">
+                  <span v-if="selectedRepo.quota_bytes">
+                    <strong>{{ formatBytes(selectedRepo.quota_bytes) }}</strong>
+                  </span>
+                  <span v-else class="text-gray-400">Inherit from namespace</span>
+                </el-descriptions-item>
+              </el-descriptions>
+
+              <div class="mt-4">
+                <el-button
+                  type="primary"
+                  @click="
+                    $router.push(
+                      `/${selectedRepo.repo_type}s/${selectedRepo.namespace}/${selectedRepo.name}`,
+                    )
+                  "
+                >
+                  <div class="i-carbon-launch mr-2" />
+                  View in Main App
+                </el-button>
+              </div>
+            </el-tab-pane>
+
+            <!-- Files Tab -->
+            <el-tab-pane label="Files" name="files">
+              <FileTree
+                :repo-type="selectedRepo.repo_type"
+                :namespace="selectedRepo.namespace"
+                :name="selectedRepo.name"
+                :token="adminStore.token"
+              />
+            </el-tab-pane>
+
+            <!-- Commits Tab -->
+            <el-tab-pane label="Commits" name="commits">
+              <div v-if="activeTab === 'commits' && !loadingCommits && repoCommits.length === 0">
+                <el-button type="primary" size="small" @click="loadRepoCommits" class="mb-4">
+                  Load Commits
+                </el-button>
+              </div>
+
+              <el-table
+                v-if="repoCommits.length > 0"
+                :data="repoCommits"
+                v-loading="loadingCommits"
+                stripe
+                max-height="400"
+              >
+                <el-table-column label="SHA" width="100">
+                  <template #default="{ row }">
+                    <code class="text-xs">{{
+                      row.commit_id.substring(0, 8)
+                    }}</code>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="username" label="Author" width="120" />
+                <el-table-column label="Message" min-width="250">
+                  <template #default="{ row }">
+                    <div class="text-sm">{{ row.message }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="branch" label="Branch" width="100" />
+                <el-table-column label="Date" width="160">
+                  <template #default="{ row }">
+                    {{ formatDate(row.created_at) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+
+              <div v-else-if="activeTab === 'commits'" class="text-center py-8">
+                <el-button type="primary" @click="loadRepoCommits" :loading="loadingCommits">
+                  Load Commits
+                </el-button>
+              </div>
+            </el-tab-pane>
+
+            <!-- Storage Tab -->
+            <el-tab-pane label="Storage" name="storage">
+              <div v-if="loadingStorage" class="text-center py-8">
+                <el-skeleton :rows="5" animated />
+              </div>
+
+              <div v-else-if="storageBreakdown" class="storage-breakdown">
+                <h3 class="text-lg font-semibold mb-3">Storage Breakdown</h3>
+
+                <el-descriptions :column="2" border class="mb-4">
+                  <el-descriptions-item label="Regular Files">
+                    <strong>{{ formatBytes(storageBreakdown.regular_files_size) }}</strong>
+                    <span class="text-xs text-gray-500 ml-2">
+                      ({{ ((storageBreakdown.regular_files_size / storageBreakdown.total_size) * 100).toFixed(1) }}%)
+                    </span>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="LFS Files">
+                    <strong>{{ formatBytes(storageBreakdown.lfs_files_size) }}</strong>
+                    <span class="text-xs text-gray-500 ml-2">
+                      ({{ ((storageBreakdown.lfs_files_size / storageBreakdown.total_size) * 100).toFixed(1) }}%)
+                    </span>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="Total Size">
+                    <strong>{{ formatBytes(storageBreakdown.total_size) }}</strong>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="LFS Objects">
+                    <strong>{{ storageBreakdown.lfs_object_count }}</strong>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="Unique LFS Objects">
+                    <strong>{{ storageBreakdown.unique_lfs_objects }}</strong>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="Deduplication Savings">
+                    <strong>{{ formatBytes(storageBreakdown.deduplication_savings) }}</strong>
+                  </el-descriptions-item>
+                </el-descriptions>
+
+                <div class="mt-4">
+                  <h4 class="text-sm font-semibold mb-2">Storage Distribution</h4>
+                  <div class="flex gap-2">
+                    <div
+                      class="storage-bar"
+                      :style="{
+                        width: ((storageBreakdown.regular_files_size / storageBreakdown.total_size) * 100) + '%',
+                        backgroundColor: '#409EFF',
+                      }"
+                    >
+                      <span v-if="storageBreakdown.regular_files_size > 0" class="text-xs text-white px-2">
+                        Regular
+                      </span>
+                    </div>
+                    <div
+                      class="storage-bar"
+                      :style="{
+                        width: ((storageBreakdown.lfs_files_size / storageBreakdown.total_size) * 100) + '%',
+                        backgroundColor: '#E6A23C',
+                      }"
+                    >
+                      <span v-if="storageBreakdown.lfs_files_size > 0" class="text-xs text-white px-2">
+                        LFS
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="text-center py-8">
+                <el-button type="primary" @click="loadStorageBreakdown">
+                  Load Storage Analytics
+                </el-button>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </div>
 
         <template #footer>
           <el-button @click="repoDialogVisible = false">Close</el-button>
-          <el-button
-            type="primary"
-            @click="
-              $router.push(
-                `/${selectedRepo.repo_type}s/${selectedRepo.namespace}/${selectedRepo.name}`,
-              )
-            "
-          >
-            View in Main App
-          </el-button>
         </template>
       </el-dialog>
     </div>
@@ -459,7 +683,87 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.page-container {
+  padding: 24px;
+}
+
 .repo-details {
   padding: 12px 0;
+}
+
+.storage-breakdown {
+  padding: 12px 0;
+}
+
+.storage-bar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.storage-bar:hover {
+  opacity: 0.85;
+  transform: scale(1.02);
+}
+
+/* Card styling */
+:deep(.el-card) {
+  background-color: var(--bg-card);
+  border-color: var(--border-default);
+  transition: all 0.2s ease;
+}
+
+:deep(.el-card:hover) {
+  box-shadow: var(--shadow-md);
+}
+
+/* Table styling */
+:deep(.el-table) {
+  background-color: var(--bg-card);
+}
+
+:deep(.el-table th) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+:deep(.el-table td) {
+  color: var(--text-primary);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Tabs styling */
+:deep(.el-tabs__item) {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: var(--color-info);
+  font-weight: 600;
+}
+
+:deep(.el-tabs__item:hover) {
+  color: var(--color-info);
+}
+
+:deep(.el-descriptions__label) {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+:deep(.el-descriptions__content) {
+  color: var(--text-primary);
 }
 </style>

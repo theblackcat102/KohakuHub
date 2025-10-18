@@ -20,8 +20,10 @@ declare module 'vue-router/auto-routes' {
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
     '/commits': RouteRecordInfo<'/commits', '/commits', Record<never, never>, Record<never, never>>,
+    '/DatabaseViewer': RouteRecordInfo<'/DatabaseViewer', '/DatabaseViewer', Record<never, never>, Record<never, never>>,
     '/invitations': RouteRecordInfo<'/invitations', '/invitations', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
+    '/QuotaOverview': RouteRecordInfo<'/QuotaOverview', '/QuotaOverview', Record<never, never>, Record<never, never>>,
     '/quotas': RouteRecordInfo<'/quotas', '/quotas', Record<never, never>, Record<never, never>>,
     '/repositories': RouteRecordInfo<'/repositories', '/repositories', Record<never, never>, Record<never, never>>,
     '/storage': RouteRecordInfo<'/storage', '/storage', Record<never, never>, Record<never, never>>,
@@ -47,12 +49,20 @@ declare module 'vue-router/auto-routes' {
       routes: '/commits'
       views: never
     }
+    'src/pages/DatabaseViewer.vue': {
+      routes: '/DatabaseViewer'
+      views: never
+    }
     'src/pages/invitations.vue': {
       routes: '/invitations'
       views: never
     }
     'src/pages/login.vue': {
       routes: '/login'
+      views: never
+    }
+    'src/pages/QuotaOverview.vue': {
+      routes: '/QuotaOverview'
       views: never
     }
     'src/pages/quotas.vue': {
