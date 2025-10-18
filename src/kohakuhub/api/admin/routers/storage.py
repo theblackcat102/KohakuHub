@@ -207,14 +207,28 @@ async def list_s3_objects(
         parsed = urlparse(cfg.s3.endpoint)
         endpoint_path = parsed.path.strip("/")  # e.g., "sizigi-deepghs-grant"
 
-        # Determine actual bucket and endpoint
+        # Determine actual bucket, endpoint, and prefix
         if endpoint_path:
-            # Endpoint has path - combine path + bucket for actual bucket name
+            # Endpoint has path - first component is bucket, rest is base prefix
+            path_parts = endpoint_path.split("/")
             root_endpoint = f"{parsed.scheme}://{parsed.netloc}"
-            actual_bucket = f"{endpoint_path}/{bucket_name}"
-            logger.info(f"Endpoint has path '{endpoint_path}'")
-            logger.info(f"Creating S3 client with root endpoint: {root_endpoint}")
-            logger.info(f"Using full bucket path: {actual_bucket}")
+            actual_bucket = path_parts[0]  # "sizigi-deepghs-grant"
+
+            # Combine remaining path parts + configured bucket + user prefix
+            base_prefix_parts = path_parts[1:] + [bucket_name]  # ["hub-storage"]
+            base_prefix = "/".join(base_prefix_parts)
+
+            # Add user-requested prefix
+            if prefix:
+                actual_prefix = f"{base_prefix}/{prefix}"
+            else:
+                actual_prefix = f"{base_prefix}/" if base_prefix else ""
+
+            logger.info(f"Endpoint path detected: '{endpoint_path}'")
+            logger.info(f"Root endpoint: {root_endpoint}")
+            logger.info(f"Actual bucket: {actual_bucket}")
+            logger.info(f"Base prefix: {base_prefix}")
+            logger.info(f"Final prefix: {actual_prefix}")
 
             # Create client with root endpoint
             s3_config = {}
@@ -234,17 +248,20 @@ async def list_s3_objects(
         else:
             # Standard S3/MinIO - use configured client as-is
             actual_bucket = bucket_name
+            actual_prefix = prefix
             s3 = get_s3_client()
-            logger.info(f"Standard S3 endpoint - using bucket: {actual_bucket}")
+            logger.info(
+                f"Standard S3 endpoint - bucket: {actual_bucket}, prefix: {actual_prefix}"
+            )
 
         try:
             logger.info(
-                f"Calling list_objects_v2(Bucket='{actual_bucket}', Prefix='{prefix}', MaxKeys={limit})"
+                f"Calling list_objects_v2(Bucket='{actual_bucket}', Prefix='{actual_prefix}', MaxKeys={limit})"
             )
 
             response = s3.list_objects_v2(
                 Bucket=actual_bucket,
-                Prefix=prefix,
+                Prefix=actual_prefix,
                 MaxKeys=limit,
             )
 
