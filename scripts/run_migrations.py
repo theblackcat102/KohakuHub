@@ -69,6 +69,38 @@ def load_migration_module(name, path):
         return None
 
 
+def is_database_initialized():
+    """Check if database is initialized (has User table).
+
+    Returns:
+        True if User table exists (database is initialized)
+        False if User table doesn't exist (fresh database)
+    """
+    try:
+        db.connect(reuse_if_open=True)
+        cursor = db.cursor()
+
+        if cfg.app.db_backend == "postgres":
+            cursor.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_name='user'
+                """
+            )
+            return cursor.fetchone() is not None
+        else:
+            # SQLite
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='user'"
+            )
+            return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"  [WARNING] Failed to check database state: {e}")
+        # If we can't check, assume uninitialized (safer to skip migrations)
+        return False
+
+
 def run_migrations():
     """Run all pending migrations."""
     print("=" * 70)
@@ -78,13 +110,28 @@ def run_migrations():
     print(f"Database URL: {cfg.app.database_url}")
     print()
 
+    # Check if database is completely uninitialized
+    if not is_database_initialized():
+        print("Database is uninitialized (User table doesn't exist)")
+        print("Skipping all migrations - will create fresh schema via init_db()")
+        print("\nInitializing database (creating all tables)...")
+        init_db()
+        print("✓ Database initialized with current schema\n")
+        print("=" * 70)
+        print("[OK] Fresh database initialized successfully!")
+        print("=" * 70)
+        return True
+
+    # Database is initialized, check for migrations
+    print("Database is initialized, checking for pending migrations...\n")
+
     # Discover migrations
     migrations = discover_migrations()
     if not migrations:
         print("No migrations found in db_migrations/")
-        print("\nInitializing database (creating tables)...")
+        print("\nEnsuring database schema is up-to-date...")
         init_db()
-        print("✓ Database initialized\n")
+        print("✓ Database schema verified\n")
         return True
 
     print(f"Found {len(migrations)} migration(s):\n")
