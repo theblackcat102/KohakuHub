@@ -51,23 +51,116 @@
               {{ profileInfo.bio }}
             </p>
 
-            <!-- Website -->
-            <a
-              v-if="profileInfo.website"
-              :href="profileInfo.website"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline"
+            <!-- Links Section (Website + Social Media) -->
+            <div
+              v-if="profileInfo.website || profileInfo.social_media"
+              class="flex gap-3"
             >
-              <div class="i-carbon-link" />
-              {{ profileInfo.website.replace(/^https?:\/\//, "") }}
-            </a>
+              <!-- Icons Column (10% width) -->
+              <div class="flex flex-col gap-2 w-10% min-w-8">
+                <!-- Website Icon -->
+                <div
+                  v-if="profileInfo.website"
+                  class="flex items-center justify-center h-6"
+                >
+                  <div
+                    class="i-carbon-link w-4 h-4 text-gray-600 dark:text-gray-400"
+                  />
+                </div>
 
-            <!-- Social Media -->
-            <SocialLinks
-              v-if="profileInfo.social_media"
-              :social-media="profileInfo.social_media"
-            />
+                <!-- Social Media Icons -->
+                <div
+                  v-if="profileInfo.social_media?.twitter_x"
+                  class="flex items-center justify-center h-6"
+                >
+                  <div
+                    class="i-carbon-logo-x w-4 h-4 text-gray-600 dark:text-gray-400"
+                  />
+                </div>
+                <div
+                  v-if="profileInfo.social_media?.threads"
+                  class="flex items-center justify-center h-6"
+                >
+                  <div
+                    class="i-carbon-logo-instagram w-4 h-4 text-gray-600 dark:text-gray-400"
+                  />
+                </div>
+                <div
+                  v-if="profileInfo.social_media?.github"
+                  class="flex items-center justify-center h-6"
+                >
+                  <div
+                    class="i-carbon-logo-github w-4 h-4 text-gray-600 dark:text-gray-400"
+                  />
+                </div>
+                <div
+                  v-if="profileInfo.social_media?.huggingface"
+                  class="flex items-center justify-center h-6"
+                >
+                  <span class="text-base">🤗</span>
+                </div>
+              </div>
+
+              <!-- Links Column (90% width) -->
+              <div class="flex flex-col gap-2 flex-1">
+                <!-- Website Link -->
+                <a
+                  v-if="profileInfo.website"
+                  :href="profileInfo.website"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center h-6 text-sm text-blue-600 dark:text-blue-400 hover:underline transition-colors truncate"
+                  title="Website"
+                >
+                  {{ profileInfo.website.replace(/^https?:\/\//, "") }}
+                </a>
+
+                <!-- Social Media Links -->
+                <a
+                  v-if="profileInfo.social_media?.twitter_x"
+                  :href="`https://twitter.com/${profileInfo.social_media.twitter_x}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate"
+                  title="Twitter/X"
+                >
+                  @{{ profileInfo.social_media.twitter_x }}
+                </a>
+
+                <a
+                  v-if="profileInfo.social_media?.threads"
+                  :href="`https://www.threads.net/@${profileInfo.social_media.threads}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors truncate"
+                  title="Threads"
+                >
+                  @{{ profileInfo.social_media.threads }}
+                </a>
+
+                <a
+                  v-if="profileInfo.social_media?.github"
+                  :href="`https://github.com/${profileInfo.social_media.github}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors truncate"
+                  title="GitHub"
+                >
+                  {{ profileInfo.social_media.github }}
+                </a>
+
+                <a
+                  v-if="profileInfo.social_media?.huggingface"
+                  :href="`https://huggingface.co/${profileInfo.social_media.huggingface}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors truncate"
+                  title="HuggingFace"
+                >
+                  {{ profileInfo.social_media.huggingface }}
+                </a>
+              </div>
+            </div>
 
             <!-- Joined Date -->
             <div
