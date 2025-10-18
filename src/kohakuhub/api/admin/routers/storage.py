@@ -157,10 +157,17 @@ async def list_s3_objects(
                     MaxKeys=limit,
                 )
 
+                # Log full response structure
                 logger.info(f"Response keys: {list(response.keys())}")
+                logger.info(f"Full response (excluding metadata): {dict((k, v) for k, v in response.items() if k != 'ResponseMetadata')}")
 
                 contents = response.get("Contents", [])
+                common_prefixes = response.get("CommonPrefixes", [])
                 logger.info(f"Contents count: {len(contents)}")
+                logger.info(f"CommonPrefixes count: {len(common_prefixes)}")
+
+                if common_prefixes:
+                    logger.info(f"CommonPrefixes: {common_prefixes}")
 
                 # Log first few object keys if any exist
                 if contents:
