@@ -22,7 +22,15 @@ const executing = ref(false);
 const selectedTable = ref(null);
 
 // PostgreSQL reserved keywords that need quoting
-const reservedKeywords = ["user", "session", "commit", "table", "index", "group", "order"];
+const reservedKeywords = [
+  "user",
+  "session",
+  "commit",
+  "table",
+  "index",
+  "group",
+  "order",
+];
 
 function checkAuth() {
   if (!adminStore.token) {
@@ -72,7 +80,10 @@ async function executeQuery() {
   queryResults.value = null;
 
   try {
-    const result = await executeDatabaseQuery(adminStore.token, queryText.value);
+    const result = await executeDatabaseQuery(
+      adminStore.token,
+      queryText.value,
+    );
     queryResults.value = result;
 
     // Debug logging
@@ -128,7 +139,9 @@ function exportCSV() {
   // Build CSV
   const csv = [
     columns.join(","), // Header
-    ...rows.map((row) => columns.map((col) => JSON.stringify(row[col] ?? "")).join(",")),
+    ...rows.map((row) =>
+      columns.map((col) => JSON.stringify(row[col] ?? "")).join(","),
+    ),
   ].join("\n");
 
   // Download
@@ -177,7 +190,9 @@ onMounted(() => {
           Database Viewer
         </h1>
         <el-alert type="warning" :closable="false" show-icon>
-          <span class="text-sm">Read-only mode - Only SELECT queries allowed</span>
+          <span class="text-sm"
+            >Read-only mode - Only SELECT queries allowed</span
+          >
         </el-alert>
       </div>
 
@@ -201,7 +216,9 @@ onMounted(() => {
                 @click="selectTable(table)"
               >
                 <div class="flex items-center gap-2">
-                  <div class="i-carbon-data-table text-gray-600 dark:text-gray-400" />
+                  <div
+                    class="i-carbon-data-table text-gray-600 dark:text-gray-400"
+                  />
                   <div class="flex-1">
                     <div class="flex items-center gap-2">
                       <span class="font-mono text-sm font-semibold">
@@ -288,12 +305,16 @@ onMounted(() => {
             <div class="mt-2 space-y-1">
               <div class="text-xs text-gray-600 dark:text-gray-400">
                 <div class="i-carbon-information inline-block mr-1" />
-                Only SELECT queries allowed. Max 1000 rows. Use LIMIT clause for better performance.
+                Only SELECT queries allowed. Max 1000 rows. Use LIMIT clause for
+                better performance.
               </div>
               <div class="text-xs text-orange-600 dark:text-orange-400">
                 <div class="i-carbon-warning inline-block mr-1" />
-                <strong>Important:</strong> Use double quotes for table names with reserved keywords:
-                <code class="ml-1 px-1 bg-gray-100 dark:bg-gray-800 rounded">SELECT * FROM "user"</code>
+                <strong>Important:</strong> Use double quotes for table names
+                with reserved keywords:
+                <code class="ml-1 px-1 bg-gray-100 dark:bg-gray-800 rounded"
+                  >SELECT * FROM "user"</code
+                >
               </div>
             </div>
           </el-card>
@@ -322,7 +343,11 @@ onMounted(() => {
                   <el-button size="small" @click="exportCSV" :icon="'Download'">
                     Export CSV
                   </el-button>
-                  <el-button size="small" @click="exportJSON" :icon="'Download'">
+                  <el-button
+                    size="small"
+                    @click="exportJSON"
+                    :icon="'Download'"
+                  >
                     Export JSON
                   </el-button>
                 </div>
@@ -343,38 +368,43 @@ onMounted(() => {
               </div>
 
               <div class="results-table-wrapper">
-              <div class="results-table-container">
-                <el-table
-                  :key="queryResults.columns.join(',')"
-                  :data="queryResults.rows"
-                  stripe
-                  border
-                  max-height="500"
-                  fit
-                >
-                  <el-table-column
-                    v-for="column in queryResults.columns"
-                    :key="column"
-                    :prop="column"
-                    :label="column"
-                    min-width="120"
-                    show-overflow-tooltip
+                <div class="results-table-container">
+                  <el-table
+                    :key="queryResults.columns.join(',')"
+                    :data="queryResults.rows"
+                    stripe
+                    border
+                    max-height="500"
+                    fit
                   >
-                    <template #default="{ row }">
-                      <div
-                        class="cell-content"
-                        :class="{ 'cell-null': row[column] === null }"
-                      >
-                        {{ row[column] !== null ? row[column] : "NULL" }}
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-              <div class="scroll-hint" v-if="queryResults.columns.length > 5">
-                <div class="i-carbon-arrow-right" />
-                <span class="text-xs">Scroll horizontally to see more columns ({{ queryResults.columns.length }} total)</span>
-              </div>
+                    <el-table-column
+                      v-for="column in queryResults.columns"
+                      :key="column"
+                      :prop="column"
+                      :label="column"
+                      min-width="120"
+                      show-overflow-tooltip
+                    >
+                      <template #default="{ row }">
+                        <div
+                          class="cell-content"
+                          :class="{ 'cell-null': row[column] === null }"
+                        >
+                          {{ row[column] !== null ? row[column] : "NULL" }}
+                        </div>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+                <div class="scroll-hint" v-if="queryResults.columns.length > 5">
+                  <div class="i-carbon-arrow-right" />
+                  <span class="text-xs"
+                    >Scroll horizontally to see more columns ({{
+                      queryResults.columns.length
+                    }}
+                    total)</span
+                  >
+                </div>
               </div>
             </div>
           </el-card>
@@ -456,7 +486,11 @@ onMounted(() => {
 }
 
 .table-item.selected {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.15) 0%,
+    rgba(59, 130, 246, 0.05) 100%
+  );
   border-color: var(--color-info);
   box-shadow: var(--shadow-sm);
 }
@@ -504,7 +538,11 @@ onMounted(() => {
 
 .template-item:hover {
   border-color: var(--color-success);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, transparent 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.1) 0%,
+    transparent 100%
+  );
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }

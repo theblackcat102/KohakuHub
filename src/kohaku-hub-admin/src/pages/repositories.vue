@@ -485,7 +485,10 @@ onMounted(() => {
             <!-- Overview Tab -->
             <el-tab-pane label="Overview" name="overview">
               <div class="mb-4">
-                <el-tag :type="getRepoTypeColor(selectedRepo.repo_type)" class="mr-2">
+                <el-tag
+                  :type="getRepoTypeColor(selectedRepo.repo_type)"
+                  class="mr-2"
+                >
                   {{ selectedRepo.repo_type }}
                 </el-tag>
                 <el-tag
@@ -528,7 +531,9 @@ onMounted(() => {
                   <span v-if="selectedRepo.quota_bytes">
                     <strong>{{ formatBytes(selectedRepo.quota_bytes) }}</strong>
                   </span>
-                  <span v-else class="text-gray-400">Inherit from namespace</span>
+                  <span v-else class="text-gray-400"
+                    >Inherit from namespace</span
+                  >
                 </el-descriptions-item>
               </el-descriptions>
 
@@ -559,8 +564,19 @@ onMounted(() => {
 
             <!-- Commits Tab -->
             <el-tab-pane label="Commits" name="commits">
-              <div v-if="activeTab === 'commits' && !loadingCommits && repoCommits.length === 0">
-                <el-button type="primary" size="small" @click="loadRepoCommits" class="mb-4">
+              <div
+                v-if="
+                  activeTab === 'commits' &&
+                  !loadingCommits &&
+                  repoCommits.length === 0
+                "
+              >
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="loadRepoCommits"
+                  class="mb-4"
+                >
                   Load Commits
                 </el-button>
               </div>
@@ -594,7 +610,11 @@ onMounted(() => {
               </el-table>
 
               <div v-else-if="activeTab === 'commits'" class="text-center py-8">
-                <el-button type="primary" @click="loadRepoCommits" :loading="loadingCommits">
+                <el-button
+                  type="primary"
+                  @click="loadRepoCommits"
+                  :loading="loadingCommits"
+                >
                   Load Commits
                 </el-button>
               </div>
@@ -611,19 +631,37 @@ onMounted(() => {
 
                 <el-descriptions :column="2" border class="mb-4">
                   <el-descriptions-item label="Regular Files">
-                    <strong>{{ formatBytes(storageBreakdown.regular_files_size) }}</strong>
+                    <strong>{{
+                      formatBytes(storageBreakdown.regular_files_size)
+                    }}</strong>
                     <span class="text-xs text-gray-500 ml-2">
-                      ({{ ((storageBreakdown.regular_files_size / storageBreakdown.total_size) * 100).toFixed(1) }}%)
+                      ({{
+                        (
+                          (storageBreakdown.regular_files_size /
+                            storageBreakdown.total_size) *
+                          100
+                        ).toFixed(1)
+                      }}%)
                     </span>
                   </el-descriptions-item>
                   <el-descriptions-item label="LFS Files">
-                    <strong>{{ formatBytes(storageBreakdown.lfs_files_size) }}</strong>
+                    <strong>{{
+                      formatBytes(storageBreakdown.lfs_files_size)
+                    }}</strong>
                     <span class="text-xs text-gray-500 ml-2">
-                      ({{ ((storageBreakdown.lfs_files_size / storageBreakdown.total_size) * 100).toFixed(1) }}%)
+                      ({{
+                        (
+                          (storageBreakdown.lfs_files_size /
+                            storageBreakdown.total_size) *
+                          100
+                        ).toFixed(1)
+                      }}%)
                     </span>
                   </el-descriptions-item>
                   <el-descriptions-item label="Total Size">
-                    <strong>{{ formatBytes(storageBreakdown.total_size) }}</strong>
+                    <strong>{{
+                      formatBytes(storageBreakdown.total_size)
+                    }}</strong>
                   </el-descriptions-item>
                   <el-descriptions-item label="LFS Objects">
                     <strong>{{ storageBreakdown.lfs_object_count }}</strong>
@@ -632,32 +670,50 @@ onMounted(() => {
                     <strong>{{ storageBreakdown.unique_lfs_objects }}</strong>
                   </el-descriptions-item>
                   <el-descriptions-item label="Deduplication Savings">
-                    <strong>{{ formatBytes(storageBreakdown.deduplication_savings) }}</strong>
+                    <strong>{{
+                      formatBytes(storageBreakdown.deduplication_savings)
+                    }}</strong>
                   </el-descriptions-item>
                 </el-descriptions>
 
                 <div class="mt-4">
-                  <h4 class="text-sm font-semibold mb-2">Storage Distribution</h4>
+                  <h4 class="text-sm font-semibold mb-2">
+                    Storage Distribution
+                  </h4>
                   <div class="flex gap-2">
                     <div
                       class="storage-bar"
                       :style="{
-                        width: ((storageBreakdown.regular_files_size / storageBreakdown.total_size) * 100) + '%',
+                        width:
+                          (storageBreakdown.regular_files_size /
+                            storageBreakdown.total_size) *
+                            100 +
+                          '%',
                         backgroundColor: '#409EFF',
                       }"
                     >
-                      <span v-if="storageBreakdown.regular_files_size > 0" class="text-xs text-white px-2">
+                      <span
+                        v-if="storageBreakdown.regular_files_size > 0"
+                        class="text-xs text-white px-2"
+                      >
                         Regular
                       </span>
                     </div>
                     <div
                       class="storage-bar"
                       :style="{
-                        width: ((storageBreakdown.lfs_files_size / storageBreakdown.total_size) * 100) + '%',
+                        width:
+                          (storageBreakdown.lfs_files_size /
+                            storageBreakdown.total_size) *
+                            100 +
+                          '%',
                         backgroundColor: '#E6A23C',
                       }"
                     >
-                      <span v-if="storageBreakdown.lfs_files_size > 0" class="text-xs text-white px-2">
+                      <span
+                        v-if="storageBreakdown.lfs_files_size > 0"
+                        class="text-xs text-white px-2"
+                      >
                         LFS
                       </span>
                     </div>

@@ -252,7 +252,10 @@ defineExpose({ openDialog });
       </el-input>
 
       <!-- Results -->
-      <div v-if="searchQuery && searchQuery.length >= 2" class="results-container">
+      <div
+        v-if="searchQuery && searchQuery.length >= 2"
+        class="results-container"
+      >
         <div v-if="loading" class="text-center py-8 text-gray-500">
           <div class="i-carbon-circle-dash animate-spin text-2xl mb-2" />
           <p>Searching...</p>
@@ -321,7 +324,9 @@ defineExpose({ openDialog });
             <div class="section-header">
               <div class="i-carbon-data-base text-green-600" />
               <span
-                >Repositories ({{ searchResults.results.repositories.length }})</span
+                >Repositories ({{
+                  searchResults.results.repositories.length
+                }})</span
               >
             </div>
             <div
@@ -349,7 +354,12 @@ defineExpose({ openDialog });
                   {{ repo.repo_type }} • {{ repo.owner_username }}
                 </div>
               </div>
-              <el-tag v-if="repo.private" type="warning" size="small" effect="plain">
+              <el-tag
+                v-if="repo.private"
+                type="warning"
+                size="small"
+                effect="plain"
+              >
                 Private
               </el-tag>
             </div>
@@ -389,7 +399,8 @@ defineExpose({ openDialog });
               <div class="result-content">
                 <div class="result-label">{{ commit.message }}</div>
                 <div class="result-sublabel">
-                  {{ commit.username}} • {{ commit.commit_id.substring(0, 8) }} •
+                  {{ commit.username }} •
+                  {{ commit.commit_id.substring(0, 8) }} •
                   {{ commit.repo_full_id }}
                 </div>
               </div>

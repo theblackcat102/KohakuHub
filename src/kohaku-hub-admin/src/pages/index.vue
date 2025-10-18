@@ -284,8 +284,7 @@ onMounted(() => {
               <template #default="{ row }">
                 <span
                   :class="{
-                    'text-red-600 font-semibold':
-                      row.private_percentage > 100,
+                    'text-red-600 font-semibold': row.private_percentage > 100,
                   }"
                 >
                   {{ row.private_percentage }}%
@@ -319,7 +318,9 @@ onMounted(() => {
 
         <div v-if="quotaOverview.repos_over_quota.length > 0">
           <h3 class="text-sm font-semibold mb-2 text-red-600">
-            Repositories Over Quota ({{ quotaOverview.repos_over_quota.length }})
+            Repositories Over Quota ({{
+              quotaOverview.repos_over_quota.length
+            }})
           </h3>
           <el-table
             :data="quotaOverview.repos_over_quota.slice(0, 5)"

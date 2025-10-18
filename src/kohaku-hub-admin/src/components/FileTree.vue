@@ -133,7 +133,12 @@ watch(selectedRef, () => {
           <div class="flex items-center gap-2">
             <div :class="getFileIcon(row.path)" class="text-gray-600" />
             <span class="font-mono text-sm">{{ row.path }}</span>
-            <el-tag v-if="row.is_lfs" type="warning" size="small" effect="plain">
+            <el-tag
+              v-if="row.is_lfs"
+              type="warning"
+              size="small"
+              effect="plain"
+            >
               LFS
             </el-tag>
           </div>

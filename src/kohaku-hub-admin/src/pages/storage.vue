@@ -315,7 +315,10 @@ onMounted(() => {
           </el-button>
 
           <el-breadcrumb separator="/" class="flex-1">
-            <el-breadcrumb-item @click="navigateToBreadcrumb(-1)" class="breadcrumb-item">
+            <el-breadcrumb-item
+              @click="navigateToBreadcrumb(-1)"
+              class="breadcrumb-item"
+            >
               <div class="i-carbon-home text-blue-600" />
               <span class="ml-1">Root</span>
             </el-breadcrumb-item>
@@ -364,22 +367,23 @@ onMounted(() => {
                 <div class="i-carbon-document text-blue-600" />
                 <span>Files ({{ folderStructure.files.length }})</span>
               </div>
-              <el-table
-                :data="folderStructure.files"
-                stripe
-                max-height="500"
-              >
+              <el-table :data="folderStructure.files" stripe max-height="500">
                 <el-table-column label="Name" min-width="300">
                   <template #default="{ row }">
                     <div class="flex items-center gap-2">
-                      <div :class="getFileIcon(row.name)" class="text-lg text-gray-600 dark:text-gray-400" />
+                      <div
+                        :class="getFileIcon(row.name)"
+                        class="text-lg text-gray-600 dark:text-gray-400"
+                      />
                       <code class="text-sm font-mono">{{ row.name }}</code>
                     </div>
                   </template>
                 </el-table-column>
                 <el-table-column label="Size" width="120" align="right">
                   <template #default="{ row }">
-                    <span class="font-mono text-sm">{{ formatBytes(row.size) }}</span>
+                    <span class="font-mono text-sm">{{
+                      formatBytes(row.size)
+                    }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="Storage Class" width="150">
@@ -399,7 +403,10 @@ onMounted(() => {
 
             <!-- Empty folder message -->
             <el-empty
-              v-if="folderStructure.folders.length === 0 && folderStructure.files.length === 0"
+              v-if="
+                folderStructure.folders.length === 0 &&
+                folderStructure.files.length === 0
+              "
               description="This folder is empty"
             />
           </div>
@@ -511,7 +518,11 @@ onMounted(() => {
 
 .folder-item:hover {
   border-color: var(--color-warning);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, var(--bg-card) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.1) 0%,
+    var(--bg-card) 100%
+  );
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
 }

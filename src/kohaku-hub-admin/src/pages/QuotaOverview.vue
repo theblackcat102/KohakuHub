@@ -33,8 +33,7 @@ async function loadOverview() {
       router.push("/login");
     } else {
       ElMessage.error(
-        error.response?.data?.detail?.error ||
-          "Failed to load quota overview",
+        error.response?.data?.detail?.error || "Failed to load quota overview",
       );
     }
   } finally {
@@ -101,9 +100,7 @@ onMounted(() => {
             </div>
 
             <div class="total-storage">
-              <div class="total-storage-label">
-                Total Storage Used
-              </div>
+              <div class="total-storage-label">Total Storage Used</div>
               <div class="total-storage-value">
                 {{ formatBytes(overview.system_storage.total_used) }}
               </div>
@@ -147,10 +144,7 @@ onMounted(() => {
             <el-table :data="overview.users_over_quota" stripe>
               <el-table-column prop="username" label="Username" width="180">
                 <template #default="{ row }">
-                  <el-button
-                    type="text"
-                    @click="navigateToUser(row.username)"
-                  >
+                  <el-button type="text" @click="navigateToUser(row.username)">
                     {{ row.username }}
                   </el-button>
                 </template>
@@ -216,7 +210,9 @@ onMounted(() => {
               <div class="flex items-center gap-2">
                 <div class="i-carbon-warning-alt text-orange-600 text-xl" />
                 <span class="font-bold">
-                  Repositories Over Quota ({{ overview.repos_over_quota.length }})
+                  Repositories Over Quota ({{
+                    overview.repos_over_quota.length
+                  }})
                 </span>
               </div>
             </template>
@@ -226,7 +222,13 @@ onMounted(() => {
                 <template #default="{ row }">
                   <div class="flex items-center gap-2">
                     <el-tag
-                      :type="row.repo_type === 'model' ? 'primary' : row.repo_type === 'dataset' ? 'success' : 'warning'"
+                      :type="
+                        row.repo_type === 'model'
+                          ? 'primary'
+                          : row.repo_type === 'dataset'
+                            ? 'success'
+                            : 'warning'
+                      "
                       size="small"
                     >
                       {{ row.repo_type }}
@@ -302,7 +304,12 @@ onMounted(() => {
                     "
                   />
                   <span class="font-semibold">{{ row.username }}</span>
-                  <el-tag v-if="row.is_org" type="info" size="small" effect="plain">
+                  <el-tag
+                    v-if="row.is_org"
+                    type="info"
+                    size="small"
+                    effect="plain"
+                  >
                     Organization
                   </el-tag>
                 </div>
@@ -319,10 +326,7 @@ onMounted(() => {
 
             <el-table-column label="Action" width="120" align="right">
               <template #default="{ row }">
-                <el-button
-                  size="small"
-                  @click="navigateToUser(row.username)"
-                >
+                <el-button size="small" @click="navigateToUser(row.username)">
                   View
                 </el-button>
               </template>
