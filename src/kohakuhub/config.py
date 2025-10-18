@@ -16,7 +16,7 @@ class S3Config(BaseModel):
     access_key: str = "test-access-key"
     secret_key: str = "test-secret-key"
     bucket: str = "test-bucket"
-    region: str = "auto"  # auto (recommended), us-east-1, or specific AWS region
+    region: str = "us-east-1"  # auto (recommended), us-east-1, or specific AWS region
     force_path_style: bool = True
     signature_version: str | None = None  # s3v4 (R2, AWS S3) or None/s3v2 (MinIO)
 
@@ -195,7 +195,7 @@ def load_config(path: str = None) -> Config:
             access_key=os.environ.get("KOHAKU_HUB_S3_ACCESS_KEY", "test-access-key"),
             secret_key=os.environ.get("KOHAKU_HUB_S3_SECRET_KEY", "test-secret-key"),
             bucket=os.environ.get("KOHAKU_HUB_S3_BUCKET", "test-bucket"),
-            region=os.environ.get("KOHAKU_HUB_S3_REGION", "auto"),
+            region=os.environ.get("KOHAKU_HUB_S3_REGION", "us-east-1"),
             signature_version=os.environ.get("KOHAKU_HUB_S3_SIGNATURE_VERSION", None),
         )
 

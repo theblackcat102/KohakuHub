@@ -95,6 +95,7 @@ def generate_minio_service(config: dict) -> str:
     environment:
       - MINIO_ROOT_USER={config['s3_access_key']}
       - MINIO_ROOT_PASSWORD={config['s3_secret_key']}
+      - MINIO_REGION=auto
     ports:
       - "29001:9000"    # S3 API
       - "29000:29000"   # Web Console
