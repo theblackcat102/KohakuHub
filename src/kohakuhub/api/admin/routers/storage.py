@@ -12,6 +12,70 @@ logger = get_logger("ADMIN")
 router = APIRouter()
 
 
+@router.get("/storage/debug")
+async def debug_s3_config(
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Debug S3 configuration and test connectivity.
+
+    Returns diagnostic information about S3 setup.
+    """
+
+    def _debug():
+        s3 = get_s3_client()
+
+        info = {
+            "endpoint": cfg.s3.endpoint,
+            "bucket": cfg.s3.bucket,
+            "region": cfg.s3.region,
+            "force_path_style": cfg.s3.force_path_style,
+        }
+
+        # Test 1: Can we access the bucket?
+        try:
+            head_response = s3.head_bucket(Bucket=cfg.s3.bucket)
+            info["bucket_accessible"] = True
+            info["head_bucket_response"] = str(
+                head_response.get("ResponseMetadata", {})
+            )
+        except Exception as e:
+            info["bucket_accessible"] = False
+            info["head_bucket_error"] = str(e)
+
+        # Test 2: Try list with different parameters
+        for test_name, params in [
+            ("Standard", {"Bucket": cfg.s3.bucket, "MaxKeys": 10}),
+            (
+                "With Delimiter",
+                {"Bucket": cfg.s3.bucket, "Delimiter": "/", "MaxKeys": 10},
+            ),
+            ("No MaxKeys", {"Bucket": cfg.s3.bucket}),
+        ]:
+            try:
+                response = s3.list_objects_v2(**params)
+                result = {
+                    "success": True,
+                    "response_keys": list(response.keys()),
+                    "key_count": response.get("KeyCount", "N/A"),
+                    "contents_count": len(response.get("Contents", [])),
+                    "common_prefixes_count": len(response.get("CommonPrefixes", [])),
+                }
+                if response.get("Contents"):
+                    result["sample_keys"] = [
+                        obj["Key"] for obj in response.get("Contents", [])[:3]
+                    ]
+                info[f"test_{test_name}"] = result
+            except Exception as e:
+                info[f"test_{test_name}"] = {"success": False, "error": str(e)}
+
+        return info
+
+    result = await run_in_s3_executor(_debug)
+    logger.info(f"S3 Debug Info: {result}")
+
+    return result
+
+
 @router.get("/storage/buckets")
 async def list_s3_buckets(
     _admin: bool = Depends(verify_admin_token),
@@ -137,6 +201,11 @@ async def list_s3_objects(
     def _list_objects():
         s3 = get_s3_client()
 
+        # Log the actual request URL that will be constructed
+        logger.info(f"S3 client endpoint: {s3.meta.endpoint_url}")
+        logger.info(f"S3 client region: {s3.meta.region_name}")
+        logger.info(f"S3 client config: {s3.meta.config}")
+
         # Try two strategies for R2/path-style compatibility
         strategies = [
             {"bucket": bucket_name, "name": "with bucket name"},
@@ -151,15 +220,32 @@ async def list_s3_objects(
                     f"Trying strategy '{strategy['name']}': Bucket='{test_bucket}', Prefix='{prefix}'"
                 )
 
-                response = s3.list_objects_v2(
-                    Bucket=test_bucket,
-                    Prefix=prefix,
-                    MaxKeys=limit,
-                )
+                # Log the exact parameters
+                params = {"Bucket": test_bucket, "Prefix": prefix, "MaxKeys": limit}
+                logger.info(f"list_objects_v2 params: {params}")
 
-                # Log full response structure
+                response = s3.list_objects_v2(**params)
+
+                # Log EVERYTHING in response
+                logger.info(f"Response type: {type(response)}")
                 logger.info(f"Response keys: {list(response.keys())}")
-                logger.info(f"Full response (excluding metadata): {dict((k, v) for k, v in response.items() if k != 'ResponseMetadata')}")
+
+                for key in response.keys():
+                    if key != "ResponseMetadata":
+                        logger.info(f"Response['{key}']: {response[key]}")
+
+                # Check if response has expected fields
+                expected_fields = [
+                    "Name",
+                    "Prefix",
+                    "KeyCount",
+                    "MaxKeys",
+                    "IsTruncated",
+                ]
+                for field in expected_fields:
+                    logger.info(
+                        f"Has '{field}': {field in response}, Value: {response.get(field, 'N/A')}"
+                    )
 
                 contents = response.get("Contents", [])
                 common_prefixes = response.get("CommonPrefixes", [])

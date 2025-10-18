@@ -19,7 +19,19 @@ def get_s3_client():
         Configured boto3 S3 client using Signature Version 4.
     """
     # Build S3-specific config
-    s3_config = {"addressing_style": "path"} if cfg.s3.force_path_style else {}
+    s3_config = {}
+
+    if cfg.s3.force_path_style:
+        s3_config["addressing_style"] = "path"
+
+    # For R2/endpoints with bucket in path (e.g., https://r2.com/account-id/bucket)
+    # Check if endpoint contains path components
+    if cfg.s3.endpoint and ("/" in cfg.s3.endpoint.split("//", 1)[1]):
+        # Endpoint has path - treat it as bucket endpoint
+        s3_config["use_accelerate_endpoint"] = False
+        logger.info(
+            "S3 endpoint contains path - using bucket_endpoint mode for R2 compatibility"
+        )
 
     # Always use Signature Version 4 (more secure than deprecated SigV2)
     boto_config = BotoConfig(
