@@ -430,12 +430,12 @@ async def create_register_invitation_admin(
         }
     )
 
-    # Create invitation (no created_by for admin-generated invitations, use system user ID 1)
+    # Create invitation (no created_by for admin-generated invitations)
     invitation = create_invitation(
         token=token,
         action="register_account",
         parameters=parameters,
-        created_by=1,  # System/Admin user
+        created_by=None,  # System/Admin generated (no specific user)
         expires_at=expires_at,
         max_usage=request.max_usage,
     )

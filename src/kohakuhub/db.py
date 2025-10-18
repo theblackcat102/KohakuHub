@@ -316,8 +316,8 @@ class Invitation(BaseModel):
         TextField()
     )  # JSON string for action-specific data (org_id, role, etc.)
     created_by = ForeignKeyField(
-        User, backref="created_invitations", on_delete="CASCADE", index=True
-    )
+        User, backref="created_invitations", on_delete="CASCADE", null=True, index=True
+    )  # NULL for system/admin-generated invitations
     expires_at = DateTimeField()
 
     # Multi-use support

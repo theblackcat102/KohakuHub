@@ -714,7 +714,7 @@ def create_invitation(
     token: str,
     action: str,
     parameters: str,
-    created_by: User,
+    created_by: User | None,
     expires_at,
     max_usage: int | None = None,
 ) -> Invitation:
@@ -724,7 +724,7 @@ def create_invitation(
         token: Unique invitation token (UUID)
         action: Action type (e.g., "join_org", "register_account")
         parameters: JSON string with action-specific data
-        created_by: User who created the invitation (ForeignKey)
+        created_by: User who created the invitation (ForeignKey), or None for system/admin-generated
         expires_at: Expiration datetime
         max_usage: Maximum usage count (None=one-time, -1=unlimited, N=max N uses)
 
@@ -737,7 +737,7 @@ def create_invitation(
         token=token,
         action=action,
         parameters=parameters,
-        created_by=created_by,
+        created_by=created_by,  # Can be None for system/admin invitations
         expires_at=expires_at,
         max_usage=max_usage,
         usage_count=0,
