@@ -159,7 +159,11 @@ onMounted(() => {
         <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
           Storage Browser
         </h1>
-        <el-button @click="loadObjects('')" :icon="'Refresh'" :loading="loading">
+        <el-button
+          @click="loadObjects('')"
+          :icon="'Refresh'"
+          :loading="loading"
+        >
           Refresh
         </el-button>
       </div>
@@ -172,7 +176,9 @@ onMounted(() => {
               <div class="i-carbon-folder-open text-2xl text-blue-600" />
               <span class="font-bold">Storage Explorer</span>
             </div>
-            <div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <div
+              class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"
+            >
               <span>{{ folderStructure.folders.length }} folders</span>
               <span>•</span>
               <span>{{ folderStructure.files.length }} files</span>

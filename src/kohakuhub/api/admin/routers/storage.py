@@ -35,6 +35,7 @@ async def list_s3_buckets(
             # For R2/path-style, list_buckets might not work
             # Return configured bucket as fallback
             from kohakuhub.config import cfg
+
             return [
                 {
                     "name": cfg.s3.bucket,
@@ -51,6 +52,7 @@ async def list_s3_buckets(
         # If no buckets returned (R2 path-style issue), use configured bucket
         if not bucket_list:
             from kohakuhub.config import cfg
+
             logger.warning("list_buckets returned empty, using configured bucket")
             return [
                 {
@@ -134,7 +136,9 @@ async def list_s3_objects(
         s3 = get_s3_client()
 
         try:
-            response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix, MaxKeys=limit)
+            response = s3.list_objects_v2(
+                Bucket=bucket_name, Prefix=prefix, MaxKeys=limit
+            )
 
             objects = []
             for obj in response.get("Contents", []):
