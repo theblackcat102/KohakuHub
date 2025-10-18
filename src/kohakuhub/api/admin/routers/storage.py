@@ -285,15 +285,36 @@ async def list_s3_objects(
                 logger.success(f"Found {len(contents)} objects!")
                 logger.info(f"First 3 keys: {[obj['Key'] for obj in contents[:3]]}")
 
+            # Strip base prefix from keys for frontend display
+            # So frontend sees relative paths from their perspective
+            strip_prefix = f"{base_prefix}/" if endpoint_path and base_prefix else ""
+            logger.info(
+                f"Stripping prefix '{strip_prefix}' from object keys for frontend"
+            )
+
             objects = []
             for obj in contents:
+                original_key = obj["Key"]
+                # Remove base prefix to show relative path
+                display_key = (
+                    original_key[len(strip_prefix) :]
+                    if strip_prefix and original_key.startswith(strip_prefix)
+                    else original_key
+                )
+
                 objects.append(
                     {
-                        "key": obj["Key"],
+                        "key": display_key,  # Relative path for frontend
+                        "full_key": original_key,  # Full S3 key
                         "size": obj["Size"],
                         "last_modified": obj["LastModified"].isoformat(),
                         "storage_class": obj.get("StorageClass", "STANDARD"),
                     }
+                )
+
+            if objects:
+                logger.info(
+                    f"Sample display keys: {[obj['key'] for obj in objects[:3]]}"
                 )
 
             return {
