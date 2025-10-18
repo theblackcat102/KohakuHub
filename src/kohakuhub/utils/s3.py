@@ -16,8 +16,8 @@ def get_s3_client():
     """Create configured S3 client with configurable signature version.
 
     Signature versions:
-    - s3v4: AWS S3, Cloudflare R2 (default, more secure)
-    - s3v2: MinIO (legacy, required for some MinIO setups)
+    - None: Use default (s3v2 for MinIO compatibility)
+    - "s3v4": AWS S3, Cloudflare R2 (required for these services)
 
     Set via KOHAKU_HUB_S3_SIGNATURE_VERSION environment variable.
 
@@ -39,14 +39,19 @@ def get_s3_client():
             "S3 endpoint contains path - using bucket_endpoint mode for R2 compatibility"
         )
 
-    # Use configured signature version (s3v4 or s3v2)
+    # Use configured signature version
     sig_version = cfg.s3.signature_version
-    logger.debug(f"Using S3 signature version: {sig_version}")
-
-    boto_config = BotoConfig(
-        signature_version=sig_version,
-        s3=s3_config,
-    )
+    if sig_version:
+        logger.debug(f"Using S3 signature version: {sig_version}")
+        boto_config = BotoConfig(
+            signature_version=sig_version,
+            s3=s3_config,
+        )
+    else:
+        logger.debug("Using default S3 signature version (s3v2 compatible)")
+        boto_config = BotoConfig(
+            s3=s3_config,
+        )
 
     return boto3.client(
         "s3",

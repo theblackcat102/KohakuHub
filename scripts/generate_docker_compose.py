@@ -241,12 +241,22 @@ def generate_hub_api_service(config: dict) -> str:
         s3_endpoint_internal = "http://minio:9000"
         s3_endpoint_public = "http://127.0.0.1:29001"
         s3_region = "auto"
-        s3_sig_version = "s3v2"
+        # MinIO: Don't set signature_version (uses default/s3v2-compatible)
+        s3_sig_version_line = "      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment for R2/AWS S3 (leave commented for MinIO)"
     else:
         s3_endpoint_internal = config["s3_endpoint"]
         s3_endpoint_public = config["s3_endpoint"]
         s3_region = config.get("s3_region", "auto")
+        # External S3: Use configured value or default to s3v4
         s3_sig_version = config.get("s3_signature_version", "s3v4")
+        if s3_sig_version:
+            s3_sig_version_line = (
+                f"      - KOHAKU_HUB_S3_SIGNATURE_VERSION={s3_sig_version}"
+            )
+        else:
+            s3_sig_version_line = (
+                "      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment if needed"
+            )
 
     return f"""  hub-api:
     build: .
@@ -277,7 +287,7 @@ def generate_hub_api_service(config: dict) -> str:
       - KOHAKU_HUB_S3_SECRET_KEY={config['s3_secret_key']}
       - KOHAKU_HUB_S3_BUCKET=hub-storage
       - KOHAKU_HUB_S3_REGION={s3_region}  # auto (recommended), us-east-1, or your AWS region
-      - KOHAKU_HUB_S3_SIGNATURE_VERSION={s3_sig_version}  # s3v2 for MinIO, s3v4 for R2/AWS S3
+{s3_sig_version_line}
 
       ## ===== LakeFS Configuration =====
       - KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:28000
@@ -423,15 +433,15 @@ def load_config_file(config_path: Path) -> dict:
         )  # 64 chars
         config["s3_region"] = s3.get("region", fallback="auto")
         config["s3_signature_version"] = s3.get(
-            "signature_version", fallback="s3v2" if config["s3_builtin"] else "s3v4"
-        )  # s3v2 for MinIO, s3v4 for R2/AWS S3
+            "signature_version", fallback="" if config["s3_builtin"] else "s3v4"
+        )  # Empty for MinIO (default), s3v4 for R2/AWS S3
     else:
         config["s3_builtin"] = True
         config["s3_endpoint"] = "http://minio:9000"
         config["s3_access_key"] = generate_secret(24)  # 32 chars
         config["s3_secret_key"] = generate_secret(48)  # 64 chars
         config["s3_region"] = "auto"
-        config["s3_signature_version"] = "s3v2"  # Default for MinIO
+        config["s3_signature_version"] = ""  # Empty for MinIO (default)
 
     # Security section
     if parser.has_section("security"):
@@ -494,14 +504,14 @@ builtin = true
 # access_key = your-access-key
 # secret_key = your-secret-key
 # region = auto  # auto (recommended), us-east-1, or your AWS region
-# signature_version = s3v4  # s3v2 for MinIO, s3v4 for R2/AWS S3
+# signature_version = s3v4  # s3v4 for R2/AWS S3, leave empty for MinIO
 
 # If builtin = true, MinIO credentials are auto-generated (recommended)
 # You can override by uncommenting and setting custom values:
 # access_key = your-custom-access-key
 # secret_key = your-custom-secret-key
 # region = auto
-# signature_version = s3v2
+# signature_version =  # Leave empty for MinIO (uses default)
 
 [security]
 # Session and admin secrets (auto-generated if not specified)
@@ -649,7 +659,7 @@ def interactive_config() -> dict:
 
         config["s3_endpoint"] = "http://minio:9000"
         config["s3_region"] = "auto"
-        config["s3_signature_version"] = "s3v2"  # MinIO uses s3v2
+        config["s3_signature_version"] = ""  # MinIO uses default (don't set)
     else:
         config["s3_endpoint"] = ask_string("S3 endpoint URL")
         config["s3_access_key"] = ask_string("S3 access key")
@@ -659,10 +669,13 @@ def interactive_config() -> dict:
         # Ask about signature version for external S3
         print()
         print("Signature version:")
-        print("  - s3v2: MinIO (legacy)")
-        print("  - s3v4: Cloudflare R2, AWS S3 (recommended)")
-        config["s3_signature_version"] = ask_string(
-            "S3 signature version (s3v2 or s3v4)", default="s3v4"
+        print("  - (empty): Use default (for MinIO compatibility)")
+        print("  - s3v4: Cloudflare R2, AWS S3 (recommended for R2/AWS)")
+        sig_input = ask_string(
+            "S3 signature version (s3v4 or leave empty)", default="s3v4"
+        )
+        config["s3_signature_version"] = (
+            sig_input if sig_input.lower() != "none" else ""
         )
 
     print()

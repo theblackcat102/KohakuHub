@@ -49,7 +49,7 @@ services:
       - KOHAKU_HUB_S3_SECRET_KEY=minioadmin
       - KOHAKU_HUB_S3_BUCKET=hub-storage
       - KOHAKU_HUB_S3_REGION=auto  # auto (recommended), us-east-1, or your AWS region
-      - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v2  # s3v2 for MinIO, s3v4 for R2/AWS S3
+      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment for R2/AWS S3 (leave commented for MinIO default)
 
       ## ===== LakeFS Configuration =====
       - KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:28000

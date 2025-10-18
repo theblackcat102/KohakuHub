@@ -196,9 +196,7 @@ def load_config(path: str = None) -> Config:
             secret_key=os.environ.get("KOHAKU_HUB_S3_SECRET_KEY", "test-secret-key"),
             bucket=os.environ.get("KOHAKU_HUB_S3_BUCKET", "test-bucket"),
             region=os.environ.get("KOHAKU_HUB_S3_REGION", "auto"),
-            signature_version=os.environ.get(
-                "KOHAKU_HUB_S3_SIGNATURE_VERSION", None
-            )
+            signature_version=os.environ.get("KOHAKU_HUB_S3_SIGNATURE_VERSION", None),
         )
 
         lakefs_config = LakeFSConfig(
