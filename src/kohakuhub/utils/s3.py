@@ -13,14 +13,20 @@ logger = get_logger("S3")
 
 
 def get_s3_client():
-    """Create configured S3 client.
+    """Create configured S3 client with SigV4 signing.
 
     Returns:
-        Configured boto3 S3 client.
+        Configured boto3 S3 client using Signature Version 4.
     """
+    # Build S3-specific config
+    s3_config = {"addressing_style": "path"} if cfg.s3.force_path_style else {}
+
+    # Always use Signature Version 4 (more secure than deprecated SigV2)
     boto_config = BotoConfig(
-        s3={"addressing_style": "path"} if cfg.s3.force_path_style else {}
+        signature_version="s3v4",
+        s3=s3_config,
     )
+
     return boto3.client(
         "s3",
         endpoint_url=cfg.s3.endpoint,
