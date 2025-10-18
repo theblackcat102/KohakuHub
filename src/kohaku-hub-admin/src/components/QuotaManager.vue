@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import {
   getQuota,
   setQuota,
@@ -28,6 +28,7 @@ const quotaInfo = ref(null);
 const loading = ref(false);
 const editing = ref(false);
 const recalculating = ref(false);
+const debounceTimer = ref(null);
 
 // Edit form
 const editForm = ref({
@@ -57,6 +58,20 @@ async function loadQuota() {
   } finally {
     loading.value = false;
   }
+}
+
+function debouncedLoadQuota() {
+  // Clear existing timer
+  if (debounceTimer.value) {
+    clearTimeout(debounceTimer.value);
+  }
+
+  // Set new timer - wait 800ms after last input before loading
+  debounceTimer.value = setTimeout(() => {
+    if (props.namespace && props.token) {
+      loadQuota();
+    }
+  }, 800);
 }
 
 async function handleSaveQuota() {
@@ -105,16 +120,36 @@ function formatPercentage(value) {
   return value !== null && value !== undefined ? value.toFixed(2) + "%" : "N/A";
 }
 
-// Watch for namespace changes
+// Watch for namespace changes with debounce
 watch(
   () => [props.namespace, props.isOrg, props.token],
-  () => {
-    if (props.namespace && props.token) {
-      loadQuota();
+  (newVal, oldVal) => {
+    // If token changed or isOrg changed (not just typing), load immediately
+    const tokenChanged = newVal[2] !== oldVal?.[2];
+    const isOrgChanged = newVal[1] !== oldVal?.[1];
+
+    if (tokenChanged || isOrgChanged) {
+      // Clear debounce timer and load immediately
+      if (debounceTimer.value) {
+        clearTimeout(debounceTimer.value);
+      }
+      if (props.namespace && props.token) {
+        loadQuota();
+      }
+    } else {
+      // Namespace changed (user typing), use debounce
+      debouncedLoadQuota();
     }
   },
   { immediate: true },
 );
+
+// Cleanup on unmount
+onUnmounted(() => {
+  if (debounceTimer.value) {
+    clearTimeout(debounceTimer.value);
+  }
+});
 </script>
 
 <template>
