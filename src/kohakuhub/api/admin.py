@@ -505,7 +505,7 @@ async def list_invitations_admin(
                 "org_name": params.get("org_name"),
                 "role": params.get("role"),
                 "email": params.get("email"),
-                "created_by": inv.created_by,
+                "created_by_id": inv.created_by.id if inv.created_by else None,
                 "creator_username": creator_username,
                 "created_at": inv.created_at.isoformat(),
                 "expires_at": inv.expires_at.isoformat(),
@@ -515,7 +515,8 @@ async def list_invitations_admin(
                 "is_available": is_available,
                 "error_message": error_msg,
                 "used_at": inv.used_at.isoformat() if inv.used_at else None,
-                "used_by": inv.used_by,
+                "used_by_id": inv.used_by.id if inv.used_by else None,
+                "used_by_username": inv.used_by.username if inv.used_by else None,
             }
         )
 
