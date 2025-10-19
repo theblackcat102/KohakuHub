@@ -2,7 +2,10 @@
 <template>
   <div class="container-main">
     <!-- Header with Settings Button (only for local admins) -->
-    <div v-if="isAdmin && !isExternalOrg" class="flex items-center justify-end mb-4">
+    <div
+      v-if="isAdmin && !isExternalOrg"
+      class="flex items-center justify-end mb-4"
+    >
       <el-button
         type="primary"
         size="small"
@@ -40,7 +43,12 @@
                 Organization
               </p>
               <!-- External Source Badge -->
-              <el-tag v-if="isExternalOrg" size="small" type="info" class="mt-1">
+              <el-tag
+                v-if="isExternalOrg"
+                size="small"
+                type="info"
+                class="mt-1"
+              >
                 <div class="i-carbon-cloud inline-block mr-1" />
                 {{ externalSourceName }}
               </el-tag>
@@ -704,24 +712,24 @@ const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 
 // External org detection
 const isExternalOrg = computed(() => {
-  return orgInfo.value?._source && orgInfo.value._source !== 'local'
-})
+  return orgInfo.value?._source && orgInfo.value._source !== "local";
+});
 
 const externalSourceName = computed(() => {
-  return orgInfo.value?._source || 'external source'
-})
+  return orgInfo.value?._source || "external source";
+});
 
 const externalSourceUrl = computed(() => {
-  return orgInfo.value?._source_url || ''
-})
+  return orgInfo.value?._source_url || "";
+});
 
 const hasPartialProfile = computed(() => {
-  return orgInfo.value?._partial === true
-})
+  return orgInfo.value?._partial === true;
+});
 
 const externalAvatarUrl = computed(() => {
-  return orgInfo.value?._avatar_url
-})
+  return orgInfo.value?._avatar_url;
+});
 
 const isAdmin = computed(() => {
   return userRole.value && ["admin", "super-admin"].includes(userRole.value);

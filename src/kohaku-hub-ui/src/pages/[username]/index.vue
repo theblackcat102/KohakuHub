@@ -24,613 +24,631 @@
         <!-- Sidebar -->
         <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
           <div class="card">
-          <div class="flex items-center gap-3 mb-4">
-            <!-- Avatar (use external URL if available) -->
-            <img
-              v-if="externalAvatarUrl && isExternalUser"
-              :src="externalAvatarUrl"
-              :alt="`${username} avatar`"
-              class="w-20 h-20 rounded-full object-cover"
-            />
-            <img
-              v-else-if="hasAvatar && !isExternalUser"
-              :src="`/api/users/${username}/avatar?t=${Date.now()}`"
-              :alt="`${username} avatar`"
-              class="w-20 h-20 rounded-full object-cover"
-              @error="hasAvatar = false"
-            />
-            <div v-else class="i-carbon-user-avatar text-5xl text-gray-400" />
+            <div class="flex items-center gap-3 mb-4">
+              <!-- Avatar (use external URL if available) -->
+              <img
+                v-if="externalAvatarUrl && isExternalUser"
+                :src="externalAvatarUrl"
+                :alt="`${username} avatar`"
+                class="w-20 h-20 rounded-full object-cover"
+              />
+              <img
+                v-else-if="hasAvatar && !isExternalUser"
+                :src="`/api/users/${username}/avatar?t=${Date.now()}`"
+                :alt="`${username} avatar`"
+                class="w-20 h-20 rounded-full object-cover"
+                @error="hasAvatar = false"
+              />
+              <div v-else class="i-carbon-user-avatar text-5xl text-gray-400" />
 
-            <div>
-              <h2 class="text-xl font-bold">{{ username }}</h2>
-              <p class="text-sm text-gray-600 dark:text-gray-400">
-                {{ profileInfo?.full_name || "User" }}
+              <div>
+                <h2 class="text-xl font-bold">{{ username }}</h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                  {{ profileInfo?.full_name || "User" }}
+                </p>
+                <!-- External Source Badge -->
+                <el-tag
+                  v-if="isExternalUser"
+                  size="small"
+                  type="info"
+                  class="mt-1"
+                >
+                  <div class="i-carbon-cloud inline-block mr-1" />
+                  {{ externalSourceName }}
+                </el-tag>
+              </div>
+            </div>
+
+            <div v-if="profileInfo" class="space-y-3 text-sm">
+              <!-- Bio -->
+              <p
+                v-if="profileInfo.bio"
+                class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"
+              >
+                {{ profileInfo.bio }}
               </p>
-              <!-- External Source Badge -->
-              <el-tag v-if="isExternalUser" size="small" type="info" class="mt-1">
-                <div class="i-carbon-cloud inline-block mr-1" />
-                {{ externalSourceName }}
-              </el-tag>
-            </div>
-          </div>
 
-          <div v-if="profileInfo" class="space-y-3 text-sm">
-            <!-- Bio -->
-            <p
-              v-if="profileInfo.bio"
-              class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"
-            >
-              {{ profileInfo.bio }}
-            </p>
-
-            <!-- Links Section (Website + Social Media) -->
-            <div
-              v-if="profileInfo.website || profileInfo.social_media"
-              class="flex gap-3"
-            >
-              <!-- Icons Column (10% width) -->
-              <div class="flex flex-col gap-2 w-10% min-w-8">
-                <!-- Website Icon -->
-                <div
-                  v-if="profileInfo.website"
-                  class="flex items-center justify-center h-6"
-                >
-                  <div
-                    class="i-carbon-link w-4 h-4 text-gray-600 dark:text-gray-400"
-                  />
-                </div>
-
-                <!-- Social Media Icons -->
-                <div
-                  v-if="profileInfo.social_media?.twitter_x"
-                  class="flex items-center justify-center h-6"
-                >
-                  <div
-                    class="i-carbon-logo-x w-4 h-4 text-gray-600 dark:text-gray-400"
-                  />
-                </div>
-                <div
-                  v-if="profileInfo.social_media?.threads"
-                  class="flex items-center justify-center h-6"
-                >
-                  <div
-                    class="i-carbon-logo-instagram w-4 h-4 text-gray-600 dark:text-gray-400"
-                  />
-                </div>
-                <div
-                  v-if="profileInfo.social_media?.github"
-                  class="flex items-center justify-center h-6"
-                >
-                  <div
-                    class="i-carbon-logo-github w-4 h-4 text-gray-600 dark:text-gray-400"
-                  />
-                </div>
-                <div
-                  v-if="profileInfo.social_media?.huggingface"
-                  class="flex items-center justify-center h-6"
-                >
-                  <span class="text-base">🤗</span>
-                </div>
-              </div>
-
-              <!-- Links Column (90% width) -->
-              <div class="flex flex-col gap-2 flex-1">
-                <!-- Website Link -->
-                <a
-                  v-if="profileInfo.website"
-                  :href="profileInfo.website"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center h-6 text-sm text-blue-600 dark:text-blue-400 hover:underline transition-colors truncate"
-                  title="Website"
-                >
-                  {{ profileInfo.website.replace(/^https?:\/\//, "") }}
-                </a>
-
-                <!-- Social Media Links -->
-                <a
-                  v-if="profileInfo.social_media?.twitter_x"
-                  :href="`https://twitter.com/${profileInfo.social_media.twitter_x}`"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate"
-                  title="Twitter/X"
-                >
-                  @{{ profileInfo.social_media.twitter_x }}
-                </a>
-
-                <a
-                  v-if="profileInfo.social_media?.threads"
-                  :href="`https://www.threads.net/@${profileInfo.social_media.threads}`"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors truncate"
-                  title="Threads"
-                >
-                  @{{ profileInfo.social_media.threads }}
-                </a>
-
-                <a
-                  v-if="profileInfo.social_media?.github"
-                  :href="`https://github.com/${profileInfo.social_media.github}`"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors truncate"
-                  title="GitHub"
-                >
-                  {{ profileInfo.social_media.github }}
-                </a>
-
-                <a
-                  v-if="profileInfo.social_media?.huggingface"
-                  :href="`https://huggingface.co/${profileInfo.social_media.huggingface}`"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors truncate"
-                  title="HuggingFace"
-                >
-                  {{ profileInfo.social_media.huggingface }}
-                </a>
-              </div>
-            </div>
-
-            <!-- Joined Date -->
-            <div
-              class="flex items-center gap-2 text-gray-600 dark:text-gray-400 pt-2 border-t"
-            >
-              <div class="i-carbon-calendar" />
-              Joined {{ formatDate(profileInfo.created_at) }}
-            </div>
-
-            <!-- Partial Profile Indicator -->
-            <div v-if="hasPartialProfile" class="text-xs text-gray-500 dark:text-gray-400 italic pt-2 border-t">
-              <div class="i-carbon-information inline-block mr-1" />
-              Limited profile from external source
-            </div>
-          </div>
-        </div>
-
-        <!-- Storage Quota Card -->
-        <div v-if="quotaInfo" class="card">
-          <h3 class="font-semibold mb-3 flex items-center gap-2">
-            <div class="i-carbon-data-base text-gray-500" />
-            Storage Usage
-          </h3>
-
-          <!-- Public Storage -->
-          <div class="mb-4">
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-sm text-gray-600 dark:text-gray-400"
-                >Public</span
+              <!-- Links Section (Website + Social Media) -->
+              <div
+                v-if="profileInfo.website || profileInfo.social_media"
+                class="flex gap-3"
               >
-              <span class="text-sm font-mono">
-                {{ formatBytes(quotaInfo.public_used_bytes) }}
-                <span
-                  v-if="quotaInfo.public_quota_bytes !== null"
-                  class="text-gray-400"
-                >
-                  / {{ formatBytes(quotaInfo.public_quota_bytes) }}
-                </span>
-                <span v-else class="text-gray-400">/ Unlimited</span>
-              </span>
+                <!-- Icons Column (10% width) -->
+                <div class="flex flex-col gap-2 w-10% min-w-8">
+                  <!-- Website Icon -->
+                  <div
+                    v-if="profileInfo.website"
+                    class="flex items-center justify-center h-6"
+                  >
+                    <div
+                      class="i-carbon-link w-4 h-4 text-gray-600 dark:text-gray-400"
+                    />
+                  </div>
+
+                  <!-- Social Media Icons -->
+                  <div
+                    v-if="profileInfo.social_media?.twitter_x"
+                    class="flex items-center justify-center h-6"
+                  >
+                    <div
+                      class="i-carbon-logo-x w-4 h-4 text-gray-600 dark:text-gray-400"
+                    />
+                  </div>
+                  <div
+                    v-if="profileInfo.social_media?.threads"
+                    class="flex items-center justify-center h-6"
+                  >
+                    <div
+                      class="i-carbon-logo-instagram w-4 h-4 text-gray-600 dark:text-gray-400"
+                    />
+                  </div>
+                  <div
+                    v-if="profileInfo.social_media?.github"
+                    class="flex items-center justify-center h-6"
+                  >
+                    <div
+                      class="i-carbon-logo-github w-4 h-4 text-gray-600 dark:text-gray-400"
+                    />
+                  </div>
+                  <div
+                    v-if="profileInfo.social_media?.huggingface"
+                    class="flex items-center justify-center h-6"
+                  >
+                    <span class="text-base">🤗</span>
+                  </div>
+                </div>
+
+                <!-- Links Column (90% width) -->
+                <div class="flex flex-col gap-2 flex-1">
+                  <!-- Website Link -->
+                  <a
+                    v-if="profileInfo.website"
+                    :href="profileInfo.website"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center h-6 text-sm text-blue-600 dark:text-blue-400 hover:underline transition-colors truncate"
+                    title="Website"
+                  >
+                    {{ profileInfo.website.replace(/^https?:\/\//, "") }}
+                  </a>
+
+                  <!-- Social Media Links -->
+                  <a
+                    v-if="profileInfo.social_media?.twitter_x"
+                    :href="`https://twitter.com/${profileInfo.social_media.twitter_x}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate"
+                    title="Twitter/X"
+                  >
+                    @{{ profileInfo.social_media.twitter_x }}
+                  </a>
+
+                  <a
+                    v-if="profileInfo.social_media?.threads"
+                    :href="`https://www.threads.net/@${profileInfo.social_media.threads}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors truncate"
+                    title="Threads"
+                  >
+                    @{{ profileInfo.social_media.threads }}
+                  </a>
+
+                  <a
+                    v-if="profileInfo.social_media?.github"
+                    :href="`https://github.com/${profileInfo.social_media.github}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors truncate"
+                    title="GitHub"
+                  >
+                    {{ profileInfo.social_media.github }}
+                  </a>
+
+                  <a
+                    v-if="profileInfo.social_media?.huggingface"
+                    :href="`https://huggingface.co/${profileInfo.social_media.huggingface}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center h-6 text-sm text-gray-700 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors truncate"
+                    title="HuggingFace"
+                  >
+                    {{ profileInfo.social_media.huggingface }}
+                  </a>
+                </div>
+              </div>
+
+              <!-- Joined Date -->
+              <div
+                class="flex items-center gap-2 text-gray-600 dark:text-gray-400 pt-2 border-t"
+              >
+                <div class="i-carbon-calendar" />
+                Joined {{ formatDate(profileInfo.created_at) }}
+              </div>
+
+              <!-- Partial Profile Indicator -->
+              <div
+                v-if="hasPartialProfile"
+                class="text-xs text-gray-500 dark:text-gray-400 italic pt-2 border-t"
+              >
+                <div class="i-carbon-information inline-block mr-1" />
+                Limited profile from external source
+              </div>
             </div>
-            <el-progress
-              v-if="quotaInfo.public_quota_bytes !== null"
-              :percentage="Math.min(100, quotaInfo.public_percentage_used || 0)"
-              :status="getQuotaStatus(quotaInfo.public_percentage_used)"
-              :show-text="false"
-            />
+          </div>
+
+          <!-- Storage Quota Card -->
+          <div v-if="quotaInfo" class="card">
+            <h3 class="font-semibold mb-3 flex items-center gap-2">
+              <div class="i-carbon-data-base text-gray-500" />
+              Storage Usage
+            </h3>
+
+            <!-- Public Storage -->
+            <div class="mb-4">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-sm text-gray-600 dark:text-gray-400"
+                  >Public</span
+                >
+                <span class="text-sm font-mono">
+                  {{ formatBytes(quotaInfo.public_used_bytes) }}
+                  <span
+                    v-if="quotaInfo.public_quota_bytes !== null"
+                    class="text-gray-400"
+                  >
+                    / {{ formatBytes(quotaInfo.public_quota_bytes) }}
+                  </span>
+                  <span v-else class="text-gray-400">/ Unlimited</span>
+                </span>
+              </div>
+              <el-progress
+                v-if="quotaInfo.public_quota_bytes !== null"
+                :percentage="
+                  Math.min(100, quotaInfo.public_percentage_used || 0)
+                "
+                :status="getQuotaStatus(quotaInfo.public_percentage_used)"
+                :show-text="false"
+              />
+              <div
+                v-else
+                class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
+              ></div>
+            </div>
+
+            <!-- Private Storage (only if user has permission) -->
+            <div v-if="quotaInfo.can_see_private" class="mb-2">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-sm text-gray-600 dark:text-gray-400"
+                  >Private</span
+                >
+                <span class="text-sm font-mono">
+                  {{ formatBytes(quotaInfo.private_used_bytes) }}
+                  <span
+                    v-if="quotaInfo.private_quota_bytes !== null"
+                    class="text-gray-400"
+                  >
+                    / {{ formatBytes(quotaInfo.private_quota_bytes) }}
+                  </span>
+                  <span v-else class="text-gray-400">/ Unlimited</span>
+                </span>
+              </div>
+              <el-progress
+                v-if="quotaInfo.private_quota_bytes !== null"
+                :percentage="
+                  Math.min(100, quotaInfo.private_percentage_used || 0)
+                "
+                :status="getQuotaStatus(quotaInfo.private_percentage_used)"
+                :show-text="false"
+              />
+              <div
+                v-else
+                class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
+              ></div>
+            </div>
+
+            <!-- Total -->
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <div class="flex justify-between items-center">
+                <span class="text-sm font-semibold">Total</span>
+                <span class="text-sm font-mono font-semibold">
+                  {{ formatBytes(quotaInfo.total_used_bytes) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- View Details Button (only for users with write permission) -->
+            <div v-if="quotaInfo.can_see_private" class="mt-4">
+              <el-button
+                size="small"
+                @click="$router.push(`/${username}/storage`)"
+                class="w-full"
+              >
+                <div class="i-carbon-chart-bar inline-block mr-1" />
+                View Details
+              </el-button>
+            </div>
+          </div>
+
+          <!-- Stats Summary / Tab Navigation -->
+          <div class="card">
+            <h3 class="font-semibold mb-3">Repositories</h3>
+            <div class="space-y-1">
+              <RouterLink
+                :to="`/${username}`"
+                :class="[
+                  'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                  'bg-gray-100 dark:bg-gray-700',
+                ]"
+              >
+                <div class="flex items-center gap-2 text-sm">
+                  <div class="i-carbon-grid text-gray-500 dark:text-gray-400" />
+                  <span class="font-semibold">Overview</span>
+                </div>
+              </RouterLink>
+
+              <RouterLink
+                :to="`/${username}/models`"
+                :class="[
+                  'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                  'hover:bg-gray-100 dark:hover:bg-gray-700',
+                ]"
+              >
+                <div class="flex items-center gap-2 text-sm">
+                  <div class="i-carbon-model text-blue-500" />
+                  <span>Models</span>
+                </div>
+                <span
+                  class="text-sm font-semibold text-gray-600 dark:text-gray-400"
+                >
+                  {{ getCount("model") }}
+                </span>
+              </RouterLink>
+
+              <RouterLink
+                :to="`/${username}/datasets`"
+                :class="[
+                  'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                  'hover:bg-gray-100 dark:hover:bg-gray-700',
+                ]"
+              >
+                <div class="flex items-center gap-2 text-sm">
+                  <div class="i-carbon-data-table text-green-500" />
+                  <span>Datasets</span>
+                </div>
+                <span
+                  class="text-sm font-semibold text-gray-600 dark:text-gray-400"
+                >
+                  {{ getCount("dataset") }}
+                </span>
+              </RouterLink>
+
+              <RouterLink
+                :to="`/${username}/spaces`"
+                :class="[
+                  'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
+                  'hover:bg-gray-100 dark:hover:bg-gray-700',
+                ]"
+              >
+                <div class="flex items-center gap-2 text-sm">
+                  <div class="i-carbon-application text-purple-500" />
+                  <span>Spaces</span>
+                </div>
+                <span
+                  class="text-sm font-semibold text-gray-600 dark:text-gray-400"
+                >
+                  {{ getCount("space") }}
+                </span>
+              </RouterLink>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="space-y-8">
+          <!-- Sort Dropdown (applies to all sections) -->
+          <div class="card">
+            <el-select
+              v-model="sortBy"
+              placeholder="Sort by"
+              class="w-full sm:w-50"
+            >
+              <el-option label="Recently Updated" value="recent" />
+              <el-option label="Most Downloads" value="downloads" />
+              <el-option label="Most Likes" value="likes" />
+            </el-select>
+          </div>
+
+          <!-- User Card (from Username/Username space repo if exists) -->
+          <section v-if="userCard" class="card">
+            <div class="markdown-body">
+              <MarkdownViewer :content="userCard" />
+            </div>
+          </section>
+
+          <!-- Models Section -->
+          <section class="mb-8">
+            <div
+              class="flex items-center justify-between mb-4 pb-3 border-b-2 border-blue-500"
+            >
+              <div class="flex items-center gap-2">
+                <div class="i-carbon-model text-blue-500 text-xl md:text-2xl" />
+                <h2 class="text-xl md:text-2xl font-bold">Models</h2>
+              </div>
+              <el-tag type="info" size="large">{{ getCount("model") }}</el-tag>
+            </div>
+
+            <div v-if="getCount('model') > 0" class="space-y-4">
+              <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div
+                  v-for="repo in displayedRepos('model')"
+                  :key="repo.id"
+                  class="card hover:shadow-md transition-shadow cursor-pointer"
+                  @click="goToRepo('model', repo)"
+                >
+                  <div class="flex items-start gap-2 mb-2">
+                    <div
+                      class="i-carbon-model text-blue-500 text-xl flex-shrink-0"
+                    />
+                    <div class="flex-1 min-w-0">
+                      <h3
+                        class="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate"
+                      >
+                        {{ repo.id }}
+                      </h3>
+                      <div
+                        class="text-xs text-gray-600 dark:text-gray-400 mt-1"
+                      >
+                        Updated {{ formatDate(repo.lastModified) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="repo.tags && repo.tags.length"
+                    class="flex gap-1 mb-2 flex-wrap"
+                  >
+                    <el-tag
+                      v-for="tag in repo.tags.slice(0, 2)"
+                      :key="tag"
+                      size="small"
+                      effect="plain"
+                    >
+                      {{ tag }}
+                    </el-tag>
+                  </div>
+
+                  <div
+                    class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-download" />
+                      {{ repo.downloads || 0 }}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-favorite" />
+                      {{ repo.likes || 0 }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Show More button -->
+              <RouterLink :to="`/${username}/models`" class="block mt-4">
+                <el-button v-if="hasMoreRepos('model')" class="w-full">
+                  Show all {{ getCount("model") }} models →
+                </el-button>
+              </RouterLink>
+            </div>
+
             <div
               v-else
-              class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
-            ></div>
-          </div>
-
-          <!-- Private Storage (only if user has permission) -->
-          <div v-if="quotaInfo.can_see_private" class="mb-2">
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-sm text-gray-600 dark:text-gray-400"
-                >Private</span
-              >
-              <span class="text-sm font-mono">
-                {{ formatBytes(quotaInfo.private_used_bytes) }}
-                <span
-                  v-if="quotaInfo.private_quota_bytes !== null"
-                  class="text-gray-400"
-                >
-                  / {{ formatBytes(quotaInfo.private_quota_bytes) }}
-                </span>
-                <span v-else class="text-gray-400">/ Unlimited</span>
-              </span>
+              class="text-center py-12 text-gray-500 dark:text-gray-400"
+            >
+              <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
+              <p>No models yet</p>
             </div>
-            <el-progress
-              v-if="quotaInfo.private_quota_bytes !== null"
-              :percentage="
-                Math.min(100, quotaInfo.private_percentage_used || 0)
-              "
-              :status="getQuotaStatus(quotaInfo.private_percentage_used)"
-              :show-text="false"
-            />
+          </section>
+
+          <!-- Datasets Section -->
+          <section class="mb-8">
+            <div
+              class="flex items-center justify-between mb-4 pb-3 border-b-2 border-green-500"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  class="i-carbon-data-table text-green-500 text-xl md:text-2xl"
+                />
+                <h2 class="text-xl md:text-2xl font-bold">Datasets</h2>
+              </div>
+              <el-tag type="success" size="large">{{
+                getCount("dataset")
+              }}</el-tag>
+            </div>
+
+            <div v-if="getCount('dataset') > 0" class="space-y-4">
+              <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div
+                  v-for="repo in displayedRepos('dataset')"
+                  :key="repo.id"
+                  class="card hover:shadow-md transition-shadow cursor-pointer"
+                  @click="goToRepo('dataset', repo)"
+                >
+                  <div class="flex items-start gap-2 mb-2">
+                    <div
+                      class="i-carbon-data-table text-green-500 text-xl flex-shrink-0"
+                    />
+                    <div class="flex-1 min-w-0">
+                      <h3
+                        class="font-semibold text-green-600 dark:text-green-400 hover:underline truncate"
+                      >
+                        {{ repo.id }}
+                      </h3>
+                      <div
+                        class="text-xs text-gray-600 dark:text-gray-400 mt-1"
+                      >
+                        Updated {{ formatDate(repo.lastModified) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="repo.tags && repo.tags.length"
+                    class="flex gap-1 mb-2 flex-wrap"
+                  >
+                    <el-tag
+                      v-for="tag in repo.tags.slice(0, 2)"
+                      :key="tag"
+                      size="small"
+                      effect="plain"
+                    >
+                      {{ tag }}
+                    </el-tag>
+                  </div>
+
+                  <div
+                    class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-download" />
+                      {{ repo.downloads || 0 }}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-favorite" />
+                      {{ repo.likes || 0 }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Show More button -->
+              <RouterLink :to="`/${username}/datasets`" class="block mt-4">
+                <el-button v-if="hasMoreRepos('dataset')" class="w-full">
+                  Show all {{ getCount("dataset") }} datasets →
+                </el-button>
+              </RouterLink>
+            </div>
+
             <div
               v-else
-              class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"
-            ></div>
-          </div>
-
-          <!-- Total -->
-          <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
-            <div class="flex justify-between items-center">
-              <span class="text-sm font-semibold">Total</span>
-              <span class="text-sm font-mono font-semibold">
-                {{ formatBytes(quotaInfo.total_used_bytes) }}
-              </span>
+              class="text-center py-12 text-gray-500 dark:text-gray-400"
+            >
+              <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
+              <p>No datasets yet</p>
             </div>
-          </div>
+          </section>
 
-          <!-- View Details Button (only for users with write permission) -->
-          <div v-if="quotaInfo.can_see_private" class="mt-4">
-            <el-button
-              size="small"
-              @click="$router.push(`/${username}/storage`)"
-              class="w-full"
+          <!-- Spaces Section -->
+          <section>
+            <div
+              class="flex items-center justify-between mb-4 pb-3 border-b-2 border-purple-500"
             >
-              <div class="i-carbon-chart-bar inline-block mr-1" />
-              View Details
-            </el-button>
-          </div>
-        </div>
-
-        <!-- Stats Summary / Tab Navigation -->
-        <div class="card">
-          <h3 class="font-semibold mb-3">Repositories</h3>
-          <div class="space-y-1">
-            <RouterLink
-              :to="`/${username}`"
-              :class="[
-                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'bg-gray-100 dark:bg-gray-700',
-              ]"
-            >
-              <div class="flex items-center gap-2 text-sm">
-                <div class="i-carbon-grid text-gray-500 dark:text-gray-400" />
-                <span class="font-semibold">Overview</span>
+              <div class="flex items-center gap-2">
+                <div
+                  class="i-carbon-application text-purple-500 text-xl md:text-2xl"
+                />
+                <h2 class="text-xl md:text-2xl font-bold">Spaces</h2>
               </div>
-            </RouterLink>
-
-            <RouterLink
-              :to="`/${username}/models`"
-              :class="[
-                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
-            >
-              <div class="flex items-center gap-2 text-sm">
-                <div class="i-carbon-model text-blue-500" />
-                <span>Models</span>
-              </div>
-              <span
-                class="text-sm font-semibold text-gray-600 dark:text-gray-400"
-              >
-                {{ getCount("model") }}
-              </span>
-            </RouterLink>
-
-            <RouterLink
-              :to="`/${username}/datasets`"
-              :class="[
-                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
-            >
-              <div class="flex items-center gap-2 text-sm">
-                <div class="i-carbon-data-table text-green-500" />
-                <span>Datasets</span>
-              </div>
-              <span
-                class="text-sm font-semibold text-gray-600 dark:text-gray-400"
-              >
-                {{ getCount("dataset") }}
-              </span>
-            </RouterLink>
-
-            <RouterLink
-              :to="`/${username}/spaces`"
-              :class="[
-                'flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors block',
-                'hover:bg-gray-100 dark:hover:bg-gray-700',
-              ]"
-            >
-              <div class="flex items-center gap-2 text-sm">
-                <div class="i-carbon-application text-purple-500" />
-                <span>Spaces</span>
-              </div>
-              <span
-                class="text-sm font-semibold text-gray-600 dark:text-gray-400"
-              >
-                {{ getCount("space") }}
-              </span>
-            </RouterLink>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main Content -->
-      <main class="space-y-8">
-        <!-- Sort Dropdown (applies to all sections) -->
-        <div class="card">
-          <el-select
-            v-model="sortBy"
-            placeholder="Sort by"
-            class="w-full sm:w-50"
-          >
-            <el-option label="Recently Updated" value="recent" />
-            <el-option label="Most Downloads" value="downloads" />
-            <el-option label="Most Likes" value="likes" />
-          </el-select>
-        </div>
-
-        <!-- User Card (from Username/Username space repo if exists) -->
-        <section v-if="userCard" class="card">
-          <div class="markdown-body">
-            <MarkdownViewer :content="userCard" />
-          </div>
-        </section>
-
-        <!-- Models Section -->
-        <section class="mb-8">
-          <div
-            class="flex items-center justify-between mb-4 pb-3 border-b-2 border-blue-500"
-          >
-            <div class="flex items-center gap-2">
-              <div class="i-carbon-model text-blue-500 text-xl md:text-2xl" />
-              <h2 class="text-xl md:text-2xl font-bold">Models</h2>
+              <el-tag type="warning" size="large">{{
+                getCount("space")
+              }}</el-tag>
             </div>
-            <el-tag type="info" size="large">{{ getCount("model") }}</el-tag>
-          </div>
 
-          <div v-if="getCount('model') > 0" class="space-y-4">
-            <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div
-                v-for="repo in displayedRepos('model')"
-                :key="repo.id"
-                class="card hover:shadow-md transition-shadow cursor-pointer"
-                @click="goToRepo('model', repo)"
-              >
-                <div class="flex items-start gap-2 mb-2">
+            <div v-if="getCount('space') > 0" class="space-y-4">
+              <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div
+                  v-for="repo in displayedRepos('space')"
+                  :key="repo.id"
+                  class="card hover:shadow-md transition-shadow cursor-pointer"
+                  @click="goToRepo('space', repo)"
+                >
+                  <div class="flex items-start gap-2 mb-2">
+                    <div
+                      class="i-carbon-application text-purple-500 text-xl flex-shrink-0"
+                    />
+                    <div class="flex-1 min-w-0">
+                      <h3
+                        class="font-semibold text-purple-600 dark:text-purple-400 hover:underline truncate"
+                      >
+                        {{ repo.id }}
+                      </h3>
+                      <div
+                        class="text-xs text-gray-600 dark:text-gray-400 mt-1"
+                      >
+                        Updated {{ formatDate(repo.lastModified) }}
+                      </div>
+                    </div>
+                  </div>
+
                   <div
-                    class="i-carbon-model text-blue-500 text-xl flex-shrink-0"
-                  />
-                  <div class="flex-1 min-w-0">
-                    <h3
-                      class="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate"
+                    v-if="repo.tags && repo.tags.length"
+                    class="flex gap-1 mb-2 flex-wrap"
+                  >
+                    <el-tag
+                      v-for="tag in repo.tags.slice(0, 2)"
+                      :key="tag"
+                      size="small"
+                      effect="plain"
                     >
-                      {{ repo.id }}
-                    </h3>
-                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      Updated {{ formatDate(repo.lastModified) }}
+                      {{ tag }}
+                    </el-tag>
+                  </div>
+
+                  <div
+                    class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-download" />
+                      {{ repo.downloads || 0 }}
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <div class="i-carbon-favorite" />
+                      {{ repo.likes || 0 }}
                     </div>
                   </div>
                 </div>
-
-                <div
-                  v-if="repo.tags && repo.tags.length"
-                  class="flex gap-1 mb-2 flex-wrap"
-                >
-                  <el-tag
-                    v-for="tag in repo.tags.slice(0, 2)"
-                    :key="tag"
-                    size="small"
-                    effect="plain"
-                  >
-                    {{ tag }}
-                  </el-tag>
-                </div>
-
-                <div
-                  class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
-                >
-                  <div class="flex items-center gap-1">
-                    <div class="i-carbon-download" />
-                    {{ repo.downloads || 0 }}
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <div class="i-carbon-favorite" />
-                    {{ repo.likes || 0 }}
-                  </div>
-                </div>
               </div>
+
+              <!-- Show More button -->
+              <RouterLink :to="`/${username}/spaces`" class="block mt-4">
+                <el-button v-if="hasMoreRepos('space')" class="w-full">
+                  Show all {{ getCount("space") }} spaces →
+                </el-button>
+              </RouterLink>
             </div>
 
-            <!-- Show More button -->
-            <RouterLink :to="`/${username}/models`" class="block mt-4">
-              <el-button v-if="hasMoreRepos('model')" class="w-full">
-                Show all {{ getCount("model") }} models →
-              </el-button>
-            </RouterLink>
-          </div>
-
-          <div
-            v-else
-            class="text-center py-12 text-gray-500 dark:text-gray-400"
-          >
-            <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
-            <p>No models yet</p>
-          </div>
-        </section>
-
-        <!-- Datasets Section -->
-        <section class="mb-8">
-          <div
-            class="flex items-center justify-between mb-4 pb-3 border-b-2 border-green-500"
-          >
-            <div class="flex items-center gap-2">
-              <div
-                class="i-carbon-data-table text-green-500 text-xl md:text-2xl"
-              />
-              <h2 class="text-xl md:text-2xl font-bold">Datasets</h2>
+            <div
+              v-else
+              class="text-center py-12 text-gray-500 dark:text-gray-400"
+            >
+              <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
+              <p>No spaces yet</p>
             </div>
-            <el-tag type="success" size="large">{{
-              getCount("dataset")
-            }}</el-tag>
-          </div>
-
-          <div v-if="getCount('dataset') > 0" class="space-y-4">
-            <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div
-                v-for="repo in displayedRepos('dataset')"
-                :key="repo.id"
-                class="card hover:shadow-md transition-shadow cursor-pointer"
-                @click="goToRepo('dataset', repo)"
-              >
-                <div class="flex items-start gap-2 mb-2">
-                  <div
-                    class="i-carbon-data-table text-green-500 text-xl flex-shrink-0"
-                  />
-                  <div class="flex-1 min-w-0">
-                    <h3
-                      class="font-semibold text-green-600 dark:text-green-400 hover:underline truncate"
-                    >
-                      {{ repo.id }}
-                    </h3>
-                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      Updated {{ formatDate(repo.lastModified) }}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  v-if="repo.tags && repo.tags.length"
-                  class="flex gap-1 mb-2 flex-wrap"
-                >
-                  <el-tag
-                    v-for="tag in repo.tags.slice(0, 2)"
-                    :key="tag"
-                    size="small"
-                    effect="plain"
-                  >
-                    {{ tag }}
-                  </el-tag>
-                </div>
-
-                <div
-                  class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
-                >
-                  <div class="flex items-center gap-1">
-                    <div class="i-carbon-download" />
-                    {{ repo.downloads || 0 }}
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <div class="i-carbon-favorite" />
-                    {{ repo.likes || 0 }}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Show More button -->
-            <RouterLink :to="`/${username}/datasets`" class="block mt-4">
-              <el-button v-if="hasMoreRepos('dataset')" class="w-full">
-                Show all {{ getCount("dataset") }} datasets →
-              </el-button>
-            </RouterLink>
-          </div>
-
-          <div
-            v-else
-            class="text-center py-12 text-gray-500 dark:text-gray-400"
-          >
-            <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
-            <p>No datasets yet</p>
-          </div>
-        </section>
-
-        <!-- Spaces Section -->
-        <section>
-          <div
-            class="flex items-center justify-between mb-4 pb-3 border-b-2 border-purple-500"
-          >
-            <div class="flex items-center gap-2">
-              <div
-                class="i-carbon-application text-purple-500 text-xl md:text-2xl"
-              />
-              <h2 class="text-xl md:text-2xl font-bold">Spaces</h2>
-            </div>
-            <el-tag type="warning" size="large">{{ getCount("space") }}</el-tag>
-          </div>
-
-          <div v-if="getCount('space') > 0" class="space-y-4">
-            <!-- Grid of repos (2 per row, max 3 rows = 6 repos) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div
-                v-for="repo in displayedRepos('space')"
-                :key="repo.id"
-                class="card hover:shadow-md transition-shadow cursor-pointer"
-                @click="goToRepo('space', repo)"
-              >
-                <div class="flex items-start gap-2 mb-2">
-                  <div
-                    class="i-carbon-application text-purple-500 text-xl flex-shrink-0"
-                  />
-                  <div class="flex-1 min-w-0">
-                    <h3
-                      class="font-semibold text-purple-600 dark:text-purple-400 hover:underline truncate"
-                    >
-                      {{ repo.id }}
-                    </h3>
-                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      Updated {{ formatDate(repo.lastModified) }}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  v-if="repo.tags && repo.tags.length"
-                  class="flex gap-1 mb-2 flex-wrap"
-                >
-                  <el-tag
-                    v-for="tag in repo.tags.slice(0, 2)"
-                    :key="tag"
-                    size="small"
-                    effect="plain"
-                  >
-                    {{ tag }}
-                  </el-tag>
-                </div>
-
-                <div
-                  class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
-                >
-                  <div class="flex items-center gap-1">
-                    <div class="i-carbon-download" />
-                    {{ repo.downloads || 0 }}
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <div class="i-carbon-favorite" />
-                    {{ repo.likes || 0 }}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Show More button -->
-            <RouterLink :to="`/${username}/spaces`" class="block mt-4">
-              <el-button v-if="hasMoreRepos('space')" class="w-full">
-                Show all {{ getCount("space") }} spaces →
-              </el-button>
-            </RouterLink>
-          </div>
-
-          <div
-            v-else
-            class="text-center py-12 text-gray-500 dark:text-gray-400"
-          >
-            <div class="i-carbon-document-blank text-6xl mb-4 inline-block" />
-            <p>No spaces yet</p>
-          </div>
-        </section>
-      </main>
+          </section>
+        </main>
       </div>
     </div>
   </div>
@@ -664,63 +682,63 @@ const MAX_DISPLAYED = 6; // 2 per row × 3 rows
 // External user detection (check both profile and repos)
 const isExternalUser = computed(() => {
   // Check profile first
-  if (profileInfo.value?._source && profileInfo.value._source !== 'local') {
-    return true
+  if (profileInfo.value?._source && profileInfo.value._source !== "local") {
+    return true;
   }
   // Check repos if profile doesn't have _source
   // If any repo has _source (and it's not local), user is external
-  for (const repoType of ['models', 'datasets', 'spaces']) {
-    const repoList = repos.value[repoType] || []
+  for (const repoType of ["models", "datasets", "spaces"]) {
+    const repoList = repos.value[repoType] || [];
     for (const repo of repoList) {
-      if (repo._source && repo._source !== 'local') {
-        return true
+      if (repo._source && repo._source !== "local") {
+        return true;
       }
     }
   }
-  return false
-})
+  return false;
+});
 
 const externalSourceName = computed(() => {
   // Try profile first
   if (profileInfo.value?._source) {
-    return profileInfo.value._source
+    return profileInfo.value._source;
   }
   // Try first repo with _source
-  for (const repoType of ['models', 'datasets', 'spaces']) {
-    const repoList = repos.value[repoType] || []
+  for (const repoType of ["models", "datasets", "spaces"]) {
+    const repoList = repos.value[repoType] || [];
     for (const repo of repoList) {
-      if (repo._source && repo._source !== 'local') {
-        return repo._source
+      if (repo._source && repo._source !== "local") {
+        return repo._source;
       }
     }
   }
-  return 'external source'
-})
+  return "external source";
+});
 
 const externalSourceUrl = computed(() => {
   // Try profile first
   if (profileInfo.value?._source_url) {
-    return profileInfo.value._source_url
+    return profileInfo.value._source_url;
   }
   // Try first repo with _source_url
-  for (const repoType of ['models', 'datasets', 'spaces']) {
-    const repoList = repos.value[repoType] || []
+  for (const repoType of ["models", "datasets", "spaces"]) {
+    const repoList = repos.value[repoType] || [];
     for (const repo of repoList) {
       if (repo._source_url) {
-        return repo._source_url
+        return repo._source_url;
       }
     }
   }
-  return ''
-})
+  return "";
+});
 
 const hasPartialProfile = computed(() => {
-  return profileInfo.value?._partial === true
-})
+  return profileInfo.value?._partial === true;
+});
 
 const externalAvatarUrl = computed(() => {
-  return profileInfo.value?._avatar_url
-})
+  return profileInfo.value?._avatar_url;
+});
 
 // Helper to convert singular type to plural key
 function getPluralKey(type) {
@@ -771,21 +789,26 @@ async function checkIfOrganization() {
 
     // Only redirect if it's a LOCAL organization
     // For external sources, check if HF says it's an org
-    if (!data._source || data._source === 'local') {
+    if (!data._source || data._source === "local") {
       // Local organization - redirect
       router.replace(`/organizations/${username.value}`);
       return true;
     }
 
     // External entity - check HF type field
-    if (data._hf_type === 'org' || data._hf_type === 'organization') {
+    if (data._hf_type === "org" || data._hf_type === "organization") {
       // HF says it's an org - redirect to org page
       router.replace(`/organizations/${username.value}`);
       return true;
     }
 
     // External user - don't redirect
-    console.log('External user detected:', data._source, 'type:', data._hf_type)
+    console.log(
+      "External user detected:",
+      data._source,
+      "type:",
+      data._hf_type,
+    );
     return false;
   } catch (err) {
     // 404 or error - not an organization, continue as user

@@ -221,7 +221,8 @@ def with_list_aggregation(repo_type: str):
             )
 
             external_tasks = [
-                fetch_external_list(source, repo_type, query_params) for source in sources
+                fetch_external_list(source, repo_type, query_params)
+                for source in sources
             ]
 
             external_results_list = await asyncio.gather(
