@@ -26,6 +26,7 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 ## Features
 
 - **HuggingFace Compatible** - Drop-in replacement for `huggingface_hub`, `hfutils`, `transformers`, `diffusers`
+- **External Source Fallback** - Browse HuggingFace (or other KohakuHub instances) when repos not found locally
 - **Native Git Clone** - Standard Git operations (clone) with Git LFS support
 - **Git-Like Versioning** - Branches, commits, tags via LakeFS
 - **S3 Storage** - Works with MinIO, AWS S3, Cloudflare R2, etc.
@@ -237,7 +238,7 @@ python scripts/test_auth.py
 - [docs/ports.md](./docs/ports.md) - Port configuration reference
 - [docs/API.md](./docs/API.md) - API endpoints and workflows
 - [docs/CLI.md](./docs/CLI.md) - Command-line tool usage
-- [docs/Admin.md](./docs/Admin.md) - Admin portal guide
+- [docs/Admin.md](./docs/Admin.md) - Admin portal & fallback system
 - [docs/Git.md](./docs/Git.md) - Git clone support
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contributing guide & roadmap
 

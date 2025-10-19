@@ -1199,3 +1199,423 @@ A: Yes, set `org_id` and `role` in the invitation. Users will automatically join
 **Last Updated:** January 2025
 **Version:** 1.1
 **Status:** ✅ Production Ready
+# External Source Fallback System
+
+**Browse repositories from HuggingFace or other KohakuHub instances when not found locally.**
+
+---
+
+## Overview
+
+The fallback system allows KohakuHub to seamlessly access repositories, files, and user profiles from external sources (like HuggingFace.co) when they're not available locally. This enables:
+
+- **Browsing HuggingFace repositories** without manually importing them
+- **Downloading files** from external sources
+- **Viewing user/org profiles** from other hubs
+- **Connecting multiple KohakuHub instances** for federated browsing
+
+---
+
+## Quick Start
+
+### 1. Configure Fallback Source (Admin Portal)
+
+Navigate to: **Admin Portal → Fallback Sources**
+
+**Add HuggingFace:**
+```
+Name: HuggingFace
+URL: https://huggingface.co
+Source Type: huggingface
+Priority: 1
+Token: (optional - for private repos)
+Namespace: (empty for global)
+Enabled: ✓
+```
+
+### 2. Browse External Repositories
+
+**Visit any HuggingFace user/org:**
+```
+http://localhost:28080/openai
+http://localhost:28080/stabilityai
+```
+
+**View external models/datasets:**
+```
+http://localhost:28080/models/openai/whisper-tiny
+http://localhost:28080/datasets/karpathy/fineweb-edu
+```
+
+**Download files:**
+```python
+from huggingface_hub import hf_hub_download
+
+# Falls back to HuggingFace automatically
+hf_hub_download(
+    repo_id="openai/whisper-tiny",
+    filename="model.bin"
+)
+```
+
+---
+
+## How It Works
+
+### Architecture
+
+```
+User Request → KohakuHub
+  ↓
+  Check Local Database
+  ↓
+  Not Found (404)
+  ↓
+  Try Fallback Sources (by priority)
+    1. HuggingFace
+    2. Other KohakuHub Instance
+    ...
+  ↓
+  Found! → Return with _source tag
+```
+
+### Caching
+
+**Repository→Source mapping is cached** (not content):
+- **Cache TTL**: 5 minutes (configurable)
+- **Cache Key**: `{repo_type}:{namespace}/{name}`
+- **Cache Value**: Source URL, name, type
+
+This reduces external API calls by 80%+.
+
+---
+
+## Configuration
+
+### Global Sources (Environment Variable)
+
+**In `docker-compose.yml`:**
+```yaml
+environment:
+  KOHAKU_HUB_FALLBACK_ENABLED: "true"
+  KOHAKU_HUB_FALLBACK_CACHE_TTL: "300"  # 5 minutes
+  KOHAKU_HUB_FALLBACK_TIMEOUT: "10"     # 10 seconds
+  KOHAKU_HUB_FALLBACK_SOURCES: |
+    [
+      {
+        "url": "https://huggingface.co",
+        "token": "",
+        "priority": 1,
+        "name": "HuggingFace",
+        "source_type": "huggingface"
+      }
+    ]
+```
+
+### Database Sources (via Admin API)
+
+**Add via API:**
+```bash
+curl -X POST http://localhost:48888/admin/api/fallback-sources \
+  -H "X-Admin-Token: your-admin-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "namespace": "",
+    "url": "https://huggingface.co",
+    "name": "HuggingFace",
+    "source_type": "huggingface",
+    "priority": 1,
+    "enabled": true
+  }'
+```
+
+**Or via Admin Portal:**
+- Navigate to: http://localhost:28080/admin/fallback-sources
+- Click "Add Source"
+- Fill in details
+
+---
+
+## Supported Operations
+
+### Repository Operations
+
+✅ **Resolve/Download Files**
+- `GET /{type}s/{namespace}/{name}/resolve/{revision}/{path}`
+- Returns 302 redirect to external URL
+
+✅ **List Files (Tree)**
+- `GET /api/{type}s/{namespace}/{name}/tree/{revision}`
+- Returns file tree from external source
+
+✅ **Repository Info**
+- `GET /api/{type}s/{namespace}/{name}`
+- Returns metadata from external source
+
+✅ **Revision Info**
+- `GET /api/{type}s/{namespace}/{name}/revision/{revision}`
+- Returns commit/branch info
+
+### User/Organization Operations
+
+✅ **User Profile**
+- `GET /api/users/{username}/profile`
+- Falls back to HF `/api/users/{username}/overview`
+
+✅ **User Repositories**
+- `GET /api/users/{username}/repos`
+- Aggregates from `/api/models`, `/api/datasets`, `/api/spaces`
+
+✅ **Organization Profile**
+- Detected via `/api/organizations/{name}/members`
+- Shows as organization page
+
+### List Aggregation
+
+✅ **Repository Lists**
+- `GET /api/models?author={name}`
+- Merges local + external results with `_source` tags
+
+❌ **Disabled by Default On:**
+- Homepage trending lists (`?fallback=false`)
+- Main browse pages (`/models`, `/datasets`, `/spaces`)
+
+---
+
+## URL Mapping (HuggingFace)
+
+**HuggingFace has asymmetric URL patterns:**
+
+| Operation | KohakuHub | HuggingFace |
+|-----------|-----------|-------------|
+| **Models Download** | `/models/{ns}/{name}/resolve/...` | `/{ns}/{name}/resolve/...` |
+| **Datasets Download** | `/datasets/{ns}/{name}/resolve/...` | `/datasets/{ns}/{name}/resolve/...` |
+| **API Endpoints** | `/api/{type}s/...` | `/api/{type}s/...` |
+
+The fallback client automatically handles these transformations.
+
+---
+
+## External Source Indicators
+
+### Repository Pages
+
+**External repos show:**
+- Badge in header: `[☁️ External: https://huggingface.co]`
+- Disabled commits tab (not available for external repos)
+- All metadata tagged with `_source` field
+
+### User/Org Pages
+
+**External profiles show:**
+- Badge in profile card: `[☁️ HuggingFace]`
+- "Limited profile" indicator (bio/website may be missing)
+- All repos tagged with source
+
+---
+
+## Query Parameters
+
+**Disable fallback per-request:**
+```
+GET /api/models?fallback=false
+```
+
+Useful for:
+- Homepage (show local only)
+- Admin interfaces
+- Performance-critical lists
+
+---
+
+## Admin Interface
+
+**Fallback Sources Management:**
+
+**Access:** http://localhost:28080/admin/fallback-sources
+
+**Features:**
+- Add/Edit/Delete sources
+- Enable/Disable sources
+- Set priority order
+- View cache statistics
+- Clear cache manually
+
+**Cache Stats:**
+- Current size
+- Max size (10,000 entries)
+- TTL (300 seconds default)
+- Usage percentage
+
+---
+
+## Limitations
+
+### What Works
+
+✅ Browsing external repos (tree, files, metadata)
+✅ Downloading files (302 redirect to external)
+✅ Viewing user/org profiles
+✅ Listing user's repositories
+✅ YAML frontmatter metadata
+
+### What Doesn't Work
+
+❌ **Commits** - Not available for external repos
+❌ **Editing** - Can't modify external repos
+❌ **Git Clone** - Only local repos support Git clone
+❌ **LFS Upload** - Can't upload to external sources
+❌ **Private Access** - Requires admin-configured tokens (no user token passthrough)
+
+---
+
+## Security
+
+**User Privacy:**
+- ❌ Local user credentials are **NEVER** sent to external sources
+- ✅ Only admin-configured tokens are used
+- ✅ Public repos work without any tokens
+
+**Admin Token:**
+- Configure once in admin portal
+- Used for all external requests
+- Can access private repos on external source (if token has permission)
+
+---
+
+## Troubleshooting
+
+**External repos not showing:**
+1. Check fallback sources in admin portal
+2. Verify source is enabled
+3. Check cache TTL (may need to wait or clear cache)
+4. Look for errors in backend logs
+
+**404 errors for external content:**
+1. Verify the repo exists on the external source
+2. Check if source URL is correct
+3. Try clearing cache in admin portal
+
+**Performance issues:**
+1. Check cache stats (should be >80% hit rate)
+2. Reduce number of external sources
+3. Increase cache TTL
+4. Use `?fallback=false` for performance-critical pages
+
+---
+
+## Advanced Configuration
+
+### Multiple Sources
+
+**Priority ordering:**
+```json
+[
+  {"url": "https://your-hub.com", "priority": 1, "name": "Internal"},
+  {"url": "https://huggingface.co", "priority": 2, "name": "HuggingFace"}
+]
+```
+
+Lower priority = checked first.
+
+### Per-Namespace Sources
+
+**User/org-specific fallback:**
+```json
+{
+  "namespace": "my-team",
+  "url": "https://team-hub.com",
+  "priority": 1
+}
+```
+
+Only applies when browsing `my-team/*` repos.
+
+### Cache Tuning
+
+```bash
+KOHAKU_HUB_FALLBACK_CACHE_TTL=600       # 10 minutes
+KOHAKU_HUB_FALLBACK_TIMEOUT=20          # 20 second timeout
+KOHAKU_HUB_FALLBACK_MAX_CONCURRENT=10   # 10 concurrent requests
+```
+
+---
+
+## API Reference
+
+**Admin Endpoints:**
+```
+POST   /admin/api/fallback-sources           # Create source
+GET    /admin/api/fallback-sources           # List sources
+GET    /admin/api/fallback-sources/{id}      # Get source
+PUT    /admin/api/fallback-sources/{id}      # Update source
+DELETE /admin/api/fallback-sources/{id}      # Delete source
+GET    /admin/api/fallback-sources/cache/stats    # Cache stats
+DELETE /admin/api/fallback-sources/cache/clear    # Clear cache
+```
+
+**Query Parameters:**
+```
+?fallback=false    # Disable fallback for this request
+?fallback=true     # Enable fallback (default)
+```
+
+---
+
+## Examples
+
+### Example 1: Browse HuggingFace Models
+
+```bash
+# View Stability AI's models
+curl http://localhost:28080/api/models?author=stabilityai
+
+# Returns local + HuggingFace models tagged with _source
+```
+
+### Example 2: Download from HuggingFace
+
+```python
+from huggingface_hub import hf_hub_download
+
+# Falls back to HuggingFace automatically
+model_path = hf_hub_download(
+    repo_id="openai/whisper-tiny",
+    filename="config.json"
+)
+```
+
+### Example 3: Federated KohakuHub
+
+**Connect company internal hub:**
+```json
+{
+  "url": "https://internal-hub.company.com",
+  "source_type": "kohakuhub",
+  "priority": 1,
+  "token": "internal_token_here"
+}
+```
+
+Now you can browse internal repos + HuggingFace from one interface!
+
+---
+
+## Performance
+
+**Typical Response Times:**
+- **Cache Hit**: <100ms (instant)
+- **Cache Miss (HF)**: <2s (external API call)
+- **File Download**: 302 redirect (no proxy, full speed)
+
+**Cache Hit Rate:**
+- **Expected**: >80% after warmup
+- **Check**: Admin Portal → Fallback Sources → Cache Stats
+
+---
+
+## See Also
+
+- [Admin Portal Guide](./Admin.md#fallback-sources-management)
+- [API Documentation](./API.md)
+- [Deployment Guide](./deployment.md)

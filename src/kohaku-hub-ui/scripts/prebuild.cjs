@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 /**
  * Prebuild script for KohakuHub frontend
- * Copies documentation files from the root docs/ directory to public/
- * so they can be served by the frontend application.
+ * Recursively copies documentation files from docs/ to public/documentation/
+ * Supports nested directory structure for better organization
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Define paths relative to the script location
+// Define paths
 const rootDir = path.join(__dirname, '..', '..', '..');
 const publicDir = path.join(__dirname, '..', 'public');
 const docsPublicDir = path.join(publicDir, 'documentation');
 const imagesPublicDir = path.join(publicDir, 'images');
+const docsSourceDir = path.join(rootDir, 'docs');
 
 // Documentation files to copy
 const filesToCopy = [
@@ -69,19 +70,14 @@ const filesToCopy = [
 ];
 
 /**
- * Copy a single file with error handling
- * @param {string} source - Source file path
- * @param {string} dest - Destination file path
+ * Copy a single file
  */
 function copyFile(source, dest) {
   try {
-    // Ensure destination directory exists
     const destDir = path.dirname(dest);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
-
-    // Copy file
     fs.copyFileSync(source, dest);
     console.log(`✓ Copied: ${path.basename(source)} -> ${path.relative(process.cwd(), dest)}`);
   } catch (error) {
@@ -91,12 +87,50 @@ function copyFile(source, dest) {
 }
 
 /**
+ * Recursively copy directory and generate manifests
+ */
+function copyDirRecursive(sourceDir, destDir) {
+  if (!fs.existsSync(sourceDir)) {
+    console.warn(`⚠ Source directory not found: ${sourceDir}`);
+    return;
+  }
+
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+
+  const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+  const mdFiles = [];
+
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+
+    if (entry.isDirectory()) {
+      // Recursively copy subdirectory
+      copyDirRecursive(sourcePath, destPath);
+    } else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'index.md') {
+      // Copy markdown file
+      copyFile(sourcePath, destPath);
+      mdFiles.push(entry.name);
+    }
+  }
+
+  // Generate .manifest.json for directory listing
+  if (mdFiles.length > 0) {
+    const manifestPath = path.join(destDir, '.manifest.json');
+    fs.writeFileSync(manifestPath, JSON.stringify(mdFiles, null, 2));
+    console.log(`  Generated manifest: ${mdFiles.length} files in ${path.basename(destDir)}/`);
+  }
+}
+
+/**
  * Main function
  */
 function main() {
-  console.log('📚 Copying documentation files and logos to public directory...\n');
+  console.log('📚 Copying documentation and images...\n');
 
-  // Create directories if they don't exist
+  // Create directories
   if (!fs.existsSync(docsPublicDir)) {
     fs.mkdirSync(docsPublicDir, { recursive: true });
   }
@@ -104,13 +138,41 @@ function main() {
     fs.mkdirSync(imagesPublicDir, { recursive: true });
   }
 
-  // Copy all files
-  filesToCopy.forEach((file) => {
-    copyFile(file.source, file.dest);
-  });
+  // Recursively copy entire docs/ directory
+  console.log('Copying docs/ directory recursively...');
+  copyDirRecursive(docsSourceDir, docsPublicDir);
 
-  console.log('\n✅ Documentation files and logos copied successfully!');
+  // Copy CONTRIBUTING.md
+  const contributingSource = path.join(rootDir, 'CONTRIBUTING.md');
+  const contributingDest = path.join(docsPublicDir, 'contributing.md');
+  if (fs.existsSync(contributingSource)) {
+    copyFile(contributingSource, contributingDest);
+  }
+
+  // Copy logo files
+  console.log('\nCopying logo files...');
+  const logoFiles = [
+    {
+      source: path.join(rootDir, 'images', 'logo-square.svg'),
+      dest: path.join(imagesPublicDir, 'logo-square.svg'),
+    },
+    {
+      source: path.join(rootDir, 'images', 'logo-banner.svg'),
+      dest: path.join(imagesPublicDir, 'logo-banner.svg'),
+    },
+    {
+      source: path.join(rootDir, 'images', 'logo-banner-dark.svg'),
+      dest: path.join(imagesPublicDir, 'logo-banner-dark.svg'),
+    },
+    {
+      source: path.join(rootDir, 'images', 'logo-square.svg'),
+      dest: path.join(publicDir, 'favicon.svg'),
+    },
+  ];
+
+  logoFiles.forEach(file => copyFile(file.source, file.dest));
+
+  console.log('\n✅ All files copied successfully!');
 }
 
-// Run the script
 main();

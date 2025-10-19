@@ -35,14 +35,7 @@ declare module 'vue-router/auto-routes' {
     '/about': RouteRecordInfo<'/about', '/about', Record<never, never>, Record<never, never>>,
     '/contributing': RouteRecordInfo<'/contributing', '/contributing', Record<never, never>, Record<never, never>>,
     '/docs/': RouteRecordInfo<'/docs/', '/docs', Record<never, never>, Record<never, never>>,
-    '/docs/admin': RouteRecordInfo<'/docs/admin', '/docs/admin', Record<never, never>, Record<never, never>>,
-    '/docs/api': RouteRecordInfo<'/docs/api', '/docs/api', Record<never, never>, Record<never, never>>,
-    '/docs/cli': RouteRecordInfo<'/docs/cli', '/docs/cli', Record<never, never>, Record<never, never>>,
-    '/docs/contributing': RouteRecordInfo<'/docs/contributing', '/docs/contributing', Record<never, never>, Record<never, never>>,
-    '/docs/deployment': RouteRecordInfo<'/docs/deployment', '/docs/deployment', Record<never, never>, Record<never, never>>,
-    '/docs/git': RouteRecordInfo<'/docs/git', '/docs/git', Record<never, never>, Record<never, never>>,
-    '/docs/ports': RouteRecordInfo<'/docs/ports', '/docs/ports', Record<never, never>, Record<never, never>>,
-    '/docs/setup': RouteRecordInfo<'/docs/setup', '/docs/setup', Record<never, never>, Record<never, never>>,
+    '/docs/[...slug]': RouteRecordInfo<'/docs/[...slug]', '/docs/:slug(.*)', { slug: ParamValue<true> }, { slug: ParamValue<false> }>,
     '/get-started': RouteRecordInfo<'/get-started', '/get-started', Record<never, never>, Record<never, never>>,
     '/invite/[token]': RouteRecordInfo<'/invite/[token]', '/invite/:token', { token: ParamValue<true> }, { token: ParamValue<false> }>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
@@ -140,36 +133,8 @@ declare module 'vue-router/auto-routes' {
       routes: '/docs/'
       views: never
     }
-    'src/pages/docs/admin.vue': {
-      routes: '/docs/admin'
-      views: never
-    }
-    'src/pages/docs/api.vue': {
-      routes: '/docs/api'
-      views: never
-    }
-    'src/pages/docs/cli.vue': {
-      routes: '/docs/cli'
-      views: never
-    }
-    'src/pages/docs/contributing.vue': {
-      routes: '/docs/contributing'
-      views: never
-    }
-    'src/pages/docs/deployment.vue': {
-      routes: '/docs/deployment'
-      views: never
-    }
-    'src/pages/docs/git.vue': {
-      routes: '/docs/git'
-      views: never
-    }
-    'src/pages/docs/ports.vue': {
-      routes: '/docs/ports'
-      views: never
-    }
-    'src/pages/docs/setup.vue': {
-      routes: '/docs/setup'
+    'src/pages/docs/[...slug].vue': {
+      routes: '/docs/[...slug]'
       views: never
     }
     'src/pages/get-started.vue': {

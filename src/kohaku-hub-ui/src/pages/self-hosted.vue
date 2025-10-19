@@ -1,455 +1,722 @@
-<!-- src/pages/self-hosted.vue -->
 <script setup>
 import MarkdownPage from "@/components/common/MarkdownPage.vue";
 
-const content = `# Self-Hosting KohakuHub
+const content = `# Self-Host KohakuHub
 
-This guide will help you set up and run your own KohakuHub instance. KohakuHub is designed to be self-hosted, giving you complete control over your AI models, datasets, and applications.
+Complete guide to deploying your own KohakuHub instance with all features enabled.
 
-## Overview
+---
 
-KohakuHub combines several powerful technologies to provide a complete model hosting solution:
+## 📋 Prerequisites
 
-- **LakeFS**: Git-like versioning for your data (branches, commits, diffs)
-- **MinIO/S3**: Object storage backend for file storage
-- **PostgreSQL/SQLite**: Metadata database for deduplication and indexing
-- **FastAPI**: HuggingFace-compatible API layer
-- **Vue 3**: Modern web interface
+**System Requirements:**
+- **OS:** Linux (recommended), macOS, Windows with WSL2
+- **RAM:** 4GB minimum, 8GB+ recommended
+- **Storage:** 50GB+ (depends on your models/datasets)
+- **Docker:** 20.10+ with Docker Compose
 
-## Prerequisites
+**For Production:**
+- Domain name with SSL certificate
+- Reverse proxy (nginx included in docker-compose)
+- Backup strategy for PostgreSQL database
 
-Before you begin, ensure you have:
+---
 
-- **Docker** and **Docker Compose** installed
-- **Node.js** and **npm** (for building the frontend)
-- **Python 3.10+** (for testing with \`huggingface_hub\` client)
-- At least **10GB** of free disk space (more for production use)
+## 🚀 Quick Deploy (Docker Compose)
 
-### Optional Services
-
-- **S3 Storage**: You can use external S3-compatible storage (MinIO runs in Docker by default)
-- **SMTP Service**: For email verification (optional but recommended for production)
-
-## Quick Start
-
-### 1. Clone the Repository
+### Step 1: Clone Repository
 
 \`\`\`bash
-git clone https://github.com/KohakuBlueleaf/Kohaku-Hub.git
-cd Kohaku-Hub
+git clone https://github.com/KohakuBlueleaf/KohakuHub.git
+cd KohakuHub
 \`\`\`
 
-### 2. Configure Docker Compose
+### Step 2: Generate Configuration
 
-The main configuration file is located at \`docker/docker-compose.yml\`. You should review and customize it before starting.
+**Option A: Interactive Generator (Recommended)**
 
-#### ⚠️ Important: Security Configuration
+\`\`\`bash
+python scripts/generate_docker_compose.py
+\`\`\`
 
-**NEVER use default passwords in production!** Change these immediately:
+This creates \`docker-compose.yml\` with:
+- Secure random passwords
+- LakeFS credentials
+- Admin token
+- Session secret
+
+**Option B: Manual Configuration**
+
+\`\`\`bash
+cp docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml to change:
+# - POSTGRES_PASSWORD
+# - KOHAKU_HUB_SESSION_SECRET (use: python scripts/generate_secret.py)
+# - KOHAKU_HUB_ADMIN_SECRET_TOKEN
+\`\`\`
+
+### Step 3: Build Frontend
+
+\`\`\`bash
+# Install dependencies
+npm install --prefix src/kohaku-hub-ui
+npm install --prefix src/kohaku-hub-admin
+
+# Build for production
+npm run build --prefix src/kohaku-hub-ui
+npm run build --prefix src/kohaku-hub-admin
+
+# Or use the deploy script:
+python scripts/deploy.py
+\`\`\`
+
+### Step 4: Start Services
+
+\`\`\`bash
+docker compose up -d --build
+\`\`\`
+
+**Services Started:**
+- **nginx** (port 28080) - Main entry point
+- **kohaku-hub** (port 48888) - FastAPI backend (4 workers)
+- **postgres** (port 5432) - Database
+- **lakefs** (port 28000) - Versioning
+- **minio** (port 29000) - S3 storage
+- **kohaku-hub-admin** (port 5174) - Admin UI dev server (optional)
+
+### Step 5: First-Time Setup
+
+**Access:** http://localhost:28080
+
+1. **Register admin account:**
+   - Username: admin (or your choice)
+   - Email: your@email.com
+   - Password: secure password
+
+2. **Access admin portal:**
+   - Visit: http://localhost:28080/admin
+   - Login with \`KOHAKU_HUB_ADMIN_SECRET_TOKEN\`
+
+3. **Create first repository:**
+   - Click **New** → **Model**
+   - Test upload/download
+
+---
+
+## ⚙️ Configuration
+
+### Core Settings
+
+**In \`docker-compose.yml\`:**
 
 \`\`\`yaml
-# MinIO credentials - CHANGE THESE!
 environment:
-  - MINIO_ROOT_USER=your_secure_username
-  - MINIO_ROOT_PASSWORD=your_very_secure_password_here
+  # Application
+  KOHAKU_HUB_BASE_URL: http://localhost:28080
+  KOHAKU_HUB_SITE_NAME: KohakuHub  # Custom site name
 
-# PostgreSQL credentials - CHANGE THESE!
-environment:
-  - POSTGRES_USER=hub
-  - POSTGRES_PASSWORD=your_secure_db_password
-  - POSTGRES_DB=hubdb
+  # Database
+  KOHAKU_HUB_DB_BACKEND: postgres
+  KOHAKU_HUB_DATABASE_URL: postgresql://hub:password@postgres:5432/kohakuhub
 
-# LakeFS encryption key - CHANGE THIS!
-environment:
-  - LAKEFS_AUTH_ENCRYPT_SECRET_KEY=generate_a_long_random_key_here
+  # S3 Storage
+  KOHAKU_HUB_S3_ENDPOINT: http://minio:9000
+  KOHAKU_HUB_S3_PUBLIC_ENDPOINT: http://localhost:29001
+  KOHAKU_HUB_S3_BUCKET: hub-storage
+  KOHAKU_HUB_S3_REGION: us-east-1
+
+  # LakeFS
+  KOHAKU_HUB_LAKEFS_ENDPOINT: http://lakefs:8000
+
+  # Auth
+  KOHAKU_HUB_SESSION_SECRET: change-me-in-production
+  KOHAKU_HUB_SESSION_EXPIRE_HOURS: 168  # 7 days
+  KOHAKU_HUB_TOKEN_EXPIRE_DAYS: 365
+  KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION: false
+  KOHAKU_HUB_INVITATION_ONLY: false
+
+  # Admin
+  KOHAKU_HUB_ADMIN_ENABLED: true
+  KOHAKU_HUB_ADMIN_SECRET_TOKEN: change-me-in-production
+
+  # LFS
+  KOHAKU_HUB_LFS_THRESHOLD_BYTES: 5000000  # 5MB
+  KOHAKU_HUB_LFS_KEEP_VERSIONS: 5
+  KOHAKU_HUB_LFS_AUTO_GC: false
+
+  # Quota (bytes, or null for unlimited)
+  KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES: null
+  KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES: null
+
+  # External Fallback
+  KOHAKU_HUB_FALLBACK_ENABLED: true
+  KOHAKU_HUB_FALLBACK_CACHE_TTL: 300
+  KOHAKU_HUB_FALLBACK_SOURCES: |
+    [
+      {
+        "url": "https://huggingface.co",
+        "token": "",
+        "priority": 1,
+        "name": "HuggingFace",
+        "source_type": "huggingface"
+      }
+    ]
 \`\`\`
 
-#### Port Configuration
+### Email Configuration (Optional)
 
-The default setup exposes these ports:
-
-- **28080** - KohakuHub Web UI (main user/API interface)
-- **48888** - KohakuHub API (for clients like \`huggingface_hub\`)
-- **28000** - LakeFS Web UI + API
-- **29000** - MinIO Web Console
-- **29001** - MinIO S3 API
-- **25432** - PostgreSQL (optional, for external access)
-
-**For production deployment:**
-
-1. Only expose port **28080** (or **443** with HTTPS) to users
-2. The Web UI will proxy requests to the API
-3. Keep other ports internal or behind a firewall
-4. Use a reverse proxy (nginx/traefik) with HTTPS
-
-#### Public Endpoint Configuration
-
-If deploying on a server, update these environment variables:
+**For email verification and notifications:**
 
 \`\`\`yaml
-environment:
-  # Replace with your actual domain/IP
-  - KOHAKU_HUB_BASE_URL=https://your-domain.com
-  - KOHAKU_HUB_S3_PUBLIC_ENDPOINT=https://s3.your-domain.com
+KOHAKU_HUB_SMTP_ENABLED: true
+KOHAKU_HUB_SMTP_HOST: smtp.gmail.com
+KOHAKU_HUB_SMTP_PORT: 587
+KOHAKU_HUB_SMTP_USERNAME: your-email@gmail.com
+KOHAKU_HUB_SMTP_PASSWORD: app-password
+KOHAKU_HUB_SMTP_FROM: noreply@yourdomain.com
+KOHAKU_HUB_SMTP_TLS: true
+
+KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION: true
 \`\`\`
 
-The S3 public endpoint is used for generating download URLs. It should point to wherever your MinIO S3 API is accessible (port 29001 by default).
+### Invitation-Only Mode
 
-### 3. Start the Services
+**Restrict registration:**
 
+\`\`\`yaml
+KOHAKU_HUB_INVITATION_ONLY: true
+\`\`\`
+
+Then create invitations via admin portal.
+
+---
+
+## 🔒 Security Hardening
+
+### Change Default Secrets
+
+**Critical:**
 \`\`\`bash
-# Set user/group ID for proper permissions
-export UID=$(id -u)
-export GID=$(id -g)
+# Generate secure secrets
+python scripts/generate_secret.py  # For session secret
+python scripts/generate_secret.py  # For admin token
 
-# Build Frontend and Start all services
-./deploy.sh
+# Update docker-compose.yml with generated values
 \`\`\`
 
-Alternatively, you can manually build and deploy:
+### PostgreSQL Security
 
-\`\`\`bash
-# Install frontend dependencies
-npm install --prefix ./src/kohaku-hub-ui
-
-# Build frontend
-npm run build --prefix ./src/kohaku-hub-ui
-
-# Start Docker services
-docker compose -f docker/docker-compose.yml up -d --build
+\`\`\`yaml
+POSTGRES_PASSWORD: use-strong-password-here  # Change from default!
 \`\`\`
 
-### 4. Verify Installation
+### MinIO Security
 
-Check that all services are running:
-
-\`\`\`bash
-docker compose -f docker/docker-compose.yml ps
+\`\`\`yaml
+MINIO_ROOT_USER: change-me
+MINIO_ROOT_PASSWORD: change-me-too
 \`\`\`
 
-All services should show "Up" status.
+### LakeFS Security
 
-### 5. Access the Web Interfaces
-
-- **KohakuHub Web UI**: http://localhost:28080 (main interface)
-- **KohakuHub API Docs**: http://localhost:48888/docs (API documentation)
-- **LakeFS Web UI**: http://localhost:28000 (repository browser)
-- **MinIO Console**: http://localhost:29000 (storage browser)
-
-### 6. Create Your First User
-
-Navigate to http://localhost:28080 and click **Register** to create your first user account.
-
-## Advanced Configuration
-
-### Using a Configuration File
-
-For advanced configuration, create a \`config.toml\` file. See \`config-example.toml\` in the repository for all available options.
-
-Key settings include:
-
-\`\`\`toml
-[server]
-host = "0.0.0.0"
-port = 8000
-base_url = "https://your-domain.com"
-
-[storage]
-# Use SQLite (default) or PostgreSQL
-db_type = "sqlite"
-db_path = "./data/hub.db"
-
-# Or use PostgreSQL
-# db_type = "postgresql"
-# db_host = "localhost"
-# db_port = 5432
-# db_user = "hub"
-# db_password = "your_password"
-# db_name = "hubdb"
-
-[lakefs]
-endpoint = "http://lakefs:8000"
-access_key_id = "your_access_key"
-secret_access_key = "your_secret_key"
-
-[s3]
-endpoint = "http://minio:9000"
-access_key_id = "your_minio_user"
-secret_access_key = "your_minio_password"
-bucket_name = "hub-data"
-
-[auth]
-session_expire_days = 30
-require_email_verification = false
-
-[lfs]
-# Files larger than this use Git LFS protocol
-threshold_mb = 10
+Auto-generated credentials saved to:
+\`\`\`
+docker/hub-meta/hub-api/credentials.env
 \`\`\`
 
-### Environment Variables
+Keep this file secure!
 
-You can also configure KohakuHub using environment variables:
+---
 
-\`\`\`bash
-# Server configuration
-export KOHAKU_HUB_BASE_URL=https://your-domain.com
-export KOHAKU_HUB_PORT=8000
+## 🌐 Production Deployment
 
-# Database configuration
-export KOHAKU_HUB_DB_TYPE=postgresql
-export KOHAKU_HUB_DB_HOST=localhost
-export KOHAKU_HUB_DB_PORT=5432
+### Domain & SSL
 
-# Storage configuration
-export KOHAKU_HUB_S3_ENDPOINT=http://minio:9000
-export KOHAKU_HUB_S3_ACCESS_KEY=your_key
-export KOHAKU_HUB_S3_SECRET_KEY=your_secret
-
-# Authentication
-export KOHAKU_HUB_SESSION_EXPIRE_DAYS=30
-export KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
-\`\`\`
-
-## Production Deployment
-
-### Cloudflare Configuration
-
-**⚠️ IMPORTANT**: If you're using Cloudflare or similar CDN/proxy services, you **must** configure caching rules to prevent issues with file downloads.
-
-#### The Problem
-
-Cloudflare's cache layer converts HEAD requests to GET requests by default. This causes:
-- Large files being downloaded when only metadata was requested
-- CORS errors when previewing files in the browser
-- Inconsistent behavior between cached and non-cached requests
-
-#### The Solution
-
-Add a **Page Rule** or **Configuration Rule** to bypass cache for download endpoints:
-
-**Option 1: Page Rules (Classic)**
-
-1. Go to **Cloudflare Dashboard** -> Your domain -> **Rules** -> **Page Rules**
-2. Click **Create Page Rule**
-3. Configure:
-   - **URL Pattern**: \`your-domain.com/*/resolve/*\`
-   - **Settings**: Cache Level = **Bypass**
-4. **Save and Deploy**
-
-**Option 2: Configuration Rules (Modern, Recommended)**
-
-1. Go to **Cloudflare Dashboard** -> Your domain -> **Rules** -> **Configuration Rules**
-2. Click **Create Rule**
-3. Configure:
-   - **Rule name**: Bypass cache for file downloads
-   - **When incoming requests match**:
-     - Field: URI Path
-     - Operator: contains
-     - Value: \`/resolve/\`
-   - **Then the settings are**:
-     - Cache eligibility: **Bypass cache**
-4. **Deploy**
-
-This ensures HEAD requests remain as HEAD when reaching your server, preventing unnecessary downloads and CORS issues.
-
-### Using a Reverse Proxy
-
-For production, use a reverse proxy like nginx or Caddy to handle HTTPS:
-
-#### Nginx Example
+**Update nginx config:**
 
 \`\`\`nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    return 301 https://$server_name$request_uri;
-}
-
+# docker/nginx/nginx.conf
 server {
     listen 443 ssl http2;
-    server_name your-domain.com;
+    server_name hub.yourdomain.com;
 
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
 
-    location / {
-        proxy_pass http://localhost:28080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # For large file uploads
-        client_max_body_size 10G;
-        proxy_request_buffering off;
-    }
+    # ... rest of config
 }
 \`\`\`
 
-#### Caddy Example
+**Update base URL:**
+\`\`\`yaml
+KOHAKU_HUB_BASE_URL: https://hub.yourdomain.com
+\`\`\`
 
-\`\`\`caddy
-your-domain.com {
-    reverse_proxy localhost:28080
+### External S3 (AWS/R2)
 
-    # For large file uploads
-    request_body {
-        max_size 10GB
-    }
+**For Cloudflare R2:**
+
+\`\`\`yaml
+KOHAKU_HUB_S3_ENDPOINT: https://account-id.r2.cloudflarestorage.com
+KOHAKU_HUB_S3_PUBLIC_ENDPOINT: https://pub-id.r2.dev
+KOHAKU_HUB_S3_REGION: auto
+KOHAKU_HUB_S3_SIGNATURE_VERSION: s3v4
+KOHAKU_HUB_S3_ACCESS_KEY: your-r2-access-key
+KOHAKU_HUB_S3_SECRET_KEY: your-r2-secret-key
+KOHAKU_HUB_S3_BUCKET: kohakuhub
+KOHAKU_HUB_S3_FORCE_PATH_STYLE: true
+\`\`\`
+
+**For AWS S3:**
+
+\`\`\`yaml
+KOHAKU_HUB_S3_ENDPOINT: https://s3.amazonaws.com
+KOHAKU_HUB_S3_REGION: us-east-1
+KOHAKU_HUB_S3_SIGNATURE_VERSION: s3v4
+KOHAKU_HUB_S3_BUCKET: your-bucket-name
+KOHAKU_HUB_S3_FORCE_PATH_STYLE: false
+\`\`\`
+
+### Database Backups
+
+**Automated backups:**
+
+\`\`\`bash
+# Backup script
+docker exec kohakuhub-postgres pg_dump -U hub kohakuhub > backup.sql
+
+# Restore
+cat backup.sql | docker exec -i kohakuhub-postgres psql -U hub kohakuhub
+\`\`\`
+
+**Cron job:**
+\`\`\`cron
+0 2 * * * cd /path/to/KohakuHub && docker exec kohakuhub-postgres pg_dump -U hub kohakuhub | gzip > backups/kohakuhub-$(date +\%Y\%m\%d).sql.gz
+\`\`\`
+
+---
+
+## 🎛️ Advanced Configuration
+
+### Multi-Worker Deployment
+
+**Backend is already multi-worker:**
+\`\`\`yaml
+# docker-compose.yml
+command: >
+  sh -c "uvicorn kohakuhub.main:app
+    --host 0.0.0.0 --port 48888
+    --workers 4"  # Adjust based on CPU cores
+\`\`\`
+
+**Database uses \`db.atomic()\` for transaction safety.**
+
+### Quota Configuration
+
+**Per-user defaults:**
+\`\`\`yaml
+KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES: 10737418240   # 10GB
+KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES: 5368709120   # 5GB
+KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES: 107374182400   # 100GB
+KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES: 53687091200   # 50GB
+\`\`\`
+
+**Customize per-user:** Admin Portal → Users → Edit → Set custom quota
+
+### LFS Configuration
+
+**Server defaults (apply to all repos):**
+\`\`\`yaml
+KOHAKU_HUB_LFS_THRESHOLD_BYTES: 5000000  # 5MB
+KOHAKU_HUB_LFS_KEEP_VERSIONS: 5  # Keep 5 versions per file
+KOHAKU_HUB_LFS_AUTO_GC: false  # Manual GC only
+\`\`\`
+
+**32 default LFS suffix rules:**
+- Models: .safetensors, .bin, .pt, .onnx, .h5, .gguf, etc.
+- Archives: .zip, .tar, .gz, .7z, .rar
+- Data: .parquet, .arrow, .npy, .npz
+- Media: .mp4, .wav, .mp3, .tiff
+
+**Per-repo overrides:** Repo Settings → LFS Settings
+
+### Fallback Sources
+
+**Add HuggingFace globally:**
+\`\`\`yaml
+KOHAKU_HUB_FALLBACK_ENABLED: true
+KOHAKU_HUB_FALLBACK_CACHE_TTL: 300
+KOHAKU_HUB_FALLBACK_SOURCES: |
+  [{
+    "url": "https://huggingface.co",
+    "token": "",
+    "priority": 1,
+    "name": "HuggingFace",
+    "source_type": "huggingface"
+  }]
+\`\`\`
+
+**Or manage via:** Admin Portal → Fallback Sources
+
+**Add private HF token:**
+\`\`\`json
+{
+  "url": "https://huggingface.co",
+  "token": "hf_your_token_here",
+  "priority": 1,
+  "name": "HuggingFace",
+  "source_type": "huggingface"
 }
 \`\`\`
 
-### Database Backup
+---
 
-For production, regularly backup your PostgreSQL database:
+## 🔧 Operations
 
-\`\`\`bash
-# Create backup
-docker exec kohaku-postgres pg_dump -U hub hubdb > backup.sql
-
-# Restore backup
-cat backup.sql | docker exec -i kohaku-postgres psql -U hub hubdb
-\`\`\`
-
-### Storage Backup
-
-Your repository data is stored in the MinIO volumes. Back up these directories:
+### View Logs
 
 \`\`\`bash
-# Default locations (check your docker-compose.yml)
-./docker/hub-meta/minio/data
-./docker/hub-meta/lakefs/data
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f kohaku-hub
+docker compose logs -f postgres
+docker compose logs -f lakefs
 \`\`\`
 
-### Monitoring
-
-Monitor your KohakuHub instance using Docker:
+### Restart Services
 
 \`\`\`bash
-# View logs
-docker compose -f docker/docker-compose.yml logs -f kohaku-hub
+# Restart all
+docker compose restart
 
-# Check resource usage
-docker stats
+# Restart backend only
+docker compose restart kohaku-hub
 \`\`\`
 
-## Scaling Considerations
+### Update KohakuHub
 
-### Storage
+\`\`\`bash
+# Pull latest code
+git pull origin main
 
-- **MinIO**: Can be scaled to multiple nodes for redundancy
-- **S3**: Use external S3-compatible storage (Cloudflare R2, Wasabi, AWS S3)
-- **LFS**: Configure threshold based on your use case
+# Rebuild frontend
+npm run build --prefix src/kohaku-hub-ui
+npm run build --prefix src/kohaku-hub-admin
 
-### Database
+# Rebuild and restart
+docker compose up -d --build
+\`\`\`
 
-- **SQLite**: Good for small deployments (< 10 users)
-- **PostgreSQL**: Recommended for production (> 10 users)
-- Consider read replicas for high traffic
+### Database Migrations
 
-### Compute
+**Automatic on startup:**
+\`\`\`
+docker/startup.sh runs migrations before starting API
+\`\`\`
 
-- Increase Docker resource limits for heavy workloads
-- Use load balancer for multiple KohakuHub instances
-- Cache frequently accessed files with CDN
+**Manual migration:**
+\`\`\`bash
+docker exec -it kohakuhub-backend python scripts/run_migrations.py
+\`\`\`
 
-## Troubleshooting
+### Storage Management
+
+**View S3 usage:**
+\`\`\`bash
+python scripts/show_s3_usage.py
+\`\`\`
+
+**Clear test data:**
+\`\`\`bash
+python scripts/clear_s3_storage.py  # WARNING: Deletes all data!
+\`\`\`
+
+**Admin Portal:**
+- Storage → Browse buckets and objects
+- Quota Overview → See all quotas
+- Repositories → Storage breakdown per repo
+
+---
+
+## 🎯 Feature Configuration
+
+### Enable Email Verification
+
+\`\`\`yaml
+KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION: true
+KOHAKU_HUB_SMTP_ENABLED: true
+KOHAKU_HUB_SMTP_HOST: smtp.your-provider.com
+KOHAKU_HUB_SMTP_PORT: 587
+KOHAKU_HUB_SMTP_USERNAME: your-smtp-username
+KOHAKU_HUB_SMTP_PASSWORD: your-smtp-password
+KOHAKU_HUB_SMTP_FROM: noreply@yourdomain.com
+KOHAKU_HUB_SMTP_TLS: true
+\`\`\`
+
+### Enable Invitation-Only Registration
+
+\`\`\`yaml
+KOHAKU_HUB_INVITATION_ONLY: true
+\`\`\`
+
+**Create invitations:** Admin Portal → Invitations → Register Invitation
+
+**Invitation types:**
+- Single-use (max_usage: 1)
+- Multi-use (max_usage: 50)
+- Unlimited (max_usage: -1)
+- With auto-org-join (org_id + role)
+
+### Configure Site Branding
+
+\`\`\`yaml
+KOHAKU_HUB_SITE_NAME: "MyCompany AI Hub"
+\`\`\`
+
+Shows in:
+- Page titles
+- API responses (/api/version, /api/whoami-v2)
+- Homepage
+
+---
+
+## 📊 Monitoring & Admin
+
+### Admin Portal Features
+
+**Access:** http://localhost:28080/admin
+
+**Available Tools:**
+1. **Dashboard** - Overview stats
+2. **Users** - CRUD, email verification, quotas
+3. **Repositories** - Browse, delete, view files
+4. **Invitations** - Create/manage invite links
+5. **Quota Overview** - All quotas at a glance
+6. **Storage** - Browse S3 buckets/objects
+7. **Fallback Sources** - Manage external sources
+8. **Database** - Query tool with templates
+9. **Statistics** - Usage analytics
+10. **Commits** - Global commit history
+
+### API Documentation
+
+**Swagger UI:** http://localhost:48888/docs
+
+**All endpoints documented with:**
+- Parameters
+- Request/response schemas
+- Try-it-out functionality
+
+---
+
+## 🔄 External Source Fallback
+
+### Setup HuggingFace Fallback
+
+**Via Admin Portal:**
+1. Navigate to **Fallback Sources**
+2. Click **Add Source**
+3. Fill in:
+   - Name: HuggingFace
+   - URL: https://huggingface.co
+   - Source Type: huggingface
+   - Priority: 1
+   - Enabled: ✓
+4. Click **Create**
+
+**Now users can:**
+- Browse HuggingFace profiles: \`/openai\`
+- View external models: \`/models/stabilityai/stable-diffusion-xl\`
+- Download from HF automatically
+- See trending HF content
+
+**Benefits:**
+- No manual importing
+- Always up-to-date
+- Transparent source tagging
+- Cached for performance
+
+---
+
+## 🏗️ Architecture
+
+### Services
+
+\`\`\`
+nginx (28080) - Entry point
+  ├─→ kohaku-hub (48888) - FastAPI backend (4 workers)
+  ├─→ kohaku-hub-ui (built static) - Vue 3 frontend
+  └─→ kohaku-hub-admin (built static) - Admin UI
+
+kohaku-hub connects to:
+  ├─→ postgres (5432) - Metadata (Peewee ORM)
+  ├─→ lakefs (28000) - Versioning (REST API)
+  └─→ minio (29000) - Object storage (S3 compatible)
+\`\`\`
+
+### Data Flow
+
+**Upload (<10MB):**
+1. Client → Base64 encode
+2. FastAPI → Commit to LakeFS
+3. LakeFS → Store in S3
+
+**Upload (>10MB):**
+1. FastAPI → Generate presigned URL
+2. Client → Direct S3 upload
+3. FastAPI → Link to LakeFS
+
+**Download:**
+1. FastAPI → 302 redirect to S3 presigned URL
+2. Client → Direct S3 download (no proxy)
+
+---
+
+## 🐛 Troubleshooting
 
 ### Services Won't Start
 
 \`\`\`bash
 # Check logs
-docker compose -f docker/docker-compose.yml logs
+docker compose logs
 
-# Restart services
-docker compose -f docker/docker-compose.yml restart
-
-# Full rebuild
-docker compose -f docker/docker-compose.yml down
-./deploy.sh
+# Check individual service
+docker compose ps
+docker compose logs kohaku-hub
 \`\`\`
 
-### Permission Issues
+**Common issues:**
+- Port conflicts (28080, 48888, etc.)
+- Insufficient disk space
+- Missing environment variables
+- Database connection errors
+
+### Frontend Not Loading
 
 \`\`\`bash
-# Fix permission on mounted volumes
-sudo chown -R $UID:$GID ./docker/hub-meta
+# Rebuild frontend
+npm run build --prefix src/kohaku-hub-ui
+
+# Check nginx logs
+docker compose logs nginx
 \`\`\`
 
 ### Database Connection Errors
 
-- Verify PostgreSQL is running: \`docker compose ps\`
-- Check credentials in docker-compose.yml
-- Ensure database exists: \`docker exec -it kohaku-postgres psql -U hub -l\`
+\`\`\`bash
+# Check postgres is running
+docker compose ps postgres
 
-### Storage Issues
-
-- Check MinIO is accessible: http://localhost:29000
-- Verify credentials match docker-compose.yml
-- Check bucket exists (default: \`hub-data\`)
-
-### LakeFS Credentials
-
-LakeFS credentials are automatically generated on first startup and stored in:
-
-\`\`\`
-docker/hub-meta/hub-api/credentials.env
+# Check credentials match
+# DATABASE_URL must match POSTGRES_* vars
 \`\`\`
 
-Use these to log into LakeFS Web UI at http://localhost:28000
-
-## Updating KohakuHub
-
-To update to the latest version:
+### LakeFS Errors
 
 \`\`\`bash
-# Pull latest changes
-git pull origin main
+# Verify credentials
+cat docker/hub-meta/hub-api/credentials.env
 
-# Rebuild and restart services
-./deploy.sh
-
-# Or manually:
-npm run build --prefix ./src/kohaku-hub-ui
-docker compose -f docker/docker-compose.yml up -d --build
+# Restart LakeFS
+docker compose restart lakefs
 \`\`\`
 
-## Security Best Practices
+### Performance Issues
 
-1. **Change all default passwords** before production use
-2. **Enable HTTPS** using a reverse proxy
-3. **Use strong session secrets** and encryption keys
-4. **Enable email verification** for user registration
-5. **Regular backups** of database and storage
-6. **Keep Docker images updated** for security patches
-7. **Limit exposed ports** to only what's necessary
-8. **Use firewall rules** to restrict access
-9. **Monitor logs** for suspicious activity
-10. **Implement rate limiting** at the reverse proxy level
-
-## Getting Help
-
-If you need help with self-hosting:
-
-- **Documentation**: Check the [GitHub repository](https://github.com/KohakuBlueleaf/Kohaku-Hub)
-- **Discord**: Join our [community](https://discord.gg/xWYrkyvJ2s)
-- **GitHub Issues**: Report bugs and feature requests
-- **Discussions**: Ask questions and share experiences
-
-## Next Steps
-
-After setting up your instance:
-
-1. **Register users**: Create accounts for your team
-2. **Create organizations**: Set up teams and projects
-3. **Upload models**: Start hosting your AI models
-4. **Configure integrations**: Set up with your ML pipeline
-5. **Monitor usage**: Track downloads and activity
+**Optimize:**
+- Increase worker count (default: 4)
+- Enable Redis for caching (future)
+- Use external S3 (R2, AWS)
+- Enable fallback cache
 
 ---
 
-**Note**: KohakuHub is under active development. Features may change, and this guide will be updated accordingly. For the latest information, check the [GitHub repository](https://github.com/KohakuBlueleaf/Kohaku-Hub).
+## 📈 Scaling
+
+### Horizontal Scaling
+
+**Multiple backend workers already enabled:**
+- Uses \`db.atomic()\` for safety
+- Stateless design
+- Can add more workers in docker-compose
+
+### Database Scaling
+
+**PostgreSQL optimization:**
+\`\`\`sql
+-- Increase connection pool
+max_connections = 200
+
+-- Enable query optimization
+shared_buffers = 256MB
+effective_cache_size = 1GB
+\`\`\`
+
+### S3 Scaling
+
+**Use external S3:**
+- AWS S3 (global scale)
+- Cloudflare R2 (zero egress fees)
+- MinIO cluster (self-hosted)
+
+---
+
+## 🔄 Backup & Recovery
+
+### What to Backup
+
+**Critical:**
+1. PostgreSQL database
+2. LakeFS metadata (auto-persists to MinIO)
+3. \`docker-compose.yml\`
+4. \`docker/hub-meta/hub-api/credentials.env\`
+
+**Not needed:**
+- S3 object storage (can rebuild from LakeFS)
+- Docker images (rebuildable)
+
+### Backup Script
+
+\`\`\`bash
+#!/bin/bash
+DATE=$(date +%Y%m%d)
+BACKUP_DIR="./backups"
+
+# Database backup
+docker exec kohakuhub-postgres pg_dump -U hub kohakuhub | gzip > $BACKUP_DIR/db-$DATE.sql.gz
+
+# Config backup
+cp docker-compose.yml $BACKUP_DIR/docker-compose-$DATE.yml
+cp docker/hub-meta/hub-api/credentials.env $BACKUP_DIR/credentials-$DATE.env
+\`\`\`
+
+### Recovery
+
+\`\`\`bash
+# Restore database
+gunzip < backup.sql.gz | docker exec -i kohakuhub-postgres psql -U hub kohakuhub
+
+# Restart services
+docker compose restart
+\`\`\`
+
+---
+
+## 📚 Next Steps
+
+- **Admin Portal:** Explore all management features
+- **Fallback:** Enable HuggingFace browsing
+- **Invitations:** Set up invite-only mode
+- **Quotas:** Configure storage limits
+- **Monitoring:** Set up log aggregation
+- **Backups:** Automate with cron
+
+**Need help?**
+- **GitHub Issues:** https://github.com/KohakuBlueleaf/KohakuHub/issues
+- **Discord:** https://discord.gg/xWYrkyvJ2s
+- **Documentation:** Check /docs for detailed guides
 `;
 </script>
 

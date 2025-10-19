@@ -1,63 +1,74 @@
-<!-- src/pages/docs/index.vue -->
+<!-- Documentation main index page -->
 <script setup>
-import { useRouter } from "vue-router";
-
-const router = useRouter();
-
-const docs = [
+const mainSections = [
   {
-    title: "Setup Guide",
-    description:
-      "Step-by-step installation and configuration guide. Learn how to deploy KohakuHub with Docker and customize it for your needs.",
-    path: "/docs/setup",
+    title: "Getting Started",
+    description: "Installation, first repository, CLI tools, Python libraries",
+    path: "/docs/getting-started",
     icon: "i-carbon-rocket",
+    color: "text-blue-600 dark:text-blue-400",
   },
   {
-    title: "Deployment Architecture",
-    description:
-      "Understanding KohakuHub's architecture, port configuration, and nginx reverse proxy setup. Essential for production deployments.",
+    title: "Core Features",
+    description: "LFS, quotas, fallback, YAML metadata",
+    path: "/docs/features/core",
+    icon: "i-carbon-cube",
+    color: "text-purple-600 dark:text-purple-400",
+  },
+  {
+    title: "Collaboration",
+    description: "Organizations, invitations, likes, trending, branches",
+    path: "/docs/features/collaboration",
+    icon: "i-carbon-group",
+    color: "text-cyan-600 dark:text-cyan-400",
+  },
+  {
+    title: "Deployment",
+    description: "Docker, production, security, scaling, backups",
     path: "/docs/deployment",
     icon: "i-carbon-cloud",
+    color: "text-green-600 dark:text-green-400",
   },
   {
+    title: "API Reference",
+    description: "Authentication, repositories, users/orgs, admin endpoints",
+    path: "/docs/api",
+    icon: "i-carbon-api",
+    color: "text-orange-600 dark:text-orange-400",
+  },
+  {
+    title: "Configuration",
+    description: "Ports, environment variables, all settings reference",
+    path: "/docs/reference",
+    icon: "i-carbon-settings",
+    color: "text-red-600 dark:text-red-400",
+  },
+];
+
+const legacyDocs = [
+  {
+    title: "Setup Guide",
+    path: "/docs/setup",
+    icon: "i-carbon-document",
+  },
+  {
+    title: "CLI Tools",
+    path: "/docs/CLI",
+    icon: "i-carbon-terminal",
+  },
+  { title: "Git Clone", path: "/docs/Git", icon: "i-carbon-code" },
+  {
     title: "Admin Portal",
-    description:
-      "Administration interface for managing users, repositories, commits, and storage. Includes quota management, statistics dashboard, and S3 browser.",
-    path: "/docs/admin",
+    path: "/docs/Admin",
     icon: "i-carbon-security",
   },
   {
-    title: "Git Clone Support",
-    description:
-      "Native Git clone/pull support with automatic LFS integration. Includes user guide, Cloudflare setup, troubleshooting, and pure Python implementation details.",
-    path: "/docs/git",
-    icon: "i-carbon-code",
-  },
-  {
     title: "Port Reference",
-    description:
-      "Quick reference guide for all ports used by KohakuHub services. Know which port to use for what.",
     path: "/docs/ports",
     icon: "i-carbon-network-3",
   },
   {
-    title: "API Documentation",
-    description:
-      "Learn about KohakuHub's API, data flow, and key endpoints. Includes detailed workflow diagrams for uploads, downloads, and repository management.",
-    path: "/docs/api",
-    icon: "i-carbon-api",
-  },
-  {
-    title: "CLI Documentation",
-    description:
-      "Complete guide to the kohub-cli tool. Covers both Python API and command-line interface for managing repositories, organizations, and more.",
-    path: "/docs/cli",
-    icon: "i-carbon-terminal",
-  },
-  {
-    title: "Contributing & Roadmap",
-    description:
-      "Want to contribute? Learn how to set up, code style guidelines, and see the project roadmap with current status and planned features.",
+    title: "Contributing",
     path: "/docs/contributing",
     icon: "i-carbon-collaborate",
   },
@@ -74,42 +85,44 @@ const docs = [
         </p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Main Sections (Nested Docs) -->
+      <h2 class="text-2xl font-bold mb-6">📚 Documentation Sections</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         <router-link
-          v-for="doc in docs"
-          :key="doc.path"
-          :to="doc.path"
-          :class="[
-            'card hover:shadow-lg transition-shadow duration-200 p-6 cursor-pointer',
-            doc.featured ? 'ring-2 ring-primary-500 dark:ring-primary-400' : '',
-          ]"
+          v-for="section in mainSections"
+          :key="section.path"
+          :to="section.path"
+          class="card hover:shadow-lg transition-all p-6 cursor-pointer hover:scale-105"
         >
-          <div class="flex items-start gap-4">
-            <div
-              :class="doc.icon"
-              class="text-3xl text-primary-600 dark:text-primary-400 flex-shrink-0"
-            />
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-2">
-                <h2 class="text-xl font-semibold">{{ doc.title }}</h2>
-                <el-tag
-                  v-if="doc.featured"
-                  type="success"
-                  size="small"
-                  effect="dark"
-                >
-                  NEW
-                </el-tag>
-              </div>
-              <p class="text-gray-600 dark:text-gray-400">
-                {{ doc.description }}
-              </p>
-            </div>
+          <div class="flex items-center gap-3 mb-3">
+            <div :class="[section.icon, section.color]" class="text-4xl" />
+            <h3 class="text-xl font-bold">{{ section.title }}</h3>
           </div>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            {{ section.description }}
+          </p>
         </router-link>
       </div>
 
-      <div class="mt-12 card p-6">
+      <!-- Legacy Docs -->
+      <h2 class="text-2xl font-bold mb-6">📄 Additional Guides</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
+        <router-link
+          v-for="doc in legacyDocs"
+          :key="doc.path"
+          :to="doc.path"
+          class="card hover:shadow-md p-4 cursor-pointer flex items-center gap-3"
+        >
+          <div
+            :class="doc.icon"
+            class="text-2xl text-gray-600 dark:text-gray-400"
+          />
+          <span class="font-semibold">{{ doc.title }}</span>
+        </router-link>
+      </div>
+
+      <!-- Quick Links -->
+      <div class="card p-6">
         <h2 class="text-2xl font-bold mb-4">Quick Links</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <a
@@ -118,7 +131,7 @@ const docs = [
             class="flex items-center gap-2 text-primary-600 dark:text-primary-400 hover:underline"
           >
             <div class="i-carbon-logo-discord" />
-            Join our Discord
+            Join Discord
           </a>
           <a
             href="https://github.com/KohakuBlueleaf/KohakuHub"
@@ -126,14 +139,14 @@ const docs = [
             class="flex items-center gap-2 text-primary-600 dark:text-primary-400 hover:underline"
           >
             <div class="i-carbon-logo-github" />
-            GitHub Repository
+            GitHub
           </a>
           <router-link
             to="/get-started"
             class="flex items-center gap-2 text-primary-600 dark:text-primary-400 hover:underline"
           >
             <div class="i-carbon-rocket" />
-            Get Started Guide
+            Get Started
           </router-link>
         </div>
       </div>

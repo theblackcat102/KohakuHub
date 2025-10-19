@@ -1,4 +1,3 @@
-<!-- src/pages/get-started.vue -->
 <script setup>
 import MarkdownPage from "@/components/common/MarkdownPage.vue";
 
@@ -6,369 +5,464 @@ const baseUrl = window.location.origin;
 
 const content = `# Get Started with KohakuHub
 
-Welcome to KohakuHub! This guide will help you get started with using KohakuHub to download and upload models, datasets, and spaces.
+Welcome to KohakuHub - your self-hosted AI model and dataset hub! This guide covers everything from account creation to advanced features.
 
-## Quick Start
+---
+
+## 🚀 Quick Start
 
 ### 1. Create an Account
 
-First, you'll need to create an account on this KohakuHub instance:
-
-1. Click the **Register** button in the navigation bar
-2. Fill in your username, email, and password
-3. Submit the registration form
+**Register your account:**
+1. Click **Register** in the navigation bar
+2. Enter username, email, and password
+3. If invitation-only mode is enabled, you'll need an invitation link
 4. Log in with your credentials
 
-### 2. Get Your Access Token
+**Note:** Check with your administrator if email verification is required.
 
-Access tokens are required to interact with KohakuHub programmatically:
+### 2. Create an Access Token
 
-1. Log in to your account
-2. Navigate to **Settings** (click your username in the top right, then **Settings**)
-3. Go to the **Access Tokens** section
-4. Click **Create New Token**
-5. Give your token a name (e.g., "My Dev Machine")
-6. Copy the token and save it securely - you won't be able to see it again!
+**For CLI and API access:**
+1. Click your username → **Settings**
+2. Navigate to **Access Tokens**
+3. Click **Create New Token**
+4. Name your token (e.g., "Dev Machine", "CI/CD")
+5. Copy and save it securely (you can't view it again!)
 
-### 3. Set Up Your Environment
+**Token permissions:**
+- Read: Download public/private repos
+- Write: Upload, create repos, manage content
 
-Before using the CLI tools, set the endpoint to point to this KohakuHub instance:
+---
+
+## 📦 Using CLI Tools
+
+### Environment Setup
 
 \`\`\`bash
-# Set the HuggingFace endpoint to this KohakuHub instance
+# Point all HuggingFace tools to this KohakuHub instance
 export HF_ENDPOINT=${baseUrl}
-
-# For persistent configuration, add it to your shell profile
-echo 'export HF_ENDPOINT=${baseUrl}' >> ~/.bashrc  # or ~/.zshrc
-\`\`\`
-
-## Using CLI Tools
-
-KohakuHub is compatible with HuggingFace ecosystem tools. Here's how to use them:
-
-### Option 1: huggingface-cli (Recommended)
-
-The official HuggingFace CLI tool works seamlessly with KohakuHub.
-
-#### Installation
-
-\`\`\`bash
-pip install huggingface_hub
-\`\`\`
-
-#### Login
-
-\`\`\`bash
-huggingface-cli login
-\`\`\`
-
-When prompted, paste the access token you created earlier.
-
-#### Download a Model
-
-\`\`\`bash
-# Download a complete repository
-huggingface-cli download username/model-name
-
-# Download a specific file
-huggingface-cli download username/model-name config.json
-
-# Download to a specific directory
-huggingface-cli download username/model-name --local-dir ./my-model
-\`\`\`
-
-#### Upload Files
-
-\`\`\`bash
-# Upload a file
-huggingface-cli upload username/model-name ./model.safetensors
-
-# Upload a directory
-huggingface-cli upload username/model-name ./my-model --repo-type model
-\`\`\`
-
-### Option 2: hfutils
-
-A powerful alternative from [deepghs/hfutils](https://github.com/deepghs/hfutils) with advanced features.
-
-#### Installation
-
-\`\`\`bash
-pip install hfutils
-\`\`\`
-
-#### Usage
-
-\`\`\`bash
-# Set your token for private repositories
 export HF_TOKEN=your_access_token_here
 
-# Download a single file
-hfutils download -r username/model-name -o ./local-file.txt -f remote-file.txt
-
-# Download entire directory
-hfutils download -r username/model-name -o ./local-dir -d remote-dir
-
-# Download archived directory
-hfutils download -r username/model-name -o ./local-dir -a archive.zip
-
-# Upload a single file
-hfutils upload -r username/model-name -i ./local-file.txt -f remote-file.txt
-
-# Upload directory as tree
-hfutils upload -r username/model-name -i ./local-dir -d remote-dir
-
-# Upload directory as archive
-hfutils upload -r username/model-name -i ./local-dir -a archive.zip
+# Make it permanent
+echo 'export HF_ENDPOINT=${baseUrl}' >> ~/.bashrc
 \`\`\`
 
-#### Advanced Options
+### huggingface-cli (Official Tool)
 
 \`\`\`bash
-# Enable transfer acceleration
-export HF_HUB_ENABLE_HF_TRANSFER=1
+# Install
+pip install -U huggingface_hub
 
-# Specify repository type
-hfutils download -r username/dataset-name -t dataset -o ./output
+# Login
+huggingface-cli login
 
-# Custom temporary directory
-export TMPDIR=/path/to/tmp
+# Download model
+huggingface-cli download username/model-name
+
+# Upload file
+huggingface-cli upload username/model-name model.safetensors
+
+# Create repo
+huggingface-cli repo create username/my-model --type model
 \`\`\`
 
-### Option 3: kohub-cli (KohakuHub Native)
-
-KohakuHub's native CLI tool with both Python API and command-line interface.
-
-#### Installation
-
-Currently, you need to install from source:
+### kohub-cli (Native Tool)
 
 \`\`\`bash
-# Clone the repository
-git clone https://github.com/KohakuBlueleaf/KohakuHub.git
+# Install (from source)
+git clone https://github.com/KohakuBlueleaf/KohakuHub
 cd KohakuHub
-
-# Install the CLI (dependencies are in pyproject.toml)
 pip install -e .
-\`\`\`
 
-#### Command-Line Usage
+# Interactive TUI mode
+kohub-cli interactive
 
-\`\`\`bash
-# Set your endpoint
-export HF_ENDPOINT=${baseUrl}
-
-# Authentication
+# Command mode
 kohub-cli auth login
-kohub-cli auth token create --name "my-laptop"
-
-# Repository management
-kohub-cli repo create my-org/my-model --type model
-kohub-cli repo list --type model --author my-org
-kohub-cli repo info my-org/my-model --type model
-kohub-cli repo files my-org/my-model --recursive
+kohub-cli repo create username/my-model --type model
+kohub-cli repo list --type model --author username
+kohub-cli repo delete username/old-model --type model
 
 # Organization management
-kohub-cli org create my-org --description "My organization"
-kohub-cli org member add my-org bob --role member
+kohub-cli org create my-team
+kohub-cli org member add my-team alice --role admin
+kohub-cli org member list my-team
 
-# Interactive mode
-kohub-cli interactive
-# or just
-kohub-cli
+# Settings
+kohub-cli settings repo lfs threshold my-org/my-model --threshold 10000000
+kohub-cli settings repo lfs suffix my-org/my-model --add .safetensors
 \`\`\`
 
-#### Python API
+---
 
-You can also use kohub-cli programmatically:
+## 🐍 Using Python Libraries
 
-\`\`\`python
-from kohub_cli import KohubClient
-
-client = KohubClient(endpoint="${baseUrl}")
-client.login(username="alice", password="secret")
-client.create_repo("my-org/my-model", repo_type="model")
-\`\`\`
-
-For file upload/download operations, use huggingface-cli or hfutils.
-
-## Using the Python API
-
-You can also use the HuggingFace Hub library directly in your Python code:
-
-### Setup
+### HuggingFace Hub Library
 
 \`\`\`python
-from huggingface_hub import HfApi, login
 import os
-
-# Set the endpoint
 os.environ['HF_ENDPOINT'] = '${baseUrl}'
+os.environ['HF_TOKEN'] = 'your_token_here'
 
-# Login with your token
-login(token="your_access_token_here")
-\`\`\`
-
-### Download Files
-
-\`\`\`python
-from huggingface_hub import hf_hub_download, snapshot_download
-
-# Download a specific file
-file_path = hf_hub_download(
-    repo_id="username/model-name",
-    filename="model.safetensors"
-)
-
-# Download entire repository
-repo_path = snapshot_download(
-    repo_id="username/model-name",
-    repo_type="model"
-)
-\`\`\`
-
-### Upload Files
-
-\`\`\`python
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 
 api = HfApi()
 
-# Upload a single file
+# Create repository
+api.create_repo("username/my-model", repo_type="model", private=False)
+
+# Upload file
 api.upload_file(
-    path_or_fileobj="./model.safetensors",
+    path_or_fileobj="model.safetensors",
     path_in_repo="model.safetensors",
-    repo_id="username/model-name",
-    repo_type="model"
+    repo_id="username/my-model"
 )
 
-# Upload a folder
-api.upload_folder(
-    folder_path="./my-model",
-    repo_id="username/model-name",
-    repo_type="model"
+# Download file
+model_path = hf_hub_download(
+    repo_id="username/my-model",
+    filename="model.safetensors"
 )
+
+# Download entire repo
+repo_path = snapshot_download(repo_id="username/my-model")
 \`\`\`
 
-## Using the Web Interface
+### Transformers & Diffusers
 
-### Browse Repositories
+\`\`\`python
+import os
+os.environ['HF_ENDPOINT'] = '${baseUrl}'
+os.environ['HF_TOKEN'] = 'your_token_here'
 
-1. Navigate to **Models**, **Datasets**, or **Spaces** from the home page
-2. Browse public repositories or search for specific ones
-3. Click on a repository to view its contents
+# Transformers
+from transformers import AutoModel, AutoTokenizer
+model = AutoModel.from_pretrained("username/my-model")
+tokenizer = AutoTokenizer.from_pretrained("username/my-model")
 
-### Create a Repository
+# Diffusers
+from diffusers import StableDiffusionPipeline
+pipeline = StableDiffusionPipeline.from_pretrained("username/my-sd-model")
+\`\`\`
 
-1. Click the **New** button in the navigation bar
-2. Choose the repository type (Model, Dataset, or Space)
-3. Fill in the repository name and description
-4. Choose visibility (Public or Private)
-5. Click **Create Repository**
+---
 
-### Upload Files via Web UI
+## 🌐 Web Interface Features
 
-1. Navigate to your repository
-2. Click the **Files** tab
-3. Click **Upload Files**
-4. Drag and drop your files or click to browse
-5. Click **Upload** to commit the files
+### Browse & Discover
 
-### Download Files
+**Homepage:**
+- 🔥 Trending repositories (by recent activity)
+- Top models, datasets, and spaces
+- Quick access to browse all types
 
-1. Navigate to any repository
-2. Click the **Clone** button to see download options
-3. Use the provided commands to download via CLI
-4. Or click **Download** to download as a zip file (coming soon)
+**Browse Pages:**
+- **/models** - All public models
+- **/datasets** - All datasets
+- **/spaces** - All spaces
+- Search and filter by name
+- Sort by: Recently Updated, Most Downloads, Most Likes
 
-## Repository Types
+**External Content:**
+- Browse HuggingFace repos (if fallback enabled)
+- Download from external sources
+- View external user profiles
+- Repos tagged with source indicator
 
-### Models
+### Repository Viewer
 
-Models are ML model repositories containing:
-- Model weights (PyTorch, TensorFlow, ONNX, etc.)
-- Configuration files
-- Tokenizer files
-- Model cards (README.md)
+**Tabs:**
+- **Model Card** - README with YAML metadata support
+- **Files** - Browse file tree, upload files
+- **Commits** - View commit history
+- **Metadata** - All YAML frontmatter fields displayed
 
-### Datasets
+**YAML Metadata Support:**
+- License, languages, framework, pipeline tags
+- Base models, training datasets
+- Task categories, size info (datasets)
+- Evaluation metrics
+- All fields displayed in dedicated cards or grid
 
-Datasets contain training or evaluation data:
-- Data files (CSV, JSON, Parquet, etc.)
-- Dataset scripts
-- Dataset cards (README.md)
+**Features:**
+- Syntax highlighting for code files
+- Markdown rendering with Mermaid diagrams
+- LaTeX math support
+- File preview for text/code
+- Download files or entire repo
 
-### Spaces
+### Create & Upload
 
-Spaces are applications and demos:
-- Application code
-- Web interfaces
-- Gradio/Streamlit apps
-- API endpoints
+**Create Repository:**
+1. Click **New** in navbar
+2. Choose type: Model / Dataset / Space
+3. Enter name (auto-validates)
+4. Select organization (optional)
+5. Set visibility: Public / Private
+6. Repository created instantly
 
-## Best Practices
+**Upload Files:**
+1. Navigate to repo → **Files** tab
+2. Click **Upload Files**
+3. Drag & drop or browse
+4. Add commit message
+5. Files uploaded with automatic LFS handling
 
-### Repository Naming
+**Automatic LFS:**
+- Files **>=5MB** use LFS by default
+- Or files with: .safetensors, .bin, .pt, .onnx, .zip, .tar, .gz, .parquet, .arrow, etc.
+- Configure per-repo in Settings
 
-- Use lowercase letters and hyphens
-- Format: \`username/repo-name\`
-- Be descriptive: \`username/bert-sentiment-analysis\` not \`username/model1\`
+### Profile & Settings
 
-### README Files
+**User Profile:**
+- Avatar upload (1024x1024 JPEG)
+- Full name, bio, website
+- Social links: Twitter/X, Threads, GitHub, HuggingFace
+- View your models, datasets, spaces
+- Storage quota (separate public/private)
 
-Always include a README.md with:
-- Model/dataset description
-- Usage examples
-- Training details
-- License information
-- Citation information
+**Repository Settings:**
+- Visibility (public/private)
+- Delete repository
+- Transfer ownership
+- LFS threshold (per-repo override)
+- LFS keep versions (garbage collection)
+- LFS suffix rules (force LFS for specific extensions)
 
-### Large Files
+---
 
-For files larger than 10MB:
-- Git LFS is automatically used
-- Consider splitting very large files
-- Use efficient formats (safetensors, parquet)
+## 👥 Organizations
 
-### Versioning
+### Create Organization
 
-- Use semantic versioning for releases
-- Tag important versions
-- Document changes in your README
+\`\`\`bash
+# Via CLI
+kohub-cli org create my-team --description "Our AI Team"
 
-## Troubleshooting
+# Or via web: Click "Organizations" → "New Organization"
+\`\`\`
 
-### Authentication Errors
+### Manage Members
 
-If you get authentication errors:
-- Verify your token is correct
-- Make sure HF_ENDPOINT is set correctly
-- Check that your token hasn't expired
+**Roles:**
+- **Member** - View org repos, create repos
+- **Admin** - Manage members, settings
+- **Super Admin** - Full control
 
-### Download Fails
+**Add Members:**
+1. Navigate to org page
+2. Click **Settings** (admin only)
+3. Add member by username
+4. Set role
 
-If downloads fail:
-- Check your internet connection
-- Verify the repository exists and is accessible
-- Ensure you have permission for private repositories
-- Try downloading specific files instead of the whole repo
+**Via CLI:**
+\`\`\`bash
+kohub-cli org member add my-team alice --role admin
+kohub-cli org member remove my-team bob
+kohub-cli org member list my-team
+\`\`\`
 
-### Upload Fails
+### Organization Features
 
-If uploads fail:
-- Verify you have write access to the repository
-- Check file size limits
-- Ensure your token has write permissions
-- Try uploading files one at a time
+- Separate storage quotas (public/private)
+- Shared repositories
+- Team avatars
+- Organization profile page
+- Member management
 
-## Next Steps
+---
 
-- **Explore**: Browse public models and datasets
-- **Create**: Upload your first model or dataset
-- **Collaborate**: Create an organization and invite team members
-- **Deploy**: Use Spaces to deploy ML applications
+## 🔄 Git Clone Support
 
-Need help? Check out our [GitHub repository](https://github.com/KohakuBlueleaf/Kohaku-Hub) or join our [Discord community](https://discord.gg/xWYrkyvJ2s).
+**Pure Python Git server** - no pygit2/libgit2 needed!
+
+\`\`\`bash
+# Clone repository
+git clone ${baseUrl}/username/repo-name.git
+
+# For private repos
+git clone http://username:your-token@${baseUrl.replace("http://", "")}/username/private-repo.git
+
+# Large files use Git LFS
+cd repo-name
+git lfs install
+git lfs pull  # Download files >=1MB
+\`\`\`
+
+**How it works:**
+- Files <1MB: Direct in Git pack
+- Files >=1MB: LFS pointers (lazy download)
+- Memory-efficient (handles any repo size)
+
+---
+
+## ⚡ Advanced Features
+
+### Repository Likes
+
+**Like repos you find useful:**
+- Click ❤️ on any repository
+- View your liked repos: \`/users/{username}/likes\`
+- See who liked a repo
+
+### Trending System
+
+**Discover popular repos:**
+- Homepage shows trending (7-day activity)
+- Algorithm: recent downloads + likes with time decay
+- Updated in real-time
+
+### Invitations
+
+**Invite-only mode:**
+- Admin creates invitation links
+- Single-use or multi-use (set max_usage)
+- Can auto-add to organizations
+- Expiration dates supported
+
+**Create invitation (admin):**
+\`\`\`bash
+curl -X POST ${baseUrl}/admin/api/invitations/register \\
+  -H "X-Admin-Token: admin_token" \\
+  -d '{"max_usage": 10, "expires_days": 30}'
+\`\`\`
+
+### SSH Keys
+
+**Add SSH key for Git operations:**
+1. Settings → SSH Keys
+2. Paste public key
+3. Use for Git clone/pull/push
+
+### Branch Operations
+
+**Via Web UI:**
+- Create branch
+- Delete branch
+- Revert commit
+- Reset branch to commit
+- Cherry-pick commits
+- Tag commits
+
+**Via API:**
+\`\`\`python
+# Create branch
+api.create_branch("username/repo", branch="dev", revision="main")
+
+# Create tag
+api.create_tag("username/repo", tag="v1.0", revision="abc123")
+\`\`\`
+
+### External Fallback
+
+**Browse HuggingFace without importing:**
+- Visit \`/openai\` to see OpenAI's HF profile
+- Click any HF model to view/download
+- Repos tagged with source indicator
+- Automatic redirect to external downloads
+
+**How to enable:** Admin Portal → Fallback Sources → Add HuggingFace
+
+---
+
+## 🛠️ Repository Management
+
+### Move Repository
+
+**Change namespace:**
+\`\`\`bash
+# Via API
+curl -X POST ${baseUrl}/api/repos/move \\
+  -d '{"from_namespace": "alice", "from_name": "model1",
+       "to_namespace": "my-org", "to_name": "model1",
+       "repo_type": "model"}'
+\`\`\`
+
+### Squash Commits
+
+**Clean up history:**
+- Keeps only latest version of each file
+- Reduces storage usage
+- Cannot be undone!
+
+### Soft Delete
+
+**Files are soft-deleted:**
+- Marked as deleted, not physically removed
+- Can be restored from history
+- Actual deletion via garbage collection
+
+---
+
+## 📊 Quota Management
+
+**Storage limits:**
+- **Public repos**: Separate quota
+- **Private repos**: Separate quota
+- Per-user and per-organization
+- View usage: Settings → Storage
+
+**Check quota:**
+\`\`\`bash
+curl ${baseUrl}/api/quota/username/public
+\`\`\`
+
+---
+
+## 🎨 Customization
+
+### Profile
+
+- Upload 1024x1024 avatar (JPEG)
+- Add bio (Markdown supported)
+- Website URL
+- Social media: Twitter/X, Threads, GitHub, HuggingFace
+
+### Site
+
+- Configurable site name
+- Custom branding (admin-configured)
+
+---
+
+## 🔧 Troubleshooting
+
+**Repository not found:**
+- Check spelling and namespace
+- Verify it's public or you have access
+- Try external fallback (if enabled)
+
+**Upload fails:**
+- Check storage quota
+- Verify file formats
+- Try smaller batches
+
+**LFS issues:**
+- Install git-lfs: \`git lfs install\`
+- Pull large files: \`git lfs pull\`
+- Check repo LFS settings
+
+**Performance:**
+- Use trending sort for discovery
+- Enable caching in client
+- Batch uploads when possible
+
+---
+
+## 📚 Resources
+
+- **API Docs:** ${baseUrl}/docs
+- **Admin Portal:** ${baseUrl}/admin
+- **GitHub:** https://github.com/KohakuBlueleaf/KohakuHub
+- **Discord:** https://discord.gg/xWYrkyvJ2s
+- **Documentation:** ${baseUrl}/docs
+
+---
+
+**Happy model hosting! 🚀**
 `;
 </script>
 
