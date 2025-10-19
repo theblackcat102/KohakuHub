@@ -21,9 +21,10 @@ class UserInfo(BaseModel):
 
     id: int
     username: str
-    email: str
+    email: str | None  # Nullable for organizations
     email_verified: bool
     is_active: bool
+    is_org: bool  # Add org flag
     private_quota_bytes: int | None
     public_quota_bytes: int | None
     private_used_bytes: int
@@ -51,23 +52,23 @@ async def get_user_info(
     username: str,
     _admin: bool = Depends(verify_admin_token),
 ):
-    """Get detailed user information.
+    """Get detailed user or organization information.
 
     Args:
-        username: Username to query
+        username: Username or org name to query
         _admin: Admin authentication (dependency)
 
     Returns:
-        User information
+        User/org information
 
     Raises:
-        HTTPException: If user not found
+        HTTPException: If user/org not found
     """
 
     user = User.get_or_none(User.username == username)
 
     if not user:
-        raise HTTPException(404, detail={"error": f"User not found: {username}"})
+        raise HTTPException(404, detail={"error": f"User/org not found: {username}"})
 
     return UserInfo(
         id=user.id,
@@ -75,6 +76,7 @@ async def get_user_info(
         email=user.email,
         email_verified=user.email_verified,
         is_active=user.is_active,
+        is_org=user.is_org,  # Add org flag
         private_quota_bytes=user.private_quota_bytes,
         public_quota_bytes=user.public_quota_bytes,
         private_used_bytes=user.private_used_bytes,
@@ -300,4 +302,53 @@ async def set_email_verification(
         "username": user.username,
         "email": user.email,
         "email_verified": user.email_verified,
+    }
+
+
+class UpdateQuotaRequest(BaseModel):
+    """Request to update user/org quota."""
+
+    private_quota_bytes: int | None = None
+    public_quota_bytes: int | None = None
+
+
+@router.put("/users/{username}/quota")
+async def update_user_quota(
+    username: str,
+    request: UpdateQuotaRequest,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Update storage quota for user or organization.
+
+    Args:
+        username: Username or org name
+        request: Quota update request
+        _admin: Admin authentication
+
+    Returns:
+        Updated quota information
+
+    Raises:
+        HTTPException: If user/org not found
+    """
+    user = User.get_or_none(User.username == username)
+    if not user:
+        raise HTTPException(404, detail={"error": f"User/org not found: {username}"})
+
+    # Update quotas
+    user.private_quota_bytes = request.private_quota_bytes
+    user.public_quota_bytes = request.public_quota_bytes
+    user.save()
+
+    logger.info(
+        f"Admin updated quota for {username}: "
+        f"private={request.private_quota_bytes}, public={request.public_quota_bytes}"
+    )
+
+    return {
+        "username": user.username,
+        "private_quota_bytes": user.private_quota_bytes,
+        "public_quota_bytes": user.public_quota_bytes,
+        "private_used_bytes": user.private_used_bytes,
+        "public_used_bytes": user.public_used_bytes,
     }

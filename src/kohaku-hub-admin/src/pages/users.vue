@@ -20,7 +20,54 @@ const users = ref([]);
 const loading = ref(false);
 const dialogVisible = ref(false);
 const userDialogVisible = ref(false);
+const quotaDialogVisible = ref(false);
 const selectedUser = ref(null);
+const quotaForm = ref({
+  username: "",
+  private_quota_bytes: null,
+  public_quota_bytes: null,
+});
+
+const quotaInputPrivate = ref("");
+const quotaInputPublic = ref("");
+
+// Parse human-readable size (100G, 5TB, 500MB) to bytes (decimal 1000^k)
+function parseHumanSize(input) {
+  if (!input || input === "null" || input === "unlimited") return null;
+
+  const match = input.trim().match(/^(\d+(?:\.\d+)?)\s*([KMGT]?B?)?$/i);
+  if (!match) return null;
+
+  const value = parseFloat(match[1]);
+  const unit = (match[2] || "").toUpperCase().replace("B", "");
+
+  const multipliers = {
+    "": 1,
+    K: 1000,
+    M: 1000000,
+    G: 1000000000,
+    T: 1000000000000,
+  };
+
+  return Math.floor(value * (multipliers[unit] || 1));
+}
+
+// Format bytes to human-readable (decimal)
+function formatBytesDecimal(bytes) {
+  if (bytes === null || bytes === undefined) return "Unlimited";
+  if (bytes === 0) return "0 B";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1000 && unitIndex < units.length - 1) {
+    size /= 1000;
+    unitIndex++;
+  }
+
+  return `${size.toFixed(2)} ${units[unitIndex]}`;
+}
 
 // Search and filters
 const searchQuery = ref("");
@@ -234,6 +281,70 @@ This action CANNOT be undone!`,
         error.response?.data?.detail?.error || "Failed to delete user",
       );
     }
+  }
+}
+
+function openQuotaDialog() {
+  quotaForm.value = {
+    username: selectedUser.value.username,
+    private_quota_bytes: selectedUser.value.private_quota_bytes,
+    public_quota_bytes: selectedUser.value.public_quota_bytes,
+  };
+
+  // Set human-readable inputs
+  quotaInputPrivate.value =
+    selectedUser.value.private_quota_bytes !== null
+      ? formatBytesDecimal(selectedUser.value.private_quota_bytes)
+      : "unlimited";
+  quotaInputPublic.value =
+    selectedUser.value.public_quota_bytes !== null
+      ? formatBytesDecimal(selectedUser.value.public_quota_bytes)
+      : "unlimited";
+
+  quotaDialogVisible.value = true;
+}
+
+function updateQuotaFromInput(type) {
+  const input =
+    type === "private" ? quotaInputPrivate.value : quotaInputPublic.value;
+  const bytes = parseHumanSize(input);
+
+  if (type === "private") {
+    quotaForm.value.private_quota_bytes = bytes;
+  } else {
+    quotaForm.value.public_quota_bytes = bytes;
+  }
+}
+
+async function saveQuota() {
+  if (!checkAuth()) return;
+
+  try {
+    loading.value = true;
+    // Update quota via admin API
+    await fetch(
+      `http://localhost:48888/admin/api/users/${quotaForm.value.username}/quota`,
+      {
+        method: "PUT",
+        headers: {
+          "X-Admin-Token": adminStore.token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          private_quota_bytes: quotaForm.value.private_quota_bytes,
+          public_quota_bytes: quotaForm.value.public_quota_bytes,
+        }),
+      },
+    );
+
+    ElMessage.success("Quota updated successfully");
+    quotaDialogVisible.value = false;
+    userDialogVisible.value = false;
+    await loadUsers();
+  } catch (error) {
+    ElMessage.error("Failed to update quota");
+  } finally {
+    loading.value = false;
   }
 }
 
@@ -598,11 +709,159 @@ onMounted(() => {
 
         <template #footer>
           <el-button @click="userDialogVisible = false">Close</el-button>
-          <el-button
-            type="primary"
-            @click="$router.push(`/quotas?namespace=${selectedUser.username}`)"
-          >
-            Manage Quota
+          <el-button type="primary" @click="openQuotaDialog">
+            Edit Quota
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <!-- Quota Edit Dialog -->
+      <el-dialog
+        v-model="quotaDialogVisible"
+        title="Edit Storage Quota"
+        width="600px"
+      >
+        <el-form :model="quotaForm" label-width="150px">
+          <el-form-item label="Username">
+            <span>{{ quotaForm.username }}</span>
+          </el-form-item>
+
+          <el-divider content-position="left">Public Quota</el-divider>
+
+          <el-form-item label="Public Quota">
+            <el-input
+              v-model="quotaInputPublic"
+              @blur="updateQuotaFromInput('public')"
+              placeholder="e.g., 10G, 500MB, unlimited"
+            >
+              <template #append>
+                <span class="text-xs"
+                  >=
+                  {{ formatBytesDecimal(quotaForm.public_quota_bytes) }}</span
+                >
+              </template>
+            </el-input>
+            <div class="text-xs text-gray-500 mt-1">
+              Enter: 100G, 5TB, 500MB, or "unlimited" (decimal: 1GB =
+              1,000,000,000 bytes)
+            </div>
+          </el-form-item>
+
+          <el-form-item label="Quick Presets">
+            <div class="flex gap-2 flex-wrap">
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPublic = '5G';
+                  updateQuotaFromInput('public');
+                "
+                >5GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPublic = '10G';
+                  updateQuotaFromInput('public');
+                "
+                >10GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPublic = '50G';
+                  updateQuotaFromInput('public');
+                "
+                >50GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPublic = '100G';
+                  updateQuotaFromInput('public');
+                "
+                >100GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPublic = 'unlimited';
+                  updateQuotaFromInput('public');
+                "
+                >Unlimited</el-button
+              >
+            </div>
+          </el-form-item>
+
+          <el-divider content-position="left">Private Quota</el-divider>
+
+          <el-form-item label="Private Quota">
+            <el-input
+              v-model="quotaInputPrivate"
+              @blur="updateQuotaFromInput('private')"
+              placeholder="e.g., 10G, 500MB, unlimited"
+            >
+              <template #append>
+                <span class="text-xs"
+                  >=
+                  {{ formatBytesDecimal(quotaForm.private_quota_bytes) }}</span
+                >
+              </template>
+            </el-input>
+            <div class="text-xs text-gray-500 mt-1">
+              Enter: 100G, 5TB, 500MB, or "unlimited"
+            </div>
+          </el-form-item>
+
+          <el-form-item label="Quick Presets">
+            <div class="flex gap-2 flex-wrap">
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPrivate = '5G';
+                  updateQuotaFromInput('private');
+                "
+                >5GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPrivate = '10G';
+                  updateQuotaFromInput('private');
+                "
+                >10GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPrivate = '50G';
+                  updateQuotaFromInput('private');
+                "
+                >50GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPrivate = '100G';
+                  updateQuotaFromInput('private');
+                "
+                >100GB</el-button
+              >
+              <el-button
+                size="small"
+                @click="
+                  quotaInputPrivate = 'unlimited';
+                  updateQuotaFromInput('private');
+                "
+                >Unlimited</el-button
+              >
+            </div>
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <el-button @click="quotaDialogVisible = false">Cancel</el-button>
+          <el-button type="primary" @click="saveQuota" :loading="loading">
+            Save
           </el-button>
         </template>
       </el-dialog>
