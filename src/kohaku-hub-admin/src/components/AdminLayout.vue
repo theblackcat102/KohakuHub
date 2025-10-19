@@ -33,6 +33,11 @@ const menuItems = [
   { path: "/commits", label: "Commits", icon: "i-carbon-version" },
   { path: "/storage", label: "Storage", icon: "i-carbon-data-volume" },
   {
+    path: "/fallback-sources",
+    label: "Fallback Sources",
+    icon: "i-carbon-connect",
+  },
+  {
     path: "/QuotaOverview",
     label: "Quota Overview",
     icon: "i-carbon-meter",

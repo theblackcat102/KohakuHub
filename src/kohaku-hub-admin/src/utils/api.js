@@ -541,3 +541,102 @@ export async function executeDatabaseQuery(token, sql) {
   const response = await client.post("/database/query", { sql });
   return response.data;
 }
+
+// ===== Fallback Sources Management =====
+
+/**
+ * List all fallback sources
+ * @param {string} token - Admin token
+ * @param {Object} params - Query parameters
+ * @param {string} params.namespace - Filter by namespace
+ * @param {boolean} params.enabled - Filter by enabled status
+ * @returns {Promise<Array>} Fallback sources list
+ */
+export async function listFallbackSources(token, { namespace, enabled } = {}) {
+  const client = createAdminClient(token);
+  const response = await client.get("/fallback-sources", {
+    params: { namespace, enabled },
+  });
+  return response.data;
+}
+
+/**
+ * Get specific fallback source
+ * @param {string} token - Admin token
+ * @param {number} sourceId - Source ID
+ * @returns {Promise<Object>} Fallback source details
+ */
+export async function getFallbackSource(token, sourceId) {
+  const client = createAdminClient(token);
+  const response = await client.get(`/fallback-sources/${sourceId}`);
+  return response.data;
+}
+
+/**
+ * Create new fallback source
+ * @param {string} token - Admin token
+ * @param {Object} sourceData - Source data
+ * @param {string} sourceData.namespace - Namespace ("" for global)
+ * @param {string} sourceData.url - Base URL
+ * @param {string} sourceData.token - Optional API token
+ * @param {number} sourceData.priority - Priority (lower = higher)
+ * @param {string} sourceData.name - Display name
+ * @param {string} sourceData.source_type - "huggingface" or "kohakuhub"
+ * @param {boolean} sourceData.enabled - Enabled status
+ * @returns {Promise<Object>} Created fallback source
+ */
+export async function createFallbackSource(token, sourceData) {
+  const client = createAdminClient(token);
+  const response = await client.post("/fallback-sources", sourceData);
+  return response.data;
+}
+
+/**
+ * Update fallback source
+ * @param {string} token - Admin token
+ * @param {number} sourceId - Source ID
+ * @param {Object} updateData - Fields to update
+ * @returns {Promise<Object>} Updated fallback source
+ */
+export async function updateFallbackSource(token, sourceId, updateData) {
+  const client = createAdminClient(token);
+  const response = await client.put(
+    `/fallback-sources/${sourceId}`,
+    updateData,
+  );
+  return response.data;
+}
+
+/**
+ * Delete fallback source
+ * @param {string} token - Admin token
+ * @param {number} sourceId - Source ID
+ * @returns {Promise<Object>} Deletion result
+ */
+export async function deleteFallbackSource(token, sourceId) {
+  const client = createAdminClient(token);
+  const response = await client.delete(`/fallback-sources/${sourceId}`);
+  return response.data;
+}
+
+/**
+ * Get fallback cache statistics
+ * @param {string} token - Admin token
+ * @returns {Promise<Object>} Cache stats
+ */
+export async function getFallbackCacheStats(token) {
+  const client = createAdminClient(token);
+  const response = await client.get("/fallback-sources/cache/stats");
+  return response.data;
+}
+
+/**
+ * Clear fallback cache
+ * @param {string} token - Admin token
+ * @returns {Promise<Object>} Clear result
+ */
+export async function clearFallbackCache(token) {
+  const client = createAdminClient(token);
+  const response = await client.delete("/fallback-sources/cache/clear");
+  return response.data;
+}

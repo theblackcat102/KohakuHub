@@ -21,6 +21,7 @@ declare module 'vue-router/auto-routes' {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
     '/commits': RouteRecordInfo<'/commits', '/commits', Record<never, never>, Record<never, never>>,
     '/DatabaseViewer': RouteRecordInfo<'/DatabaseViewer', '/DatabaseViewer', Record<never, never>, Record<never, never>>,
+    '/fallback-sources': RouteRecordInfo<'/fallback-sources', '/fallback-sources', Record<never, never>, Record<never, never>>,
     '/invitations': RouteRecordInfo<'/invitations', '/invitations', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/QuotaOverview': RouteRecordInfo<'/QuotaOverview', '/QuotaOverview', Record<never, never>, Record<never, never>>,
@@ -51,6 +52,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/DatabaseViewer.vue': {
       routes: '/DatabaseViewer'
+      views: never
+    }
+    'src/pages/fallback-sources.vue': {
+      routes: '/fallback-sources'
       views: never
     }
     'src/pages/invitations.vue': {
