@@ -40,8 +40,20 @@ def with_repo_fallback(operation: OperationType):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Check if fallback is enabled
-            if not cfg.fallback.enabled:
+            # Extract fallback param from Request object (if available)
+            fallback_enabled = None
+            request = kwargs.get("request")
+            if request and hasattr(request, "query_params"):
+                fallback_param = request.query_params.get("fallback")
+                if fallback_param is not None:
+                    fallback_enabled = fallback_param.lower() not in (
+                        "false",
+                        "0",
+                        "no",
+                    )
+
+            # Check if fallback is enabled globally and not disabled by query param
+            if not cfg.fallback.enabled or fallback_enabled is False:
                 return await func(*args, **kwargs)
 
             # Extract repo info from kwargs
@@ -179,8 +191,22 @@ def with_list_aggregation(repo_type: str):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Check if fallback is enabled
-            if not cfg.fallback.enabled:
+            # Extract fallback parameter (5th arg or kwargs)
+            # Functions called as: _list_xxx_with_aggregation(author, limit, sort, user, fallback)
+            fallback_enabled = kwargs.get("fallback", True)
+            if fallback_enabled is None:
+                fallback_enabled = True
+            if len(args) > 4:
+                args = list(args)
+                fallback_enabled = args.pop()
+
+            logger.info(
+                f"with_list_aggregation decorator params: fallback_enabled={fallback_enabled}"
+            )
+
+            # Check if fallback is enabled globally and not disabled by param
+            if not cfg.fallback.enabled or not fallback_enabled:
+                # Call without fallback - need to remove fallback from args
                 return await func(*args, **kwargs)
 
             # Get local results
@@ -284,8 +310,20 @@ def with_user_fallback(operation: UserOperationType):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Check if fallback is enabled
-            if not cfg.fallback.enabled:
+            # Extract fallback param from Request object (if available)
+            fallback_enabled = None
+            request = kwargs.get("request")
+            if request and hasattr(request, "query_params"):
+                fallback_param = request.query_params.get("fallback")
+                if fallback_param is not None:
+                    fallback_enabled = fallback_param.lower() not in (
+                        "false",
+                        "0",
+                        "no",
+                    )
+
+            # Check if fallback is enabled globally and not disabled by query param
+            if not cfg.fallback.enabled or fallback_enabled is False:
                 return await func(*args, **kwargs)
 
             # Extract username/org_name from kwargs

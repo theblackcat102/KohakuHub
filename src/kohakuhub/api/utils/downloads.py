@@ -125,7 +125,7 @@ async def track_download_async(
             session_count = count_repository_sessions(repo)
 
             if session_count > cfg.app.download_session_cleanup_threshold:
-                asyncio.create_task(aggregate_old_sessions(repo))
+                track_task = asyncio.create_task(aggregate_old_sessions(repo))
 
     except Exception as e:
         # Don't fail the download if tracking fails

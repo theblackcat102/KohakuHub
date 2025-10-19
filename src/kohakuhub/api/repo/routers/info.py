@@ -303,6 +303,7 @@ async def _list_repos_internal(
     limit: int = 50,
     sort: str = "recent",
     user: User | None = None,
+    fallback: bool = True,
 ) -> list[dict]:
     """Internal function to list repositories (called by decorated versions).
 
@@ -312,6 +313,7 @@ async def _list_repos_internal(
         limit: Maximum number of results
         sort: Sort order
         user: Current authenticated user (optional)
+        fallback: Enable fallback to external sources (default: True)
 
     Returns:
         List of repositories
@@ -393,18 +395,18 @@ async def _list_repos_internal(
 
 # Create decorated versions for each repo type
 @with_list_aggregation("model")
-async def _list_models_with_aggregation(author, limit, sort, user):
-    return await _list_repos_internal("model", author, limit, sort, user)
+async def _list_models_with_aggregation(author, limit, sort, user, fallback=True):
+    return await _list_repos_internal("model", author, limit, sort, user, fallback)
 
 
 @with_list_aggregation("dataset")
-async def _list_datasets_with_aggregation(author, limit, sort, user):
-    return await _list_repos_internal("dataset", author, limit, sort, user)
+async def _list_datasets_with_aggregation(author, limit, sort, user, fallback=True):
+    return await _list_repos_internal("dataset", author, limit, sort, user, fallback)
 
 
 @with_list_aggregation("space")
-async def _list_spaces_with_aggregation(author, limit, sort, user):
-    return await _list_repos_internal("space", author, limit, sort, user)
+async def _list_spaces_with_aggregation(author, limit, sort, user, fallback=True):
+    return await _list_repos_internal("space", author, limit, sort, user, fallback)
 
 
 @router.get("/models")
@@ -414,6 +416,7 @@ async def list_repos(
     author: Optional[str] = None,
     limit: int = Query(50, ge=1, le=1000),
     sort: str = Query("recent", regex="^(recent|likes|downloads|trending)$"),
+    fallback: bool = Query(True, description="Enable fallback to external sources"),
     request: Request = None,
     user: User | None = Depends(get_optional_user),
 ):
@@ -423,6 +426,7 @@ async def list_repos(
         author: Filter by author/namespace
         limit: Maximum number of results
         sort: Sort order (recent, likes, downloads, trending) - default: recent
+        fallback: Enable fallback to external sources (default: True)
         request: FastAPI request object
         user: Current authenticated user (optional)
 
@@ -433,11 +437,17 @@ async def list_repos(
 
     match path:
         case _ if "models" in path:
-            return await _list_models_with_aggregation(author, limit, sort, user)
+            return await _list_models_with_aggregation(
+                author, limit, sort, user, fallback
+            )
         case _ if "datasets" in path:
-            return await _list_datasets_with_aggregation(author, limit, sort, user)
+            return await _list_datasets_with_aggregation(
+                author, limit, sort, user, fallback
+            )
         case _ if "spaces" in path:
-            return await _list_spaces_with_aggregation(author, limit, sort, user)
+            return await _list_spaces_with_aggregation(
+                author, limit, sort, user, fallback
+            )
         case _:
             return hf_error_response(
                 404,

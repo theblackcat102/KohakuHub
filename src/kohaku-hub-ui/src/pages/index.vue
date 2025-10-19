@@ -233,9 +233,9 @@ function goToRepo(type, repo) {
 async function loadStats() {
   try {
     const [models, datasets, spaces] = await Promise.all([
-      repoAPI.listRepos("model", { limit: 100, sort: "trending" }),
-      repoAPI.listRepos("dataset", { limit: 100, sort: "trending" }),
-      repoAPI.listRepos("space", { limit: 100, sort: "trending" }),
+      repoAPI.listRepos("model", { limit: 100, sort: "trending", fallback: false }),
+      repoAPI.listRepos("dataset", { limit: 100, sort: "trending", fallback: false }),
+      repoAPI.listRepos("space", { limit: 100, sort: "trending", fallback: false }),
     ]);
 
     stats.value = {
