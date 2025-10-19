@@ -67,6 +67,18 @@ export default defineConfig({
   },
 
   build: {
+    // Target modern browsers (skip legacy transpilation)
+    target: 'esnext',
+
+    // Enable minification (rolldown uses built-in minifier)
+    minify: true,
+
+    // Disable source maps in production (faster builds)
+    sourcemap: false,
+
+    // Optimize CSS
+    cssMinify: true,
+
     rollupOptions: {
       output: {
         manualChunks: (id) => {
@@ -89,6 +101,9 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 1000, // Increase limit to 1000kb to reduce warnings
   },
+
+  // Enable caching for faster rebuilds
+  cacheDir: 'node_modules/.vite',
 
   server: {
     port: 5173,

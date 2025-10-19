@@ -54,12 +54,28 @@ export default defineConfig({
   },
 
   build: {
+    // Target modern browsers (skip legacy transpilation)
+    target: 'esnext',
+
+    // Enable minification (rolldown uses built-in minifier)
+    minify: true,
+
+    // Disable source maps in production (faster builds)
+    sourcemap: false,
+
+    // Optimize CSS
+    cssMinify: true,
+
     rollupOptions: {
       output: {
         manualChunks: (id) => {
           // Split element-plus into separate chunk
           if (id.includes('element-plus')) {
             return 'element-plus'
+          }
+          // Split echarts into separate chunk
+          if (id.includes('echarts')) {
+            return 'echarts'
           }
           // Split core vendor libraries
           if (
@@ -74,6 +90,9 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 1000
   },
+
+  // Enable caching for faster rebuilds
+  cacheDir: 'node_modules/.vite',
 
   server: {
     port: 5174, // Different port from main UI (5173)

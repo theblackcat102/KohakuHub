@@ -210,7 +210,7 @@ async function loadRepos() {
     const { data } = await repoAPI.listRepos(repoType.value, {
       limit: 100,
       sort: apiSort,
-      fallback: false,  // Don't aggregate external repos on main list pages
+      fallback: false, // Don't aggregate external repos on main list pages
     });
     repos.value = data;
   } catch (err) {

@@ -6,7 +6,7 @@ export default defineConfig({
     presetAttributify(),
     presetIcons({
       scale: 1.2,
-      warn: true,
+      warn: false,  // Disable warnings for missing icons (false positives)
       collections: {
         carbon: () =>
           import('@iconify-json/carbon/icons.json', { with: { type: 'json' } }).then(
@@ -16,6 +16,15 @@ export default defineConfig({
           import('@iconify-json/ep/icons.json', { with: { type: 'json' } }).then((i) => i.default)
       }
     })
+  ],
+  safelist: [
+    // Explicitly safelist icons used in dynamic contexts
+    'i-carbon-user',
+    'i-carbon-data-base',
+    'i-carbon-version',
+    'i-carbon-search',
+    'i-carbon-circle-dash',
+    'i-carbon-search-locate',
   ],
   shortcuts: {
     'btn-primary':
