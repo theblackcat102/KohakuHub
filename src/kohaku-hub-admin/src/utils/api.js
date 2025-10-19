@@ -32,11 +32,11 @@ function createAdminClient(token) {
  */
 export async function listUsers(
   token,
-  { search, limit = 100, offset = 0 } = {},
+  { search, limit = 100, offset = 0, include_orgs = false } = {},
 ) {
   const client = createAdminClient(token);
   const response = await client.get("/users", {
-    params: { search, limit, offset },
+    params: { search, limit, offset, include_orgs },
   });
   return response.data;
 }

@@ -88,6 +88,7 @@ async def list_users(
     search: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    include_orgs: bool = False,
     _admin: bool = Depends(verify_admin_token),
 ):
     """List all users with quota information.
@@ -96,13 +97,18 @@ async def list_users(
         search: Search by username or email (optional)
         limit: Maximum number of users to return
         offset: Offset for pagination
+        include_orgs: Include organizations in results (default: False)
         _admin: Admin authentication (dependency)
 
     Returns:
         List of users with quota information
     """
 
-    users_query = User.select().where(User.is_org == False)
+    # Filter by type
+    if include_orgs:
+        users_query = User.select()  # Include both users and orgs
+    else:
+        users_query = User.select().where(User.is_org == False)  # Users only
 
     # Add search filter if provided
     if search:
@@ -119,6 +125,7 @@ async def list_users(
             "email": u.email,
             "email_verified": u.email_verified,
             "is_active": u.is_active,
+            "is_org": u.is_org,  # Add org flag
             "private_quota_bytes": u.private_quota_bytes,
             "public_quota_bytes": u.public_quota_bytes,
             "private_used_bytes": u.private_used_bytes,

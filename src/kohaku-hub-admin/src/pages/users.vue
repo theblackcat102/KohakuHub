@@ -22,9 +22,10 @@ const dialogVisible = ref(false);
 const userDialogVisible = ref(false);
 const selectedUser = ref(null);
 
-// Search
+// Search and filters
 const searchQuery = ref("");
 const searchDebounceTimer = ref(null);
+const showOrgs = ref(true); // Toggle to show/hide organizations
 
 // Pagination
 const currentPage = ref(1);
@@ -105,6 +106,7 @@ async function loadUsers() {
       search: searchQuery.value || undefined,
       limit: pageSize.value,
       offset: (currentPage.value - 1) * pageSize.value,
+      include_orgs: showOrgs.value,
     });
     users.value = response.users;
   } catch (error) {
@@ -302,7 +304,7 @@ onMounted(() => {
 
       <!-- Search Bar -->
       <el-card class="mb-4">
-        <div class="flex gap-4 items-center">
+        <div class="flex gap-4 items-center flex-wrap">
           <el-input
             v-model="searchQuery"
             placeholder="Search users by username or email..."
@@ -315,6 +317,12 @@ onMounted(() => {
               <div class="i-carbon-search text-gray-400" />
             </template>
           </el-input>
+          <el-switch
+            v-model="showOrgs"
+            @change="loadUsers"
+            active-text="Show Organizations"
+            inactive-text="Users Only"
+          />
           <span v-if="searchQuery" class="text-sm text-gray-500">
             Searching for: "{{ searchQuery }}"
           </span>
@@ -341,7 +349,16 @@ onMounted(() => {
             label="Username"
             min-width="150"
             sortable="custom"
-          />
+          >
+            <template #default="{ row }">
+              <div class="flex items-center gap-2">
+                <span>{{ row.username }}</span>
+                <el-tag v-if="row.is_org" size="small" type="warning"
+                  >ORG</el-tag
+                >
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="email" label="Email" min-width="200" />
           <el-table-column
             prop="private_used"
