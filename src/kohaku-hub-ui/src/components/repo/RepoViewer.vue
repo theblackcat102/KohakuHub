@@ -151,6 +151,14 @@
           </div>
         </div>
 
+        <!-- Metadata Header (Key badges) -->
+        <MetadataHeader
+          v-if="hasMetadataHeader"
+          :metadata="readmeMetadata"
+          :repo-type="repoType"
+          @navigate-to-metadata="navigateToTab('metadata')"
+        />
+
         <!-- Navigation Tabs -->
         <div class="mb-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
           <div
@@ -195,6 +203,17 @@
             >
               Commits
             </button>
+            <button
+              :class="[
+                'px-4 py-2 font-medium transition-colors',
+                activeTab === 'metadata'
+                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+              ]"
+              @click="navigateToTab('metadata')"
+            >
+              Metadata
+            </button>
           </div>
         </div>
 
@@ -233,6 +252,25 @@
                 Create README.md
               </el-button>
             </div>
+          </div>
+        </div>
+
+        <!-- Metadata Tab -->
+        <div v-if="activeTab === 'metadata'">
+          <DetailedMetadataPanel
+            v-if="hasDetailedMetadata"
+            :metadata="readmeMetadata"
+            :repo-type="repoType"
+          />
+          <div
+            v-else
+            class="card text-center py-12 text-gray-500 dark:text-gray-400"
+          >
+            <div class="i-carbon-information text-6xl mb-4 inline-block" />
+            <p>No metadata found in README.md</p>
+            <p class="text-sm mt-2">
+              Add YAML frontmatter to README.md to display metadata
+            </p>
           </div>
         </div>
 
@@ -470,35 +508,18 @@
         </div>
       </main>
 
-      <!-- Sidebar -->
+      <!-- Sidebar (Compact) -->
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <!-- Owner Info -->
-        <div class="card">
-          <h3 class="font-semibold mb-3">Owner</h3>
-          <RouterLink
-            :to="`/${namespace}`"
-            class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded transition-colors"
-          >
-            <div
-              class="i-carbon-user-avatar text-3xl text-gray-400 dark:text-gray-500"
-            />
-            <span class="font-medium">{{ namespace }}</span>
-          </RouterLink>
-        </div>
+        <!-- Relationships (Author + Base Model + Datasets from YAML) -->
+        <SidebarRelationshipsCard
+          :namespace="namespace"
+          :metadata="readmeMetadata"
+          :repo-type="repoType"
+        />
 
-        <!-- Tags -->
-        <div v-if="repoInfo?.tags && repoInfo.tags.length" class="card">
-          <h3 class="font-semibold mb-3">Tags</h3>
-          <div class="flex flex-wrap gap-2">
-            <el-tag v-for="tag in repoInfo.tags" :key="tag" size="small">
-              {{ tag }}
-            </el-tag>
-          </div>
-        </div>
-
-        <!-- Metadata -->
+        <!-- Basic Metadata -->
         <div class="card">
-          <h3 class="font-semibold mb-3">Metadata</h3>
+          <h3 class="font-semibold mb-3">Info</h3>
           <div class="space-y-2 text-sm">
             <div>
               <span class="text-gray-600 dark:text-gray-400">Type:</span>
@@ -679,13 +700,20 @@ huggingface-cli download {{ repoInfo?.id }}</pre
 </template>
 
 <script setup>
-import { likesAPI, repoAPI } from "@/utils/api";
-import { useAuthStore } from "@/stores/auth";
-import { copyToClipboard } from "@/utils/clipboard";
-import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+
+import { useAuthStore } from "@/stores/auth";
+import { copyToClipboard } from "@/utils/clipboard";
+import { parseYAMLFrontmatter, normalizeMetadata } from "@/utils/yaml-parser";
+import { parseTags } from "@/utils/tag-parser";
+import { likesAPI, repoAPI } from "@/utils/api";
+import MarkdownViewer from "@/components/common/MarkdownViewer.vue";
+import MetadataHeader from "@/components/repo/metadata/MetadataHeader.vue";
+import DetailedMetadataPanel from "@/components/repo/metadata/DetailedMetadataPanel.vue";
+import ReferencedDatasetsCard from "@/components/repo/metadata/ReferencedDatasetsCard.vue";
+import SidebarRelationshipsCard from "@/components/repo/metadata/SidebarRelationshipsCard.vue";
 
 dayjs.extend(relativeTime);
 
@@ -723,6 +751,7 @@ const commitsNextCursor = ref(null);
 const filesLoading = ref(true);
 const readmeContent = ref("");
 const readmeLoading = ref(true);
+const readmeMetadata = ref({});
 const showCloneDialog = ref(false);
 const fileSearchQuery = ref("");
 const isLiked = ref(false);
@@ -766,6 +795,43 @@ const filteredFiles = computed(() => {
   );
 });
 
+// Parse tags from repo info
+const parsedTags = computed(() => {
+  return parseTags(repoInfo.value?.tags || []);
+});
+
+const referencedDatasets = computed(() => {
+  return parsedTags.value.datasets;
+});
+
+const cleanTags = computed(() => {
+  return parsedTags.value.cleanTags;
+});
+
+const showTagsCard = computed(() => {
+  return cleanTags.value.length > 0;
+});
+
+const showReferencedDatasetsCard = computed(() => {
+  return referencedDatasets.value.length > 0;
+});
+
+// Metadata visibility
+const hasMetadataHeader = computed(() => {
+  return (
+    readmeMetadata.value.license ||
+    readmeMetadata.value.language ||
+    readmeMetadata.value.library_name ||
+    readmeMetadata.value.pipeline_tag ||
+    readmeMetadata.value.task_categories ||
+    readmeMetadata.value.size_categories
+  );
+});
+
+const hasDetailedMetadata = computed(() => {
+  return Object.keys(readmeMetadata.value).length > 0;
+});
+
 // Methods
 function getIconClass(type) {
   const icons = {
@@ -804,16 +870,25 @@ function getFileName(path) {
 }
 
 function navigateToTab(tab) {
-  if (tab === "files") {
-    router.push(
-      `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`,
-    );
-  } else if (tab === "commits") {
-    router.push(
-      `/${props.repoType}s/${props.namespace}/${props.name}/commits/${currentBranch.value}`,
-    );
-  } else {
-    router.push(`/${props.repoType}s/${props.namespace}/${props.name}`);
+  switch (tab) {
+    case "files":
+      router.push(
+        `/${props.repoType}s/${props.namespace}/${props.name}/tree/${currentBranch.value}`,
+      );
+      break;
+    case "commits":
+      router.push(
+        `/${props.repoType}s/${props.namespace}/${props.name}/commits/${currentBranch.value}`,
+      );
+      break;
+    case "metadata":
+      router.push({
+        path: `/${props.repoType}s/${props.namespace}/${props.name}`,
+        query: { tab: "metadata" },
+      });
+      break;
+    default:
+      router.push(`/${props.repoType}s/${props.namespace}/${props.name}`);
   }
 }
 
@@ -951,6 +1026,7 @@ async function loadReadme() {
 
     if (!readmeFile) {
       readmeContent.value = "";
+      readmeMetadata.value = {};
       return;
     }
 
@@ -958,11 +1034,17 @@ async function loadReadme() {
     const response = await fetch(downloadUrl);
 
     if (response.ok) {
-      readmeContent.value = await response.text();
+      const rawContent = await response.text();
+
+      // Parse YAML frontmatter
+      const { metadata, content } = parseYAMLFrontmatter(rawContent);
+      readmeMetadata.value = normalizeMetadata(metadata);
+      readmeContent.value = content; // Content without frontmatter for display
     }
   } catch (err) {
     console.error("Failed to load README:", err);
     readmeContent.value = "";
+    readmeMetadata.value = {};
   } finally {
     readmeLoading.value = false;
   }

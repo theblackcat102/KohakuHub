@@ -4,7 +4,7 @@
     :repo-type="repoType"
     :namespace="namespace"
     :name="name"
-    tab="card"
+    :tab="currentTab"
   />
 </template>
 
@@ -23,4 +23,5 @@ const repoType = computed(() => {
 
 const namespace = computed(() => route.params.namespace);
 const name = computed(() => route.params.name);
+const currentTab = computed(() => route.query.tab || "card");
 </script>
