@@ -289,10 +289,11 @@ async def fetch_external_list(
         params = {}
         if query_params.get("author"):
             params["author"] = query_params["author"]
+            logger.debug(f"Fetching {repo_type}s with author={params['author']}")
         if query_params.get("limit"):
             params["limit"] = query_params["limit"]
-        if query_params.get("sort"):
-            params["sort"] = query_params["sort"]
+        # Don't send sort to HuggingFace - they don't support it
+        # HF returns models sorted by downloads by default
 
         client = FallbackClient(
             source_url=source["url"],
@@ -323,8 +324,243 @@ async def fetch_external_list(
         logger.warning(
             f"Failed to fetch list from {source['name']}: {response.status_code}"
         )
+        logger.debug(f"Request URL: {response.url}")
+        logger.debug(f"Response: {response.text[:200]}")
         return []
 
     except Exception as e:
         logger.warning(f"Failed to fetch list from {source['name']}: {e}")
         return []
+
+
+async def try_fallback_user_profile(username: str) -> Optional[dict]:
+    """Try to get user profile from fallback sources.
+
+    HuggingFace workflow:
+    1. Try /api/users/{name}/overview (works for users, returns 404 for orgs)
+    2. If 404, try /api/organizations/{name}/members (works for orgs)
+    3. If members succeeds → It's an org, return minimal profile
+    4. If both fail → Not found
+
+    Args:
+        username: Username or org name to lookup
+
+    Returns:
+        User/org profile dict or None if not found
+    """
+    sources = get_enabled_sources(namespace="")  # Global sources only
+
+    if not sources:
+        return None
+
+    for source in sources:
+        try:
+            client = FallbackClient(
+                source_url=source["url"],
+                source_type=source["source_type"],
+                token=source.get("token"),
+            )
+
+            match source["source_type"]:
+                case "huggingface":
+                    # Step 1: Try user overview
+                    user_path = f"/api/users/{username}/overview"
+                    user_response = await client.get(user_path, "model")
+
+                    if 200 <= user_response.status_code < 400:
+                        # User overview succeeded
+                        hf_data = user_response.json()
+                        profile_data = {
+                            "username": username,
+                            "full_name": hf_data.get("fullname")
+                            or hf_data.get("name")
+                            or username,
+                            "bio": None,
+                            "website": None,
+                            "social_media": None,
+                            "created_at": hf_data.get("createdAt"),
+                            "_source": source["name"],
+                            "_source_url": source["url"],
+                            "_partial": True,
+                            "_hf_pro": hf_data.get("isPro", False),
+                            "_avatar_url": hf_data.get("avatarUrl"),
+                            "_hf_type": hf_data.get("type", "user"),
+                        }
+                        logger.info(
+                            f"Fallback user profile SUCCESS: {username} from {source['name']} (type: {profile_data['_hf_type']})"
+                        )
+                        return profile_data
+
+                    # Step 2: User overview failed, try org members
+                    org_members_path = f"/api/organizations/{username}/members"
+                    org_response = await client.get(org_members_path, "model")
+
+                    if 200 <= org_response.status_code < 400:
+                        # Org members endpoint succeeded → It's an org!
+                        members_data = org_response.json()
+
+                        # Try to get org info from first member's avatarUrl or other data
+                        first_member = members_data[0] if members_data else {}
+
+                        profile_data = {
+                            "username": username,
+                            "full_name": username,  # HF doesn't provide org fullname
+                            "bio": None,
+                            "website": None,
+                            "social_media": None,
+                            "created_at": None,
+                            "_source": source["name"],
+                            "_source_url": source["url"],
+                            "_partial": True,
+                            "_hf_type": "org",  # We know it's an org
+                            "_avatar_url": None,  # HF doesn't provide org avatar in members
+                            "_member_count": len(members_data),
+                        }
+                        logger.info(
+                            f"Fallback org profile SUCCESS: {username} from {source['name']} ({len(members_data)} members)"
+                        )
+                        return profile_data
+
+                    # Both failed
+                    logger.debug(f"HF user/org not found: {username}")
+                    continue
+
+                case "kohakuhub":
+                    # Other KohakuHub instances use /profile
+                    kohaku_path = f"/api/users/{username}/profile"
+                    response = await client.get(kohaku_path, "model")
+
+                    if response.status_code == 200:
+                        profile_data = response.json()
+                        profile_data["_source"] = source["name"]
+                        profile_data["_source_url"] = source["url"]
+                        logger.info(
+                            f"Fallback user profile SUCCESS: {username} from {source['name']}"
+                        )
+                        return profile_data
+
+                    elif not should_retry_source(response):
+                        return None
+
+                case _:
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Fallback user profile failed for {source['name']}: {e}")
+            continue
+
+    return None
+
+
+async def try_fallback_user_repos(username: str) -> Optional[dict]:
+    """Try to get user repositories from fallback sources.
+
+    Args:
+        username: Username to lookup
+
+    Returns:
+        Repos dict with models/datasets/spaces or None if not found
+    """
+    sources = get_enabled_sources(namespace="")
+
+    if not sources:
+        return None
+
+    for source in sources:
+        try:
+            client = FallbackClient(
+                source_url=source["url"],
+                source_type=source["source_type"],
+                token=source.get("token"),
+            )
+
+            match source["source_type"]:
+                case "huggingface":
+                    # HF doesn't have single repos endpoint, query each type
+                    models_path = f"/api/models?author={username}&limit=100"
+                    datasets_path = f"/api/datasets?author={username}&limit=100"
+                    spaces_path = f"/api/spaces?author={username}&limit=100"
+
+                    # Fetch concurrently
+                    models_task = client.get(models_path, "model")
+                    datasets_task = client.get(datasets_path, "dataset")
+                    spaces_task = client.get(spaces_path, "space")
+
+                    models_resp, datasets_resp, spaces_resp = await asyncio.gather(
+                        models_task, datasets_task, spaces_task, return_exceptions=True
+                    )
+
+                    result = {"models": [], "datasets": [], "spaces": []}
+
+                    # Parse models
+                    if (
+                        not isinstance(models_resp, Exception)
+                        and models_resp.status_code == 200
+                    ):
+                        result["models"] = models_resp.json()
+
+                    # Parse datasets
+                    if (
+                        not isinstance(datasets_resp, Exception)
+                        and datasets_resp.status_code == 200
+                    ):
+                        result["datasets"] = datasets_resp.json()
+
+                    # Parse spaces
+                    if (
+                        not isinstance(spaces_resp, Exception)
+                        and spaces_resp.status_code == 200
+                    ):
+                        result["spaces"] = spaces_resp.json()
+
+                    # Add source tags to all repos
+                    for repo_list in [
+                        result["models"],
+                        result["datasets"],
+                        result["spaces"],
+                    ]:
+                        for repo in repo_list:
+                            if isinstance(repo, dict):
+                                repo["_source"] = source["name"]
+                                repo["_source_url"] = source["url"]
+
+                    logger.info(
+                        f"Fallback user repos SUCCESS: {username} from {source['name']}"
+                    )
+                    return result
+
+                case "kohakuhub":
+                    # Use single endpoint
+                    repos_path = f"/api/users/{username}/repos"
+                    response = await client.get(repos_path, "model")
+
+                    if response.status_code == 200:
+                        data = response.json()
+
+                        # Add source tags
+                        for repo_list in [
+                            data.get("models", []),
+                            data.get("datasets", []),
+                            data.get("spaces", []),
+                        ]:
+                            for repo in repo_list:
+                                if isinstance(repo, dict):
+                                    repo["_source"] = source["name"]
+                                    repo["_source_url"] = source["url"]
+
+                        logger.info(
+                            f"Fallback user repos SUCCESS: {username} from {source['name']}"
+                        )
+                        return data
+
+                    elif not should_retry_source(response):
+                        return None
+
+                case _:
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Fallback user repos failed for {source['name']}: {e}")
+            continue
+
+    return None

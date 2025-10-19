@@ -21,7 +21,11 @@ from kohakuhub.auth.permissions import (
     check_repo_write_permission,
 )
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
-from kohakuhub.api.fallback import with_list_aggregation, with_repo_fallback
+from kohakuhub.api.fallback import (
+    with_list_aggregation,
+    with_repo_fallback,
+    with_user_fallback,
+)
 from kohakuhub.api.quota.util import get_repo_storage_info
 from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
@@ -443,6 +447,7 @@ async def list_repos(
 
 
 @router.get("/users/{username}/repos")
+@with_user_fallback("repos")
 async def list_user_repos(
     username: str,
     limit: int = Query(100, ge=1, le=1000),

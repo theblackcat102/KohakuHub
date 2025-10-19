@@ -22,6 +22,7 @@ from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
+from kohakuhub.api.fallback import with_user_fallback
 from kohakuhub.api.quota.util import calculate_repository_storage, check_quota
 from kohakuhub.api.repo.utils.hf import hf_repo_not_found
 
@@ -101,6 +102,7 @@ async def update_user_settings(
 
 
 @router.get("/users/{username}/profile")
+@with_user_fallback("profile")
 async def get_user_profile(username: str):
     """Get user public profile information.
 
@@ -129,6 +131,7 @@ async def get_user_profile(username: str):
         "website": user.website,
         "social_media": social_media,
         "created_at": user.created_at.isoformat(),
+        "_source": "local",  # Tag local users
     }
 
 

@@ -19,14 +19,21 @@
       </el-button>
     </div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-      <!-- Sidebar -->
-      <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <div class="card">
+    <div v-else>
+      <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <!-- Sidebar -->
+        <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          <div class="card">
           <div class="flex items-center gap-3 mb-4">
-            <!-- Avatar -->
+            <!-- Avatar (use external URL if available) -->
             <img
-              v-if="hasAvatar"
+              v-if="externalAvatarUrl && isExternalUser"
+              :src="externalAvatarUrl"
+              :alt="`${username} avatar`"
+              class="w-20 h-20 rounded-full object-cover"
+            />
+            <img
+              v-else-if="hasAvatar && !isExternalUser"
               :src="`/api/users/${username}/avatar?t=${Date.now()}`"
               :alt="`${username} avatar`"
               class="w-20 h-20 rounded-full object-cover"
@@ -39,6 +46,11 @@
               <p class="text-sm text-gray-600 dark:text-gray-400">
                 {{ profileInfo?.full_name || "User" }}
               </p>
+              <!-- External Source Badge -->
+              <el-tag v-if="isExternalUser" size="small" type="info" class="mt-1">
+                <div class="i-carbon-cloud inline-block mr-1" />
+                {{ externalSourceName }}
+              </el-tag>
             </div>
           </div>
 
@@ -168,6 +180,12 @@
             >
               <div class="i-carbon-calendar" />
               Joined {{ formatDate(profileInfo.created_at) }}
+            </div>
+
+            <!-- Partial Profile Indicator -->
+            <div v-if="hasPartialProfile" class="text-xs text-gray-500 dark:text-gray-400 italic pt-2 border-t">
+              <div class="i-carbon-information inline-block mr-1" />
+              Limited profile from external source
             </div>
           </div>
         </div>
@@ -613,6 +631,7 @@
           </div>
         </section>
       </main>
+      </div>
     </div>
   </div>
 </template>
@@ -641,6 +660,67 @@ const hasAvatar = ref(true); // Assume avatar exists, will be set to false on er
 const sortBy = ref("recent"); // Sort option
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
+
+// External user detection (check both profile and repos)
+const isExternalUser = computed(() => {
+  // Check profile first
+  if (profileInfo.value?._source && profileInfo.value._source !== 'local') {
+    return true
+  }
+  // Check repos if profile doesn't have _source
+  // If any repo has _source (and it's not local), user is external
+  for (const repoType of ['models', 'datasets', 'spaces']) {
+    const repoList = repos.value[repoType] || []
+    for (const repo of repoList) {
+      if (repo._source && repo._source !== 'local') {
+        return true
+      }
+    }
+  }
+  return false
+})
+
+const externalSourceName = computed(() => {
+  // Try profile first
+  if (profileInfo.value?._source) {
+    return profileInfo.value._source
+  }
+  // Try first repo with _source
+  for (const repoType of ['models', 'datasets', 'spaces']) {
+    const repoList = repos.value[repoType] || []
+    for (const repo of repoList) {
+      if (repo._source && repo._source !== 'local') {
+        return repo._source
+      }
+    }
+  }
+  return 'external source'
+})
+
+const externalSourceUrl = computed(() => {
+  // Try profile first
+  if (profileInfo.value?._source_url) {
+    return profileInfo.value._source_url
+  }
+  // Try first repo with _source_url
+  for (const repoType of ['models', 'datasets', 'spaces']) {
+    const repoList = repos.value[repoType] || []
+    for (const repo of repoList) {
+      if (repo._source_url) {
+        return repo._source_url
+      }
+    }
+  }
+  return ''
+})
+
+const hasPartialProfile = computed(() => {
+  return profileInfo.value?._partial === true
+})
+
+const externalAvatarUrl = computed(() => {
+  return profileInfo.value?._avatar_url
+})
 
 // Helper to convert singular type to plural key
 function getPluralKey(type) {
@@ -687,12 +767,28 @@ function goToRepo(type, repo) {
 async function checkIfOrganization() {
   try {
     // Check if this name is an organization
-    await orgAPI.get(username.value);
-    // If successful, it's an organization - redirect
-    router.replace(`/organizations/${username.value}`);
-    return true;
+    const { data } = await orgAPI.get(username.value);
+
+    // Only redirect if it's a LOCAL organization
+    // For external sources, check if HF says it's an org
+    if (!data._source || data._source === 'local') {
+      // Local organization - redirect
+      router.replace(`/organizations/${username.value}`);
+      return true;
+    }
+
+    // External entity - check HF type field
+    if (data._hf_type === 'org' || data._hf_type === 'organization') {
+      // HF says it's an org - redirect to org page
+      router.replace(`/organizations/${username.value}`);
+      return true;
+    }
+
+    // External user - don't redirect
+    console.log('External user detected:', data._source, 'type:', data._hf_type)
+    return false;
   } catch (err) {
-    // Not an organization, continue as user
+    // 404 or error - not an organization, continue as user
     return false;
   }
 }
@@ -771,9 +867,13 @@ onMounted(async () => {
     return;
   }
 
-  // Load user card, profile, and quota info
+  // Load user card and profile info
   loadUserCard();
-  loadProfileInfo();
-  loadQuotaInfo();
+  await loadProfileInfo();
+
+  // Only load quota for local users (not external)
+  if (!isExternalUser.value) {
+    loadQuotaInfo();
+  }
 });
 </script>

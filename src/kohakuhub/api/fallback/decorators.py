@@ -14,12 +14,15 @@ from kohakuhub.api.fallback.operations import (
     try_fallback_info,
     try_fallback_resolve,
     try_fallback_tree,
+    try_fallback_user_profile,
+    try_fallback_user_repos,
 )
 from kohakuhub.api.fallback.config import get_enabled_sources
 
 logger = get_logger("FALLBACK_DEC")
 
 OperationType = Literal["resolve", "tree", "info", "revision", "paths_info"]
+UserOperationType = Literal["profile", "repos"]
 
 
 def with_repo_fallback(operation: OperationType):
@@ -193,8 +196,19 @@ def with_list_aggregation(repo_type: str):
                     item["_source"] = "local"
                     item["_source_url"] = cfg.app.base_url
 
-            # Get fallback sources
+            # Get author from kwargs or args
+            # Functions are called as: _list_models_with_aggregation(author, limit, sort, user)
             author = kwargs.get("author")
+            if author is None and len(args) > 0:
+                author = args[0]  # First positional arg is author
+
+            # Build query params dict for external sources
+            query_params = {
+                "author": author,
+                "limit": kwargs.get("limit", args[1] if len(args) > 1 else 50),
+                "sort": kwargs.get("sort", args[2] if len(args) > 2 else "recent"),
+            }
+
             sources = get_enabled_sources(namespace=author or "")
 
             if not sources:
@@ -207,7 +221,7 @@ def with_list_aggregation(repo_type: str):
             )
 
             external_tasks = [
-                fetch_external_list(source, repo_type, kwargs) for source in sources
+                fetch_external_list(source, repo_type, query_params) for source in sources
             ]
 
             external_results_list = await asyncio.gather(
@@ -248,6 +262,92 @@ def with_list_aggregation(repo_type: str):
             )
 
             return final_results
+
+        return wrapper
+
+    return decorator
+
+
+def with_user_fallback(operation: UserOperationType):
+    """Decorator for user/org endpoints.
+
+    Falls back to external sources if user/org not found locally.
+
+    Args:
+        operation: Type of operation ("profile", "repos")
+
+    Returns:
+        Decorated function
+    """
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Check if fallback is enabled
+            if not cfg.fallback.enabled:
+                return await func(*args, **kwargs)
+
+            # Extract username/org_name from kwargs
+            username = kwargs.get("username") or kwargs.get("org_name")
+
+            if not username:
+                return await func(*args, **kwargs)
+
+            is_404 = False
+            original_error = None
+            original_response = None
+
+            try:
+                # Try local first
+                local_result = await func(*args, **kwargs)
+
+                # Check if result is a 404 Response
+                if (
+                    isinstance(local_result, Response)
+                    and getattr(local_result, "status_code", 200) == 404
+                ):
+                    is_404 = True
+                    original_response = local_result
+                    logger.info(
+                        f"Local 404 response for user {username}, trying fallback sources..."
+                    )
+                else:
+                    return local_result
+
+            except HTTPException as e:
+                # Only fallback on 404 errors
+                if e.status_code != 404:
+                    raise
+
+                is_404 = True
+                original_error = e
+                logger.info(
+                    f"Local 404 exception for user {username}, trying fallback sources..."
+                )
+
+            # If we got here, we have a 404 - try fallback
+            if is_404:
+                match operation:
+                    case "profile":
+                        result = await try_fallback_user_profile(username)
+
+                    case "repos":
+                        result = await try_fallback_user_repos(username)
+
+                    case _:
+                        logger.warning(f"Unknown user fallback operation: {operation}")
+                        result = None
+
+                if result:
+                    logger.success(f"Fallback SUCCESS for user {operation}: {username}")
+                    return result
+                else:
+                    # Not found in any source
+                    logger.debug(f"Fallback MISS for user {operation}: {username}")
+                    if original_error:
+                        raise original_error
+                    else:
+                        return original_response
 
         return wrapper
 

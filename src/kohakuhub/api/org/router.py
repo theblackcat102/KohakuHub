@@ -17,6 +17,7 @@ from kohakuhub.db_operations import (
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.api.fallback import with_user_fallback
 
 # Error messages
 _ERR_ORG_NOT_FOUND = "Organization not found"
@@ -55,6 +56,7 @@ async def create_organization_endpoint(
 
 
 @router.get("/{org_name}")
+@with_user_fallback("profile")
 async def get_organization_info(org_name: str):
     """Get organization details."""
     org = get_organization(org_name)
@@ -64,6 +66,7 @@ async def get_organization_info(org_name: str):
         "name": org.username,
         "description": org.description,
         "created_at": org.created_at,
+        "_source": "local",  # Tag local orgs
     }
 
 

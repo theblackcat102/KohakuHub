@@ -1,8 +1,8 @@
 <!-- src/pages/organizations/[orgname]/index.vue -->
 <template>
   <div class="container-main">
-    <!-- Header with Settings Button -->
-    <div v-if="isAdmin" class="flex items-center justify-end mb-4">
+    <!-- Header with Settings Button (only for local admins) -->
+    <div v-if="isAdmin && !isExternalOrg" class="flex items-center justify-end mb-4">
       <el-button
         type="primary"
         size="small"
@@ -18,9 +18,15 @@
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div class="card">
           <div class="flex items-center gap-3 mb-4">
-            <!-- Avatar -->
+            <!-- Avatar (use external URL if available) -->
             <img
-              v-if="hasAvatar"
+              v-if="externalAvatarUrl && isExternalOrg"
+              :src="externalAvatarUrl"
+              :alt="`${orgname} avatar`"
+              class="w-20 h-20 rounded-full object-cover"
+            />
+            <img
+              v-else-if="hasAvatar && !isExternalOrg"
               :src="`/api/organizations/${orgname}/avatar?t=${Date.now()}`"
               :alt="`${orgname} avatar`"
               class="w-20 h-20 rounded-full object-cover"
@@ -33,6 +39,11 @@
               <p class="text-sm text-gray-600 dark:text-gray-400">
                 Organization
               </p>
+              <!-- External Source Badge -->
+              <el-tag v-if="isExternalOrg" size="small" type="info" class="mt-1">
+                <div class="i-carbon-cloud inline-block mr-1" />
+                {{ externalSourceName }}
+              </el-tag>
             </div>
           </div>
 
@@ -690,6 +701,27 @@ const userRole = ref(null);
 const hasAvatar = ref(true); // Assume avatar exists, will be set to false on error
 
 const MAX_DISPLAYED = 6; // 2 per row × 3 rows
+
+// External org detection
+const isExternalOrg = computed(() => {
+  return orgInfo.value?._source && orgInfo.value._source !== 'local'
+})
+
+const externalSourceName = computed(() => {
+  return orgInfo.value?._source || 'external source'
+})
+
+const externalSourceUrl = computed(() => {
+  return orgInfo.value?._source_url || ''
+})
+
+const hasPartialProfile = computed(() => {
+  return orgInfo.value?._partial === true
+})
+
+const externalAvatarUrl = computed(() => {
+  return orgInfo.value?._avatar_url
+})
 
 const isAdmin = computed(() => {
   return userRole.value && ["admin", "super-admin"].includes(userRole.value);
