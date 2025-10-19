@@ -68,7 +68,7 @@
               </div>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <el-tag v-if="repoInfo?.private" type="warning">
                 <div class="i-carbon-locked inline-block mr-1" />
                 Private
@@ -76,6 +76,10 @@
               <el-tag v-else type="success">
                 <div class="i-carbon-unlocked inline-block mr-1" />
                 Public
+              </el-tag>
+              <el-tag v-if="isExternalRepo" type="info">
+                <div class="i-carbon-cloud inline-block mr-1" />
+                External: {{ repoInfo._source_url }}
               </el-tag>
             </div>
           </div>
@@ -198,8 +202,11 @@
                 activeTab === 'commits'
                   ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+                isExternalRepo ? 'opacity-50 cursor-not-allowed' : '',
               ]"
-              @click="navigateToTab('commits')"
+              @click="!isExternalRepo && navigateToTab('commits')"
+              :disabled="isExternalRepo"
+              :title="isExternalRepo ? `Commits not available for ${externalSourceName} repos` : ''"
             >
               Commits
             </button>
@@ -429,7 +436,23 @@
           </div>
         </div>
 
-        <div v-if="activeTab === 'commits'" class="card">
+        <div v-if="activeTab === 'commits'">
+          <!-- External Repo Warning -->
+          <div v-if="isExternalRepo" class="card text-center py-12">
+            <div class="i-carbon-warning text-6xl text-yellow-500 dark:text-yellow-400 mb-4 inline-block" />
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Commits Not Available
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+              This repository is from {{ externalSourceName }}. Commit history is not available for external repositories.
+            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-500">
+              Visit the source repository to view commits.
+            </p>
+          </div>
+
+          <!-- Local Repo Commits -->
+          <div v-else class="card">
           <h2 class="text-xl font-semibold mb-4">Commit History</h2>
 
           <div
@@ -504,6 +527,7 @@
           >
             <div class="i-carbon-branch text-6xl mb-4 inline-block" />
             <p>No commits yet</p>
+          </div>
           </div>
         </div>
       </main>
@@ -830,6 +854,15 @@ const hasMetadataHeader = computed(() => {
 
 const hasDetailedMetadata = computed(() => {
   return Object.keys(readmeMetadata.value).length > 0;
+});
+
+// Check if repo is from external source
+const isExternalRepo = computed(() => {
+  return repoInfo.value?._source && repoInfo.value._source !== 'local';
+});
+
+const externalSourceName = computed(() => {
+  return repoInfo.value?._source || 'external source';
 });
 
 // Methods

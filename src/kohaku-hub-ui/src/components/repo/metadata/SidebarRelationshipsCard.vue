@@ -65,7 +65,8 @@ const remainingDatasets = computed(() => {
 });
 
 const hasContent = computed(() => {
-  return allBaseModels.value.length > 0 || allDatasets.value.length > 0;
+  // Always show card since we always have author
+  return true;
 });
 </script>
 
