@@ -6,6 +6,7 @@ This script:
 2. Runs docker compose up -d --build
 """
 
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -22,7 +23,10 @@ def run_command(cmd: list[str], cwd: Path | None = None, description: str = ""):
     if cwd:
         print(f"  in: {cwd}")
 
-    result = subprocess.run(cmd, cwd=cwd, shell=True)
+    # Use shell=True on Windows (npm is npm.cmd), False on Unix
+    use_shell = platform.system() == "Windows"
+
+    result = subprocess.run(cmd, cwd=cwd, shell=use_shell)
 
     if result.returncode != 0:
         print(f"\n❌ Command failed with exit code {result.returncode}")
@@ -37,7 +41,7 @@ def main():
     ui_dir = root_dir / "src" / "kohaku-hub-ui"
     admin_dir = root_dir / "src" / "kohaku-hub-admin"
 
-    print("\n🚀 KohakuHub Deployment")
+    print("\nKohakuHub Deployment")
     print("=" * 60)
 
     # Step 1: Build UI
@@ -54,14 +58,14 @@ def main():
     )
 
     print("\n" + "=" * 60)
-    print("✅ KohakuHub deployed successfully!")
+    print("[OK] KohakuHub deployed successfully!")
     print("=" * 60)
-    print("\n📍 Access Points:")
+    print("\nAccess Points:")
     print("   Main UI:    http://localhost:28080")
     print("   Admin UI:   http://localhost:28080/admin")
     print("   API:        http://localhost:28080/api")
     print("   API Docs:   http://localhost:28080/docs")
-    print("\n💡 Tip: View logs with: docker compose logs -f")
+    print("\nTip: View logs with: docker compose logs -f")
 
 
 if __name__ == "__main__":

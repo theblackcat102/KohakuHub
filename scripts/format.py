@@ -7,6 +7,7 @@ This script:
 3. Formats backend Python code
 """
 
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -23,7 +24,10 @@ def run_command(cmd: list[str], cwd: Path | None = None, description: str = ""):
     if cwd:
         print(f"  in: {cwd}")
 
-    result = subprocess.run(cmd, cwd=cwd, shell=True)
+    # Use shell=True on Windows (npm is npm.cmd), False on Unix
+    use_shell = platform.system() == "Windows"
+
+    result = subprocess.run(cmd, cwd=cwd, shell=use_shell)
 
     if result.returncode != 0:
         print(f"\n❌ Command failed with exit code {result.returncode}")
@@ -38,7 +42,7 @@ def main():
     ui_dir = root_dir / "src" / "kohaku-hub-ui"
     admin_dir = root_dir / "src" / "kohaku-hub-admin"
 
-    print("\n🎨 KohakuHub Code Formatter")
+    print("\nKohakuHub Code Formatter")
     print("=" * 60)
 
     # Step 1: Build UI (generates router/component definitions)
@@ -67,7 +71,7 @@ def main():
     run_command(["black", "."], cwd=root_dir, description="Formatting Python code")
 
     print("\n" + "=" * 60)
-    print("✅ All code formatted successfully!")
+    print("[OK] All code formatted successfully!")
     print("=" * 60)
 
 
