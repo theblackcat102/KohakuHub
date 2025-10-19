@@ -29,6 +29,7 @@ from kohakuhub.auth.permissions import (
 )
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.utils.s3 import generate_download_presigned_url, parse_s3_uri
+from kohakuhub.api.fallback import with_repo_fallback
 from kohakuhub.api.quota.util import check_quota
 from kohakuhub.api.utils.downloads import (
     get_or_create_tracking_cookie,
@@ -269,6 +270,7 @@ async def preupload(
 
 
 @router.get("/{repo_type}s/{namespace}/{name}/revision/{revision}")
+@with_repo_fallback("revision")
 async def get_revision(
     repo_type: RepoType,
     namespace: str,
@@ -452,6 +454,7 @@ async def _get_file_metadata(
 
 
 @router.head("/{repo_type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+@with_repo_fallback("resolve")
 async def resolve_file_head(
     repo_type: str,
     namespace: str,
@@ -476,6 +479,7 @@ async def resolve_file_head(
 
 
 @router.get("/{repo_type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+@with_repo_fallback("resolve")
 async def resolve_file_get(
     repo_type: str,
     namespace: str,

@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from kohakuhub.api.admin.routers import (
     commits_router,
     database_router,
+    fallback_router,
     invitations_router,
     quota_router,
     repositories_router,
@@ -38,5 +39,6 @@ router.include_router(commits_router, tags=["admin-commits"])
 router.include_router(invitations_router, tags=["admin-invitations"])
 router.include_router(search_router, tags=["admin-search"])
 router.include_router(database_router, tags=["admin-database"])
+router.include_router(fallback_router, tags=["admin-fallback"])
 
 __all__ = ["router"]

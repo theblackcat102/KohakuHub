@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import Literal, Optional
-import asyncio
 
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -22,13 +21,14 @@ from kohakuhub.auth.permissions import (
     check_repo_write_permission,
 )
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.fallback import with_list_aggregation, with_repo_fallback
+from kohakuhub.api.quota.util import get_repo_storage_info
 from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     format_hf_datetime,
     hf_error_response,
     hf_repo_not_found,
 )
-from kohakuhub.api.quota.util import get_repo_storage_info
 
 logger = get_logger("REPO")
 router = APIRouter()
@@ -39,6 +39,7 @@ RepoType = Literal["model", "dataset", "space"]
 @router.get("/models/{namespace}/{repo_name}")
 @router.get("/datasets/{namespace}/{repo_name}")
 @router.get("/spaces/{namespace}/{repo_name}")
+@with_repo_fallback("info")
 async def get_repo_info(
     namespace: str,
     repo_name: str,
@@ -69,18 +70,19 @@ async def get_repo_info(
 
     # Determine repo type from path
     path = request.url.path
-    if "/models/" in path:
-        repo_type = "model"
-    elif "/datasets/" in path:
-        repo_type = "dataset"
-    elif "/spaces/" in path:
-        repo_type = "space"
-    else:
-        return hf_error_response(
-            404,
-            HFErrorCode.INVALID_REPO_TYPE,
-            "Invalid repository type",
-        )
+    match path:
+        case _ if "/models/" in path:
+            repo_type = "model"
+        case _ if "/datasets/" in path:
+            repo_type = "dataset"
+        case _ if "/spaces/" in path:
+            repo_type = "space"
+        case _:
+            return hf_error_response(
+                404,
+                HFErrorCode.INVALID_REPO_TYPE,
+                "Invalid repository type",
+            )
 
     # Check if repository exists in database
     repo_row = get_repository(repo_type, namespace, repo_name)
@@ -291,42 +293,25 @@ def _filter_repos_by_privacy(q, user: Optional[User], author: Optional[str] = No
     return q
 
 
-@router.get("/models")
-@router.get("/datasets")
-@router.get("/spaces")
-async def list_repos(
+async def _list_repos_internal(
+    rt: str,
     author: Optional[str] = None,
-    limit: int = Query(50, ge=1, le=1000),
-    sort: str = Query("recent", regex="^(recent|likes|downloads|trending)$"),
-    request: Request = None,
-    user: User | None = Depends(get_optional_user),
-):
-    """List repositories of a specific type.
+    limit: int = 50,
+    sort: str = "recent",
+    user: User | None = None,
+) -> list[dict]:
+    """Internal function to list repositories (called by decorated versions).
 
     Args:
+        rt: Repository type ("model", "dataset", or "space")
         author: Filter by author/namespace
         limit: Maximum number of results
-        sort: Sort order (recent, likes, downloads, trending) - default: recent
-        request: FastAPI request object
+        sort: Sort order
         user: Current authenticated user (optional)
 
     Returns:
-        List of repositories (respects privacy settings)
+        List of repositories
     """
-    path = request.url.path
-    if "models" in path:
-        rt = "model"
-    elif "datasets" in path:
-        rt = "dataset"
-    elif "spaces" in path:
-        rt = "space"
-    else:
-        return hf_error_response(
-            404,
-            HFErrorCode.INVALID_REPO_TYPE,
-            "Unknown repository type",
-        )
-
     # Query database
     q = Repository.select().where(Repository.repo_type == rt)
 
@@ -400,6 +385,61 @@ async def list_repos(
 
     # Sorting already applied by database query
     return result
+
+
+# Create decorated versions for each repo type
+@with_list_aggregation("model")
+async def _list_models_with_aggregation(author, limit, sort, user):
+    return await _list_repos_internal("model", author, limit, sort, user)
+
+
+@with_list_aggregation("dataset")
+async def _list_datasets_with_aggregation(author, limit, sort, user):
+    return await _list_repos_internal("dataset", author, limit, sort, user)
+
+
+@with_list_aggregation("space")
+async def _list_spaces_with_aggregation(author, limit, sort, user):
+    return await _list_repos_internal("space", author, limit, sort, user)
+
+
+@router.get("/models")
+@router.get("/datasets")
+@router.get("/spaces")
+async def list_repos(
+    author: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=1000),
+    sort: str = Query("recent", regex="^(recent|likes|downloads|trending)$"),
+    request: Request = None,
+    user: User | None = Depends(get_optional_user),
+):
+    """List repositories of a specific type.
+
+    Args:
+        author: Filter by author/namespace
+        limit: Maximum number of results
+        sort: Sort order (recent, likes, downloads, trending) - default: recent
+        request: FastAPI request object
+        user: Current authenticated user (optional)
+
+    Returns:
+        List of repositories (respects privacy settings, aggregated from local + external sources)
+    """
+    path = request.url.path
+
+    match path:
+        case _ if "models" in path:
+            return await _list_models_with_aggregation(author, limit, sort, user)
+        case _ if "datasets" in path:
+            return await _list_datasets_with_aggregation(author, limit, sort, user)
+        case _ if "spaces" in path:
+            return await _list_spaces_with_aggregation(author, limit, sort, user)
+        case _:
+            return hf_error_response(
+                404,
+                HFErrorCode.INVALID_REPO_TYPE,
+                "Unknown repository type",
+            )
 
 
 @router.get("/users/{username}/repos")

@@ -1,8 +1,8 @@
 """Repository tree listing and path information endpoints - Refactored version."""
 
+import asyncio
 from datetime import datetime
 from typing import Literal
-import asyncio
 
 from fastapi import APIRouter, Depends, Form
 
@@ -13,6 +13,7 @@ from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
 from kohakuhub.auth.permissions import check_repo_read_permission
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
+from kohakuhub.api.fallback import with_repo_fallback
 from kohakuhub.api.repo.utils.hf import (
     hf_repo_not_found,
     hf_revision_not_found,
@@ -219,6 +220,7 @@ async def convert_directory_object(
 
 
 @router.get("/{repo_type}s/{namespace}/{repo_name}/tree/{revision}{path:path}")
+@with_repo_fallback("tree")
 async def list_repo_tree(
     repo_type: RepoType,
     namespace: str,
@@ -305,6 +307,7 @@ async def list_repo_tree(
 
 
 @router.post("/{repo_type}s/{namespace}/{repo_name}/paths-info/{revision}")
+@with_repo_fallback("paths_info")
 async def get_paths_info(
     repo_type: str,
     namespace: str,

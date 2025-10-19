@@ -24,6 +24,7 @@ from kohakuhub.db_operations import get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.api.commit import history as commit_history
 from kohakuhub.api.commit import router as commits
+from kohakuhub.api.fallback import with_repo_fallback
 from kohakuhub.api.files import resolve_file_get, resolve_file_head
 from kohakuhub.api.org import router as org
 from kohakuhub.api.quota import router as quota
@@ -99,6 +100,7 @@ app.include_router(validation.router, tags=["validation"])
 
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.head("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+@with_repo_fallback("resolve")
 async def public_resolve_head(
     namespace: str,
     name: str,
@@ -127,6 +129,7 @@ async def public_resolve_head(
 
 @app.get("/{namespace}/{name}/resolve/{revision}/{path:path}")
 @app.get("/{type}s/{namespace}/{name}/resolve/{revision}/{path:path}")
+@with_repo_fallback("resolve")
 async def public_resolve_get(
     namespace: str,
     name: str,

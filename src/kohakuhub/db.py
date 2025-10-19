@@ -421,6 +421,31 @@ class DailyRepoStats(BaseModel):
         indexes = ((("repository", "date"), True),)  # UNIQUE per repo per day
 
 
+class FallbackSource(BaseModel):
+    """External fallback sources for repository resolution.
+
+    Allows KohakuHub to fall back to HuggingFace or other KohakuHub instances
+    when repositories or files are not found locally.
+    """
+
+    id = AutoField()
+    namespace = CharField(default="", index=True)  # "" for global, or user/org name
+    url = CharField()  # Base URL: https://huggingface.co
+    token = CharField(null=True)  # Admin-configured token (encrypted)
+    priority = IntegerField(default=100, index=True)  # Lower = higher priority
+    name = CharField()  # Display name: "HuggingFace"
+    source_type = CharField()  # "huggingface" or "kohakuhub"
+    enabled = BooleanField(default=True, index=True)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+    updated_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = (
+            (("namespace", "priority"), False),  # For ordered lookups
+            (("enabled", "priority"), False),  # For active sources
+        )
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
@@ -440,6 +465,7 @@ def init_db():
             RepositoryLike,
             DownloadSession,
             DailyRepoStats,
+            FallbackSource,
         ],
         safe=True,
     )

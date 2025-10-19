@@ -62,6 +62,18 @@ class QuotaConfig(BaseModel):
     default_org_public_quota_bytes: int | None = None  # None = unlimited
 
 
+class FallbackConfig(BaseModel):
+    """Fallback source configuration."""
+
+    enabled: bool = True  # Enable fallback system
+    cache_ttl_seconds: int = 300  # Cache TTL for repo→source mappings (5 minutes)
+    timeout_seconds: int = 10  # HTTP request timeout for external sources
+    max_concurrent_requests: int = 5  # Max concurrent requests to external sources
+    # Global fallback sources (JSON list)
+    # Format: [{"url": "https://huggingface.co", "token": "", "priority": 1, "name": "HF", "source_type": "huggingface"}]
+    sources: list[dict] = []
+
+
 class AppConfig(BaseModel):
     base_url: str = "http://localhost:48888"
     api_base: str = "/api"
@@ -133,6 +145,7 @@ class Config(BaseModel):
     auth: AuthConfig = AuthConfig()
     admin: AdminConfig = AdminConfig()
     quota: QuotaConfig = QuotaConfig()
+    fallback: FallbackConfig = FallbackConfig()
     app: AppConfig
 
     def validate_production_safety(self) -> list[str]:
@@ -272,6 +285,35 @@ def load_config(path: str = None) -> Config:
             ),
         )
 
+        def _parse_fallback_sources(value: str | None) -> list[dict]:
+            """Parse fallback sources from JSON environment variable."""
+            import json
+
+            if not value:
+                return []
+            try:
+                sources = json.loads(value)
+                if not isinstance(sources, list):
+                    return []
+                return sources
+            except json.JSONDecodeError:
+                return []
+
+        fallback_config = FallbackConfig(
+            enabled=os.environ.get("KOHAKU_HUB_FALLBACK_ENABLED", "true").lower()
+            == "true",
+            cache_ttl_seconds=int(
+                os.environ.get("KOHAKU_HUB_FALLBACK_CACHE_TTL", "300")
+            ),
+            timeout_seconds=int(os.environ.get("KOHAKU_HUB_FALLBACK_TIMEOUT", "10")),
+            max_concurrent_requests=int(
+                os.environ.get("KOHAKU_HUB_FALLBACK_MAX_CONCURRENT", "5")
+            ),
+            sources=_parse_fallback_sources(
+                os.environ.get("KOHAKU_HUB_FALLBACK_SOURCES")
+            ),
+        )
+
         app_config = AppConfig(
             base_url=os.environ.get("KOHAKU_HUB_BASE_URL", "http://localhost:48888"),
             api_base=os.environ.get("KOHAKU_HUB_API_BASE", "/api"),
@@ -299,6 +341,7 @@ def load_config(path: str = None) -> Config:
             auth=auth_config,
             admin=admin_config,
             quota=quota_config,
+            fallback=fallback_config,
             app=app_config,
         )
     else:
