@@ -9,6 +9,7 @@ import {
   createUser,
   deleteUser,
   setEmailVerification,
+  updateUserQuota,
 } from "@/utils/api";
 import { formatBytes } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -321,20 +322,11 @@ async function saveQuota() {
 
   try {
     loading.value = true;
-    // Update quota via admin API
-    await fetch(
-      `http://localhost:48888/admin/api/users/${quotaForm.value.username}/quota`,
-      {
-        method: "PUT",
-        headers: {
-          "X-Admin-Token": adminStore.token,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          private_quota_bytes: quotaForm.value.private_quota_bytes,
-          public_quota_bytes: quotaForm.value.public_quota_bytes,
-        }),
-      },
+    await updateUserQuota(
+      adminStore.token,
+      quotaForm.value.username,
+      quotaForm.value.private_quota_bytes,
+      quotaForm.value.public_quota_bytes,
     );
 
     ElMessage.success("Quota updated successfully");
@@ -342,7 +334,9 @@ async function saveQuota() {
     userDialogVisible.value = false;
     await loadUsers();
   } catch (error) {
-    ElMessage.error("Failed to update quota");
+    ElMessage.error(
+      error.response?.data?.detail?.error || "Failed to update quota",
+    );
   } finally {
     loading.value = false;
   }

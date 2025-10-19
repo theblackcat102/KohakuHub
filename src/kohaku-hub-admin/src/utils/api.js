@@ -99,6 +99,28 @@ export async function setEmailVerification(token, username, verified) {
   return response.data;
 }
 
+/**
+ * Update user/org quota
+ * @param {string} token - Admin token
+ * @param {string} username - Username or org name
+ * @param {number|null} privateQuotaBytes - Private quota in bytes (null = unlimited)
+ * @param {number|null} publicQuotaBytes - Public quota in bytes (null = unlimited)
+ * @returns {Promise<Object>} Updated quota info
+ */
+export async function updateUserQuota(
+  token,
+  username,
+  privateQuotaBytes,
+  publicQuotaBytes,
+) {
+  const client = createAdminClient(token);
+  const response = await client.put(`/users/${username}/quota`, {
+    private_quota_bytes: privateQuotaBytes,
+    public_quota_bytes: publicQuotaBytes,
+  });
+  return response.data;
+}
+
 // ===== Quota Management =====
 
 /**
