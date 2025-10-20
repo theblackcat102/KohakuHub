@@ -180,35 +180,7 @@ async def delete_repo(
     # 2. Check if user has permission to delete this repository
     check_repo_delete_permission(repo_row, user)
 
-    # 2. Delete LakeFS repository
-    client = get_lakefs_client()
-    try:
-        # Note: Deleting a LakeFS repo is generally fast as it only deletes metadata
-        await client.delete_repository(repository=lakefs_repo)
-        logger.success(f"Successfully deleted LakeFS repository: {lakefs_repo}")
-    except Exception as e:
-        # LakeFS returns 404 if repo doesn't exist, which is fine
-        if not is_lakefs_not_found_error(e):
-            # If LakeFS deletion fails for other reasons, fail the whole operation
-            logger.exception(f"LakeFS repository deletion failed for {lakefs_repo}", e)
-            return hf_server_error(f"LakeFS repository deletion failed: {str(e)}")
-        logger.info(f"LakeFS repository {lakefs_repo} not found/already deleted (OK)")
-
-    # 3. Delete related metadata from database (CASCADE will handle related records)
-    try:
-        with db.atomic():
-            # ForeignKey CASCADE will automatically delete:
-            # - All files (File.repository)
-            # - All commits (Commit.repository)
-            # - All staging uploads (StagingUpload.repository)
-            # - All LFS history (LFSObjectHistory.repository)
-            repo_row.delete_instance()
-        logger.success(f"Successfully deleted database records for: {full_id}")
-    except Exception as e:
-        logger.exception(f"Database deletion failed for {full_id}", e)
-        return hf_server_error(f"Database deletion failed for {full_id}: {str(e)}")
-
-    # 4. Clean up S3 storage (repository folder and unreferenced LFS objects)
+    # 3. Clean up S3 storage FIRST (before deleting DB, so we can access repo FK)
     try:
         cleanup_stats = await cleanup_repository_storage(
             repo_type=repo_type,
@@ -223,10 +195,38 @@ async def delete_repo(
             f"{cleanup_stats['lfs_history_deleted']} history records deleted"
         )
     except Exception as e:
-        # S3 cleanup failure is non-fatal - repository is already deleted from LakeFS/DB
+        # S3 cleanup failure is non-fatal - we'll continue with deletion
         logger.warning(f"S3 cleanup failed for {full_id} (non-fatal): {e}")
 
-    # 5. Return success response (200 OK with a simple message)
+    # 4. Delete LakeFS repository
+    client = get_lakefs_client()
+    try:
+        # Note: Deleting a LakeFS repo is generally fast as it only deletes metadata
+        await client.delete_repository(repository=lakefs_repo)
+        logger.success(f"Successfully deleted LakeFS repository: {lakefs_repo}")
+    except Exception as e:
+        # LakeFS returns 404 if repo doesn't exist, which is fine
+        if not is_lakefs_not_found_error(e):
+            # If LakeFS deletion fails for other reasons, fail the whole operation
+            logger.exception(f"LakeFS repository deletion failed for {lakefs_repo}", e)
+            return hf_server_error(f"LakeFS repository deletion failed: {str(e)}")
+        logger.info(f"LakeFS repository {lakefs_repo} not found/already deleted (OK)")
+
+    # 5. Delete related metadata from database (CASCADE will handle related records)
+    try:
+        with db.atomic():
+            # ForeignKey CASCADE will automatically delete:
+            # - All files (File.repository)
+            # - All commits (Commit.repository)
+            # - All staging uploads (StagingUpload.repository)
+            # - All LFS history (LFSObjectHistory.repository)
+            repo_row.delete_instance()
+        logger.success(f"Successfully deleted database records for: {full_id}")
+    except Exception as e:
+        logger.exception(f"Database deletion failed for {full_id}", e)
+        return hf_server_error(f"Database deletion failed for {full_id}: {str(e)}")
+
+    # 6. Return success response (200 OK with a simple message)
     # HuggingFace Hub delete_repo returns a simple 200 OK.
     return {"message": f"Repository '{full_id}' of type '{repo_type}' deleted."}
 
