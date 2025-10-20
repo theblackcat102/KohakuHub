@@ -9,6 +9,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 
 from kohakuhub.db import SSHKey, User
+from kohakuhub.utils.datetime_utils import safe_strftime
 from kohakuhub.db_operations import (
     create_ssh_key,
     delete_ssh_key,
@@ -161,12 +162,8 @@ async def list_ssh_keys(user: User = Depends(get_current_user)):
             title=key.title,
             key_type=key.key_type,
             fingerprint=key.fingerprint,
-            created_at=key.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-            last_used=(
-                key.last_used.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                if key.last_used
-                else None
-            ),
+            created_at=safe_strftime(key.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
+            last_used=safe_strftime(key.last_used, "%Y-%m-%dT%H:%M:%S.%fZ"),
         )
         for key in keys
     ]
@@ -216,7 +213,7 @@ async def add_ssh_key(
             title=new_key.title,
             key_type=new_key.key_type,
             fingerprint=new_key.fingerprint,
-            created_at=new_key.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            created_at=safe_strftime(new_key.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
             last_used=None,
         )
 
@@ -285,8 +282,6 @@ async def get_ssh_key(key_id: int, user: User = Depends(get_current_user)):
         title=key.title,
         key_type=key.key_type,
         fingerprint=key.fingerprint,
-        created_at=key.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-        last_used=(
-            key.last_used.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if key.last_used else None
-        ),
+        created_at=safe_strftime(key.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
+        last_used=safe_strftime(key.last_used, "%Y-%m-%dT%H:%M:%S.%fZ"),
     )

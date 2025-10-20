@@ -225,8 +225,10 @@ def hf_server_error(message: str, error_code: Optional[str] = None) -> Response:
 def format_hf_datetime(dt) -> Optional[str]:
     """Format datetime for HuggingFace API responses.
 
+    Handles both datetime objects and string timestamps from database.
+
     Args:
-        dt: datetime object or None
+        dt: datetime object, string timestamp, or None
 
     Returns:
         ISO format datetime string with milliseconds or None
@@ -240,8 +242,11 @@ def format_hf_datetime(dt) -> Optional[str]:
     if dt is None:
         return None
 
+    # Import here to avoid circular dependency
+    from kohakuhub.utils.datetime_utils import safe_strftime
+
     # HuggingFace format: "2025-01-15T10:30:45.123456Z"
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return safe_strftime(dt, "%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def is_lakefs_not_found_error(error: Exception) -> bool:

@@ -41,9 +41,9 @@ from kohakuhub.auth.utils import (
     verify_password,
 )
 from kohakuhub.utils.names import normalize_name
+from kohakuhub.utils.datetime_utils import safe_isoformat
 
 logger = get_logger("AUTH")
-
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -342,7 +342,7 @@ def get_me(user: User = Depends(get_current_user)):
         "username": user.username,
         "email": user.email,
         "email_verified": user.email_verified,
-        "created_at": user.created_at.isoformat(),
+        "created_at": safe_isoformat(user.created_at),
     }
 
 
@@ -357,8 +357,8 @@ async def list_tokens(user: User = Depends(get_current_user)):
             {
                 "id": t.id,
                 "name": t.name,
-                "last_used": t.last_used.isoformat() if t.last_used else None,
-                "created_at": t.created_at.isoformat(),
+                "last_used": safe_isoformat(t.last_used) if t.last_used else None,
+                "created_at": safe_isoformat(t.created_at),
             }
             for t in tokens
         ]

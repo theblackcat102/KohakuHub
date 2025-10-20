@@ -22,6 +22,7 @@ from kohakuhub.db_operations import (
     should_use_lfs,
 )
 from kohakuhub.logger import get_logger
+from kohakuhub.utils.datetime_utils import safe_strftime
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
 from kohakuhub.auth.permissions import (
     check_repo_read_permission,
@@ -335,7 +336,7 @@ async def get_revision(
         )
 
     # Format created_at
-    created_at = repo_row.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    created_at = safe_strftime(repo_row.created_at, "%Y-%m-%dT%H:%M:%S.%fZ")
 
     return {
         "id": repo_id,

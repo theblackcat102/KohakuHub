@@ -11,6 +11,14 @@ from kohakuhub.logger import get_logger
 
 logger = get_logger("S3")
 
+# Multipart upload configuration
+MULTIPART_THRESHOLD = (
+    128 * 1024 * 1024
+)  # 128 MB - use multipart for files larger than this
+MULTIPART_CHUNK_SIZE = (
+    32 * 1024 * 1024
+)  # 32 MB per part (minimum is 5MB, except last part)
+
 
 def get_s3_client():
     """Create configured S3 client with configurable signature version.

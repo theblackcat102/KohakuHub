@@ -27,6 +27,7 @@ from kohakuhub.api.fallback import (
     with_user_fallback,
 )
 from kohakuhub.api.quota.util import get_repo_storage_info
+from kohakuhub.utils.datetime_utils import safe_strftime
 from kohakuhub.api.repo.utils.hf import (
     HFErrorCode,
     format_hf_datetime,
@@ -378,11 +379,7 @@ async def _list_repos_internal(
                 "private": r.private,
                 "sha": sha,
                 "lastModified": last_modified,
-                "createdAt": (
-                    r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                    if r.created_at
-                    else None
-                ),
+                "createdAt": safe_strftime(r.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
                 "downloads": r.downloads,
                 "likes": r.likes_count,
                 "gated": False,
@@ -552,11 +549,7 @@ async def list_user_repos(
                     "private": r.private,
                     "sha": sha,
                     "lastModified": last_modified,
-                    "createdAt": (
-                        r.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                        if r.created_at
-                        else None
-                    ),
+                    "createdAt": safe_strftime(r.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
                     "downloads": r.downloads,
                     "likes": r.likes_count,
                     "gated": False,

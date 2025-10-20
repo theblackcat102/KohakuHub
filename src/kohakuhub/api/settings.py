@@ -25,6 +25,7 @@ from kohakuhub.api.quota.util import calculate_repository_storage, check_quota
 from kohakuhub.api.repo.utils.hf import hf_repo_not_found
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.permissions import check_repo_delete_permission
+from kohakuhub.utils.datetime_utils import safe_isoformat
 
 logger = get_logger("SETTINGS")
 
@@ -178,7 +179,7 @@ async def get_user_profile(username: str, request: Request, fallback: bool = Tru
         "bio": user.bio,
         "website": user.website,
         "social_media": social_media,
-        "created_at": user.created_at.isoformat(),
+        "created_at": safe_isoformat(user.created_at),
         "_source": "local",  # Tag local users
     }
 

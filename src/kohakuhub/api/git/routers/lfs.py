@@ -23,7 +23,11 @@ from kohakuhub.auth.permissions import (
     check_repo_write_permission,
 )
 from kohakuhub.utils.s3 import (
+    MULTIPART_CHUNK_SIZE,
+    MULTIPART_THRESHOLD,
+    complete_multipart_upload,
     generate_download_presigned_url,
+    generate_multipart_upload_urls,
     generate_upload_presigned_url,
     get_object_metadata,
     object_exists,
@@ -131,20 +135,73 @@ async def process_upload_object(
             # No actions = already exists
         )
 
-    # Check if multipart upload required (>5GB)
-    multipart_threshold = 5 * 1024 * 1024 * 1024  # 5GB
+    # Check if multipart upload required (>100MB)
+    # HuggingFace clients detect multipart by presence of 'chunk_size' in header
+    use_multipart = size > MULTIPART_THRESHOLD
 
-    if size > multipart_threshold:
-        return LFSObjectResponse(
-            oid=oid,
-            size=size,
-            error=LFSError(
-                code=501,  # Not Implemented
-                message="Multipart upload not yet implemented for files >5GB",
-            ),
-        )
+    if use_multipart:
+        # Multipart upload for large files
+        try:
+            # Calculate number of parts needed
+            part_count = (size + MULTIPART_CHUNK_SIZE - 1) // MULTIPART_CHUNK_SIZE
 
-    # Single PUT upload
+            # Generate multipart upload URLs
+            multipart_info = await generate_multipart_upload_urls(
+                bucket=cfg.s3.bucket,
+                key=lfs_key,
+                part_count=part_count,
+                expires_in=3600,  # 1 hour
+            )
+
+            logger.info(
+                f"Generated multipart upload for {oid[:8]}: "
+                f"{part_count} parts, chunk_size={MULTIPART_CHUNK_SIZE}"
+            )
+
+            # Build response compatible with HuggingFace clients
+            # The 'chunk_size' in header tells client to use multipart upload
+            # Part URLs must be in header with numeric string keys ("1", "2", "3", etc.)
+            header = {
+                "chunk_size": str(MULTIPART_CHUNK_SIZE),  # Signal multipart upload
+                "upload_id": multipart_info["upload_id"],
+            }
+
+            # Add part URLs with numeric keys (HuggingFace client expects this format)
+            for part in multipart_info["part_urls"]:
+                header[str(part["part_number"])] = part["url"]
+
+            return LFSObjectResponse(
+                oid=oid,
+                size=size,
+                authenticated=True,
+                actions={
+                    "upload": {
+                        "href": f"{cfg.app.base_url}/api/{repo_id}.git/info/lfs/complete/{multipart_info['upload_id']}",
+                        "expires_at": multipart_info["expires_at"],
+                        "header": header,
+                    },
+                    "verify": {
+                        "href": f"{cfg.app.base_url}/api/{repo_id}.git/info/lfs/verify",
+                        "expires_at": multipart_info["expires_at"],
+                    },
+                },
+            )
+        except Exception as e:
+            logger.exception(
+                f"Failed to generate multipart upload URLs for LFS object {oid[:8]} "
+                f"(size: {size}, parts: {part_count})",
+                e,
+            )
+            return LFSObjectResponse(
+                oid=oid,
+                size=size,
+                error=LFSError(
+                    code=500,
+                    message=f"Failed to generate multipart upload URLs: {str(e)}",
+                ),
+            )
+
+    # Single PUT upload for smaller files
     try:
         # Convert SHA256 hex to base64 for S3 checksum verification
         checksum_sha256 = base64.b64encode(bytes.fromhex(oid)).decode("utf-8")
@@ -366,11 +423,137 @@ async def lfs_batch(
     )
 
 
+@router.post("/api/{namespace}/{name}.git/info/lfs/complete/{upload_id}")
+@router.post("/api/{namespace}/{name}.git/info/lfs/complete")
+async def lfs_complete_multipart(
+    namespace: str, name: str, request: Request, upload_id: str = None
+):
+    """Complete multipart LFS upload.
+
+    Called by client after uploading all parts to finalize S3 multipart upload.
+
+    Args:
+        namespace: Repository namespace
+        name: Repository name
+        request: FastAPI request with completion data
+        upload_id: S3 upload ID (from URL or body)
+
+    Returns:
+        Completion result
+
+    Request body (HuggingFace format):
+        {
+            "oid": "sha256_hash",
+            "parts": [{"partNumber": 1, "etag": "etag1"}, ...]
+        }
+
+    Request body (Alternative format):
+        {
+            "oid": "sha256_hash",
+            "size": file_size,
+            "upload_id": "s3_upload_id",
+            "parts": [{"PartNumber": 1, "ETag": "etag1"}, ...]
+        }
+    """
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise HTTPException(400, detail={"error": f"Invalid completion request: {e}"})
+
+    oid = body.get("oid")
+    size = body.get("size")
+
+    # Get upload_id from URL path or body
+    if not upload_id:
+        upload_id = body.get("upload_id")
+
+    parts = body.get("parts", [])
+
+    if not oid or not upload_id or not parts:
+        raise HTTPException(
+            400,
+            detail={
+                "error": "Missing required fields: oid, upload_id, parts",
+                "received": {
+                    "oid": bool(oid),
+                    "upload_id": bool(upload_id),
+                    "parts": bool(parts),
+                },
+            },
+        )
+
+    # Normalize parts format (HuggingFace uses partNumber/etag, S3 uses PartNumber/ETag)
+    normalized_parts = []
+    for part in parts:
+        # Support both formats
+        part_number = part.get("PartNumber") or part.get("partNumber")
+        etag = part.get("ETag") or part.get("etag")
+
+        if not part_number or not etag:
+            raise HTTPException(
+                400,
+                detail={
+                    "error": f"Invalid part format: {part}",
+                    "expected": "PartNumber/partNumber and ETag/etag",
+                },
+            )
+
+        normalized_parts.append({"PartNumber": int(part_number), "ETag": etag})
+
+    lfs_key = get_lfs_key(oid)
+
+    try:
+        # Complete the multipart upload on S3
+        logger.info(
+            f"Completing multipart upload for {oid[:8]}: "
+            f"{len(parts)} parts, upload_id={upload_id}"
+        )
+
+        result = await complete_multipart_upload(
+            bucket=cfg.s3.bucket,
+            key=lfs_key,
+            upload_id=upload_id,
+            parts=normalized_parts,
+        )
+
+        # Verify the completed object
+        metadata = await get_object_metadata(cfg.s3.bucket, lfs_key)
+
+        if size and metadata["size"] != size:
+            logger.error(
+                f"Size mismatch after multipart completion: "
+                f"expected {size}, got {metadata['size']}"
+            )
+            raise HTTPException(400, detail={"error": "Size mismatch after upload"})
+
+        logger.success(
+            f"Multipart upload completed for {oid[:8]}: "
+            f"size={metadata['size']}, etag={metadata['etag']}"
+        )
+
+        return {
+            "message": "Multipart upload completed successfully",
+            "size": metadata["size"],
+            "etag": metadata["etag"],
+        }
+
+    except Exception as e:
+        logger.exception(
+            f"Failed to complete multipart upload for {oid[:8]} "
+            f"(upload_id={upload_id})",
+            e,
+        )
+        raise HTTPException(
+            500, detail={"error": f"Failed to complete multipart upload: {str(e)}"}
+        )
+
+
 @router.post("/api/{namespace}/{name}.git/info/lfs/verify")
 async def lfs_verify(namespace: str, name: str, request: Request):
     """Verify LFS upload completion.
 
     Called by client after successful upload to confirm the file.
+    Supports both single-part and multipart uploads.
 
     Args:
         namespace: Repository namespace
@@ -379,6 +562,20 @@ async def lfs_verify(namespace: str, name: str, request: Request):
 
     Returns:
         Verification result
+
+    Request body (single-part):
+        {
+            "oid": "sha256_hash",
+            "size": file_size
+        }
+
+    Request body (multipart):
+        {
+            "oid": "sha256_hash",
+            "size": file_size,
+            "upload_id": "s3_upload_id",
+            "parts": [{"PartNumber": 1, "ETag": "etag1"}, ...]
+        }
     """
     repo_id = f"{namespace}/{name}"
     try:
@@ -388,12 +585,40 @@ async def lfs_verify(namespace: str, name: str, request: Request):
 
     oid = body.get("oid")
     size = body.get("size")
+    upload_id = body.get("upload_id")
+    parts = body.get("parts")
 
     if not oid:
         raise HTTPException(400, detail={"error": "Missing OID"})
 
     lfs_key = get_lfs_key(oid)
 
+    # If this is a multipart upload, complete it first
+    if upload_id and parts:
+        try:
+            logger.info(
+                f"Completing multipart upload during verify for {oid[:8]}: "
+                f"{len(parts)} parts, upload_id={upload_id}"
+            )
+
+            await complete_multipart_upload(
+                bucket=cfg.s3.bucket, key=lfs_key, upload_id=upload_id, parts=parts
+            )
+
+            logger.success(f"Multipart upload completed for {oid[:8]}")
+
+        except Exception as e:
+            logger.exception(
+                f"Failed to complete multipart upload for {oid[:8]} "
+                f"(upload_id={upload_id})",
+                e,
+            )
+            raise HTTPException(
+                500,
+                detail={"error": f"Failed to complete multipart upload: {str(e)}"},
+            )
+
+    # Verify object exists in S3
     if not await object_exists(cfg.s3.bucket, lfs_key):
         raise HTTPException(404, detail={"error": "Object not found in storage"})
 
@@ -402,9 +627,14 @@ async def lfs_verify(namespace: str, name: str, request: Request):
         try:
             metadata = await get_object_metadata(cfg.s3.bucket, lfs_key)
             if metadata["size"] != size:
+                logger.error(
+                    f"Size mismatch for {oid[:8]}: expected {size}, got {metadata['size']}"
+                )
                 raise HTTPException(400, detail={"error": "Size mismatch"})
-        except Exception:
+        except HTTPException:
+            raise
+        except Exception as e:
             # If metadata retrieval fails, still accept the verification
-            pass
+            logger.warning(f"Failed to verify size for {oid[:8]}: {e}")
 
     return {"message": "Object verified successfully"}
