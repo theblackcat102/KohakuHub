@@ -45,6 +45,14 @@ def main():
     print("\nKohakuHub Code Formatter")
     print("=" * 60)
 
+    # Step 3: Format UI
+    run_command(["npm", "run", "format"], cwd=ui_dir, description="Formatting UI code")
+
+    # Step 4: Format Admin
+    run_command(
+        ["npm", "run", "format"], cwd=admin_dir, description="Formatting Admin code"
+    )
+
     # Step 1: Build UI (generates router/component definitions)
     run_command(
         ["npm", "run", "build"],
@@ -57,14 +65,6 @@ def main():
         ["npm", "run", "build"],
         cwd=admin_dir,
         description="Building Admin (generating router/component info)",
-    )
-
-    # Step 3: Format UI
-    run_command(["npm", "run", "format"], cwd=ui_dir, description="Formatting UI code")
-
-    # Step 4: Format Admin
-    run_command(
-        ["npm", "run", "format"], cwd=admin_dir, description="Formatting Admin code"
     )
 
     # Step 5: Format Python
