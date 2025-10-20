@@ -311,12 +311,17 @@ def with_list_aggregation(repo_type: str):
                         all_results.append(item)
                         seen_ids.add(item_id)
 
-            # Apply limit after merging
-            limit = kwargs.get("limit", 50)
-            final_results = all_results[:limit]
+            # Get limit from kwargs (if None or very large, return all)
+            limit = kwargs.get("limit")
+            if limit is None or limit >= len(all_results):
+                # No effective limit - return all results
+                final_results = all_results
+            else:
+                # Apply limit after merging
+                final_results = all_results[:limit]
 
             logger.info(
-                f"Aggregated {len(final_results)} {repo_type}s (local: {len(local_results)}, total: {len(all_results)})"
+                f"Aggregated {len(final_results)} {repo_type}s (local: {len(local_results)}, total merged: {len(all_results)})"
             )
 
             return final_results

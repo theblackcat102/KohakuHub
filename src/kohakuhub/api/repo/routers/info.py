@@ -415,7 +415,9 @@ async def _list_spaces_with_aggregation(author, limit, sort, user, fallback=True
 @router.get("/spaces")
 async def list_repos(
     author: Optional[str] = None,
-    limit: int = Query(50, ge=1, le=1000),
+    limit: int = Query(
+        50, ge=1, le=100000
+    ),  # Very high limit to support "get all repos"
     sort: str = Query("recent", regex="^(recent|likes|downloads|trending)$"),
     fallback: bool = Query(True, description="Enable fallback to external sources"),
     request: Request = None,
@@ -462,7 +464,9 @@ async def list_repos(
 async def list_user_repos(
     username: str,
     request: Request,
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(
+        100, ge=1, le=100000
+    ),  # Very high limit to support "get all repos"
     sort: str = Query("recent", regex="^(recent|likes|downloads)$"),
     fallback: bool = True,
     user: User | None = Depends(get_optional_user),
