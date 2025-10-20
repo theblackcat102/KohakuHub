@@ -1,8 +1,18 @@
 <!-- src/pages/[username]/index.vue -->
 <template>
   <div class="container-main">
+    <!-- Loading State -->
+    <div v-if="loading" class="text-center py-20">
+      <div
+        class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-gray-300 border-t-blue-600 mb-4"
+      ></div>
+      <p class="text-xl text-gray-600 dark:text-gray-400">
+        Loading user profile...
+      </p>
+    </div>
+
     <!-- User Not Found -->
-    <div v-if="userNotFound" class="text-center py-20">
+    <div v-else-if="userNotFound" class="text-center py-20">
       <div
         class="i-carbon-user-avatar-filled text-8xl text-gray-300 dark:text-gray-600 mb-6 inline-block"
       />
@@ -25,15 +35,9 @@
         <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
           <div class="card">
             <div class="flex items-center gap-3 mb-4">
-              <!-- Avatar (use external URL if available) -->
+              <!-- Avatar (always try API endpoint with fallback) -->
               <img
-                v-if="externalAvatarUrl && isExternalUser"
-                :src="externalAvatarUrl"
-                :alt="`${username} avatar`"
-                class="w-20 h-20 rounded-full object-cover"
-              />
-              <img
-                v-else-if="hasAvatar && !isExternalUser"
+                v-if="hasAvatar"
                 :src="`/api/users/${username}/avatar?t=${Date.now()}`"
                 :alt="`${username} avatar`"
                 class="w-20 h-20 rounded-full object-cover"
@@ -668,6 +672,7 @@ const route = useRoute();
 const router = useRouter();
 const username = computed(() => route.params.username);
 
+const loading = ref(true);
 const userInfo = ref(null);
 const profileInfo = ref(null);
 const repos = ref({ models: [], datasets: [], spaces: [] });
@@ -784,41 +789,43 @@ function goToRepo(type, repo) {
 
 async function checkIfOrganization() {
   try {
-    // Check if this name is an organization
-    const { data } = await orgAPI.get(username.value);
+    // Only check local org (no fallback)
+    const { data: localData } = await axios.get(`/org/${username.value}`, {
+      params: { fallback: false },
+    });
 
-    // Only redirect if it's a LOCAL organization
-    // For external sources, check if HF says it's an org
-    if (!data._source || data._source === "local") {
-      // Local organization - redirect
-      router.replace(`/organizations/${username.value}`);
-      return true;
-    }
-
-    // External entity - check HF type field
-    if (data._hf_type === "org" || data._hf_type === "organization") {
-      // HF says it's an org - redirect to org page
-      router.replace(`/organizations/${username.value}`);
-      return true;
-    }
-
-    // External user - don't redirect
-    console.log(
-      "External user detected:",
-      data._source,
-      "type:",
-      data._hf_type,
-    );
-    return false;
+    // Found local org - redirect
+    router.replace(`/organizations/${username.value}`);
+    return true;
   } catch (err) {
-    // 404 or error - not an organization, continue as user
+    // Not a local org - continue as user
     return false;
+  }
+}
+
+async function checkUserExists() {
+  try {
+    // Check if user exists by calling profile endpoint (WITH fallback to check all sources)
+    const { data } = await axios.get(`/api/users/${username.value}/profile`, {
+      params: { fallback: true },
+    });
+    profileInfo.value = data;
+    return true;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      // User doesn't exist in local or any fallback source
+      userNotFound.value = true;
+      return false;
+    }
+    // Other errors - continue anyway
+    console.error("Failed to check user existence:", err);
+    return true;
   }
 }
 
 async function loadUserData() {
   try {
-    // Get user overview which returns all repos and validates user exists
+    // Get user overview which returns all repos
     const response = await repoAPI.getUserOverview(
       username.value,
       sortBy.value,
@@ -826,13 +833,9 @@ async function loadUserData() {
     repos.value = response.data;
     return true;
   } catch (err) {
-    // Check if it's a 404 error
-    if (err.response?.status === 404) {
-      userNotFound.value = true;
-      return false;
-    }
-    // For other errors, show empty repos
-    console.error("Failed to load user data:", err);
+    // Even if repos fail to load, if user exists we show empty state
+    console.error("Failed to load user repos:", err);
+    repos.value = { models: [], datasets: [], spaces: [] };
     return true;
   }
 }
@@ -867,36 +870,31 @@ async function loadQuotaInfo() {
   }
 }
 
-async function loadProfileInfo() {
-  try {
-    const { data } = await settingsAPI.getUserProfile(username.value);
-    profileInfo.value = data;
-  } catch (err) {
-    console.error("Failed to load profile info:", err);
-    // Profile info is optional
-    profileInfo.value = null;
-  }
-}
-
 onMounted(async () => {
-  // Check if this is actually an organization
-  const isOrg = await checkIfOrganization();
-  if (isOrg) return; // Already redirected
+  try {
+    loading.value = true;
 
-  // Load user data (repos) - this also validates user exists
-  const userExists = await loadUserData();
-  if (!userExists) {
-    // userNotFound already set to true in loadUserData
-    return;
-  }
+    // Check if this is actually an organization
+    const isOrg = await checkIfOrganization();
+    if (isOrg) return; // Already redirected
 
-  // Load user card and profile info
-  loadUserCard();
-  await loadProfileInfo();
+    // Check if user exists (loads profile with fallback=true)
+    const userExists = await checkUserExists();
+    if (!userExists) {
+      // userNotFound already set to true in checkUserExists
+      return;
+    }
 
-  // Only load quota for local users (not external)
-  if (!isExternalUser.value) {
-    loadQuotaInfo();
+    // User exists - load repos and other data
+    await loadUserData();
+    loadUserCard();
+
+    // Only load quota for local users (not external)
+    if (!isExternalUser.value) {
+      loadQuotaInfo();
+    }
+  } finally {
+    loading.value = false;
   }
 });
 </script>
