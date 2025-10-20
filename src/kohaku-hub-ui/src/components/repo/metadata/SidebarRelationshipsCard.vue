@@ -6,6 +6,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  namespaceLink: {
+    type: String,
+    required: true,
+  },
   metadata: {
     type: Object,
     default: () => ({}),
@@ -80,7 +84,7 @@ const hasContent = computed(() => {
       <div>
         <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Author:</div>
         <RouterLink
-          :to="`/${namespace}`"
+          :to="namespaceLink"
           class="flex items-center gap-2 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
         >
           <div

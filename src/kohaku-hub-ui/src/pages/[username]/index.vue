@@ -443,6 +443,22 @@
                     </el-tag>
                   </div>
 
+                  <!-- External Source Badge + Link -->
+                  <div
+                    v-if="repo._source && repo._source !== 'local'"
+                    class="mb-2"
+                  >
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      @click.stop="openExternalRepo(repo, 'model')"
+                    >
+                      <div class="i-carbon-launch inline-block mr-1" />
+                      View on {{ repo._source }}
+                    </el-button>
+                  </div>
+
                   <div
                     class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
                   >
@@ -532,6 +548,22 @@
                     </el-tag>
                   </div>
 
+                  <!-- External Source Badge + Link -->
+                  <div
+                    v-if="repo._source && repo._source !== 'local'"
+                    class="mb-2"
+                  >
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      @click.stop="openExternalRepo(repo, 'dataset')"
+                    >
+                      <div class="i-carbon-launch inline-block mr-1" />
+                      View on {{ repo._source }}
+                    </el-button>
+                  </div>
+
                   <div
                     class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400"
                   >
@@ -619,6 +651,22 @@
                     >
                       {{ tag }}
                     </el-tag>
+                  </div>
+
+                  <!-- External Source Badge + Link -->
+                  <div
+                    v-if="repo._source && repo._source !== 'local'"
+                    class="mb-2"
+                  >
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      @click.stop="openExternalRepo(repo, 'space')"
+                    >
+                      <div class="i-carbon-launch inline-block mr-1" />
+                      View on {{ repo._source }}
+                    </el-button>
                   </div>
 
                   <div
@@ -785,6 +833,31 @@ function getQuotaStatus(percentage) {
 function goToRepo(type, repo) {
   const [namespace, name] = repo.id.split("/");
   router.push(`/${type}s/${namespace}/${name}`);
+}
+
+function openExternalRepo(repo, type) {
+  if (!repo._source_url) return;
+
+  // Check if source is HuggingFace
+  const isHF =
+    repo._source &&
+    (repo._source.toLowerCase().includes("huggingface") ||
+      repo._source_url.includes("huggingface.co"));
+
+  let url;
+  if (isHF) {
+    // HuggingFace URLs: models have no prefix, datasets and spaces have prefix
+    if (type === "model") {
+      url = `${repo._source_url}/${repo.id}`;
+    } else {
+      url = `${repo._source_url}/${type}s/${repo.id}`;
+    }
+  } else {
+    // KohakuHub and other sources: always use type prefix
+    url = `${repo._source_url}/${type}s/${repo.id}`;
+  }
+
+  window.open(url, "_blank");
 }
 
 async function checkIfOrganization() {

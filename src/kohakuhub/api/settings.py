@@ -101,6 +101,52 @@ async def update_user_settings(
     return {"success": True, "message": "User settings updated successfully"}
 
 
+@router.get("/users/{username}/type")
+async def get_namespace_type(username: str, request: Request, fallback: bool = True):
+    """Get namespace type (user or org).
+
+    This endpoint checks both local and fallback sources to determine if a namespace
+    is a user or organization.
+
+    For HuggingFace fallback:
+    - Try /api/users/{name}/overview - if succeeds, it's a user
+    - If 404, try /{name} (GET) - if succeeds, it's an org
+
+    Args:
+        username: Username or org name
+        request: FastAPI request object
+        fallback: Enable fallback to external sources
+
+    Returns:
+        Dict with type: "user" or "org"
+    """
+    # Check local first
+    user = get_user_by_username(username)
+    if user:
+        return {"type": "org" if user.is_org else "user", "_source": "local"}
+
+    org = get_organization(username)
+    if org:
+        return {"type": "org", "_source": "local"}
+
+    # If not found locally and fallback enabled, try fallback sources
+    if not fallback:
+        raise HTTPException(404, detail="Namespace not found")
+
+    # Try fallback - check profile which will determine type
+    from kohakuhub.api.fallback.operations import try_fallback_user_profile
+
+    profile = await try_fallback_user_profile(username)
+
+    if profile:
+        namespace_type = (
+            "org" if profile.get("_hf_type") in ["org", "organization"] else "user"
+        )
+        return {"type": namespace_type, "_source": profile.get("_source", "unknown")}
+
+    raise HTTPException(404, detail="Namespace not found")
+
+
 @router.get("/users/{username}/profile")
 @with_user_fallback("profile")
 async def get_user_profile(username: str, request: Request, fallback: bool = True):

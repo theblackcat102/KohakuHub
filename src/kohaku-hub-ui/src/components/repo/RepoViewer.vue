@@ -6,7 +6,7 @@
       <el-breadcrumb-item :to="{ path: `/${repoType}s` }">
         {{ repoTypeLabel }}
       </el-breadcrumb-item>
-      <el-breadcrumb-item :to="{ path: `/${namespace}` }">
+      <el-breadcrumb-item :to="{ path: namespaceLink }">
         {{ namespace }}
       </el-breadcrumb-item>
       <el-breadcrumb-item>{{ name }}</el-breadcrumb-item>
@@ -46,7 +46,7 @@
                 </h1>
                 <div class="flex items-center gap-2 mt-1">
                   <RouterLink
-                    :to="`/${namespace}`"
+                    :to="namespaceLink"
                     class="text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     {{ namespace }}
@@ -79,8 +79,18 @@
               </el-tag>
               <el-tag v-if="isExternalRepo" type="info">
                 <div class="i-carbon-cloud inline-block mr-1" />
-                External: {{ repoInfo._source_url }}
+                {{ repoInfo._source }}
               </el-tag>
+              <el-button
+                v-if="isExternalRepo && repoInfo._source_url"
+                size="small"
+                type="primary"
+                plain
+                @click="openExternalRepo"
+              >
+                <div class="i-carbon-launch inline-block mr-1" />
+                View on {{ repoInfo._source }}
+              </el-button>
             </div>
           </div>
 
@@ -546,6 +556,7 @@
         <!-- Relationships (Author + Base Model + Datasets from YAML) -->
         <SidebarRelationshipsCard
           :namespace="namespace"
+          :namespace-link="namespaceLink"
           :metadata="readmeMetadata"
           :repo-type="repoType"
         />
@@ -734,6 +745,7 @@ huggingface-cli download {{ repoInfo?.id }}</pre
 
 <script setup>
 import { ElMessage, ElMessageBox } from "element-plus";
+import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -804,6 +816,15 @@ const repoTypeLabel = computed(() => {
 
 const isOwner = computed(() => {
   return authStore.canWriteToNamespace(props.namespace);
+});
+
+const isNamespaceOrg = ref(false);
+
+const namespaceLink = computed(() => {
+  if (isNamespaceOrg.value) {
+    return `/organizations/${props.namespace}`;
+  }
+  return `/${props.namespace}`;
 });
 
 const cloneUrl = computed(() => {
@@ -884,6 +905,31 @@ function getIconClass(type) {
   return icons[type] || icons.model;
 }
 
+function openExternalRepo() {
+  if (!repoInfo.value?._source_url) return;
+
+  // Check if source is HuggingFace
+  const isHF =
+    repoInfo.value._source &&
+    (repoInfo.value._source.toLowerCase().includes("huggingface") ||
+      repoInfo.value._source_url.includes("huggingface.co"));
+
+  let url;
+  if (isHF) {
+    // HuggingFace URLs: models have no prefix, datasets and spaces have prefix
+    if (props.repoType === "model") {
+      url = `${repoInfo.value._source_url}/${props.namespace}/${props.name}`;
+    } else {
+      url = `${repoInfo.value._source_url}/${props.repoType}s/${props.namespace}/${props.name}`;
+    }
+  } else {
+    // KohakuHub and other sources: always use type prefix
+    url = `${repoInfo.value._source_url}/${props.repoType}s/${props.namespace}/${props.name}`;
+  }
+
+  window.open(url, "_blank");
+}
+
 function formatDate(date) {
   return date ? dayjs(date).fromNow() : "Unknown";
 }
@@ -958,6 +1004,19 @@ function handleBranchChange() {
   }
 }
 
+async function checkIfNamespaceIsOrg() {
+  try {
+    // Check namespace type (works with fallback sources)
+    const { data } = await axios.get(`/api/users/${props.namespace}/type`, {
+      params: { fallback: true },
+    });
+    isNamespaceOrg.value = data.type === "org";
+  } catch (err) {
+    // If unknown, assume user
+    isNamespaceOrg.value = false;
+  }
+}
+
 async function loadRepoInfo() {
   loading.value = true;
   error.value = null;
@@ -970,6 +1029,9 @@ async function loadRepoInfo() {
     );
     repoInfo.value = data;
     likesCount.value = data.likes || 0;
+
+    // Check if namespace is an org (for correct linking)
+    checkIfNamespaceIsOrg();
 
     // Check if current user has liked (only if authenticated)
     if (authStore.isAuthenticated) {
