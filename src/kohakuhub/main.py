@@ -125,6 +125,7 @@ async def public_resolve_head(
         name=name,
         revision=revision,
         path=path,
+        request=request,
         user=user,
     )
 

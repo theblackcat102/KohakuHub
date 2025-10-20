@@ -174,7 +174,7 @@ class File(BaseModel):
         Repository, backref="files", on_delete="CASCADE", index=True
     )
     path_in_repo = CharField(index=True)
-    size = IntegerField(default=0)
+    size = BigIntegerField(default=0)  # Changed from IntegerField to support files >2GB
     sha256 = CharField(index=True)
     lfs = BooleanField(default=False)
     is_deleted = BooleanField(default=False, index=True)  # Soft delete flag
@@ -197,7 +197,7 @@ class StagingUpload(BaseModel):
     revision = CharField(index=True)
     path_in_repo = CharField()
     sha256 = CharField(default="")
-    size = IntegerField(default=0)
+    size = BigIntegerField(default=0)  # Changed from IntegerField to support files >2GB
     upload_id = CharField(null=True)
     storage_key = CharField()
     lfs = BooleanField(default=False)
@@ -272,7 +272,7 @@ class LFSObjectHistory(BaseModel):
     )
     path_in_repo = CharField(index=True)  # File path
     sha256 = CharField(index=True)  # LFS object hash
-    size = IntegerField()
+    size = BigIntegerField()  # Changed from IntegerField to support files >2GB
     commit_id = CharField(index=True)  # LakeFS commit ID
     # Optional link to File record for faster lookups
     # IMPORTANT: on_delete="SET NULL" prevents CASCADE deletion when File is deleted
