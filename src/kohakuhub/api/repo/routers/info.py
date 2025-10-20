@@ -48,6 +48,7 @@ async def get_repo_info(
     namespace: str,
     repo_name: str,
     request: Request,
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Get repository information (without revision).
@@ -460,8 +461,10 @@ async def list_repos(
 @with_user_fallback("repos")
 async def list_user_repos(
     username: str,
+    request: Request,
     limit: int = Query(100, ge=1, le=1000),
     sort: str = Query("recent", regex="^(recent|likes|downloads)$"),
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """List all repositories for a specific user/namespace.

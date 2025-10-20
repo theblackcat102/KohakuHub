@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, Request
 
 from kohakuhub.config import cfg
 from kohakuhub.db import File, Repository, User
@@ -225,10 +225,12 @@ async def list_repo_tree(
     repo_type: RepoType,
     namespace: str,
     repo_name: str,
+    request: Request,
     revision: str = "main",
     path: str = "",
     recursive: bool = False,
     expand: bool = False,
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """List repository file tree.
@@ -313,8 +315,10 @@ async def get_paths_info(
     namespace: str,
     repo_name: str,
     revision: str,
+    request: Request,
     paths: list[str] = Form(...),
     expand: bool = Form(False),
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Get information about specific paths in a repository.

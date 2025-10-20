@@ -3,7 +3,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
 from kohakuhub.db import User
@@ -103,11 +103,13 @@ async def update_user_settings(
 
 @router.get("/users/{username}/profile")
 @with_user_fallback("profile")
-async def get_user_profile(username: str):
+async def get_user_profile(username: str, request: Request, fallback: bool = True):
     """Get user public profile information.
 
     Args:
         username: Username to query
+        request: FastAPI request object
+        fallback: Enable fallback to external sources
 
     Returns:
         Public profile data

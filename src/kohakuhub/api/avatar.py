@@ -3,7 +3,7 @@
 import io
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
@@ -17,6 +17,7 @@ from kohakuhub.db_operations import (
 )
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_current_user, get_optional_user
+from kohakuhub.api.fallback import with_user_fallback
 
 logger = get_logger("AVATAR")
 
@@ -194,17 +195,23 @@ async def upload_user_avatar(
 
 
 @router.get("/users/{username}/avatar")
+@with_user_fallback("avatar")
 async def get_user_avatar(
-    username: str, _user: User | None = Depends(get_optional_user)
+    username: str,
+    request: Request,
+    fallback: bool = True,
+    _user: User | None = Depends(get_optional_user),
 ):
     """Get user avatar image.
 
     Args:
         username: Username
+        request: FastAPI request object
+        fallback: Enable fallback to external sources
         _user: Optional authenticated user (for logging)
 
     Returns:
-        JPEG image
+        JPEG image (can be from local or fallback source)
 
     Raises:
         HTTPException: If user not found or no avatar
@@ -336,17 +343,23 @@ async def upload_org_avatar(
 
 
 @router.get("/organizations/{org_name}/avatar")
+@with_user_fallback("avatar")
 async def get_org_avatar(
-    org_name: str, _user: User | None = Depends(get_optional_user)
+    org_name: str,
+    request: Request,
+    fallback: bool = True,
+    _user: User | None = Depends(get_optional_user),
 ):
     """Get organization avatar image.
 
     Args:
         org_name: Organization name
+        request: FastAPI request object
+        fallback: Enable fallback to external sources
         _user: Optional authenticated user (for logging)
 
     Returns:
-        JPEG image
+        JPEG image (can be from local or fallback source)
 
     Raises:
         HTTPException: If organization not found or no avatar

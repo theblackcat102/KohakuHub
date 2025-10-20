@@ -1,6 +1,6 @@
 """Organization related API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from kohakuhub.db import User, UserOrganization, db
@@ -57,8 +57,12 @@ async def create_organization_endpoint(
 
 @router.get("/{org_name}")
 @with_user_fallback("profile")
-async def get_organization_info(org_name: str):
-    """Get organization details."""
+async def get_organization_info(org_name: str, request: Request, fallback: bool = True):
+    """Get organization details.
+
+    Query params:
+        fallback: Set to "false" to disable fallback to external sources (default: true)
+    """
     org = get_organization(org_name)
     if not org:
         raise HTTPException(404, detail=_ERR_ORG_NOT_FOUND)

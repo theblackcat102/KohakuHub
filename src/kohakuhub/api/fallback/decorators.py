@@ -1,6 +1,7 @@
 """Decorators for adding fallback functionality to endpoints."""
 
 import asyncio
+import inspect
 from functools import wraps
 from typing import Literal
 
@@ -12,8 +13,10 @@ from kohakuhub.logger import get_logger
 from kohakuhub.api.fallback.operations import (
     fetch_external_list,
     try_fallback_info,
+    try_fallback_org_avatar,
     try_fallback_resolve,
     try_fallback_tree,
+    try_fallback_user_avatar,
     try_fallback_user_profile,
     try_fallback_user_repos,
 )
@@ -22,7 +25,7 @@ from kohakuhub.api.fallback.config import get_enabled_sources
 logger = get_logger("FALLBACK_DEC")
 
 OperationType = Literal["resolve", "tree", "info", "revision", "paths_info"]
-UserOperationType = Literal["profile", "repos"]
+UserOperationType = Literal["profile", "repos", "avatar"]
 
 
 def with_repo_fallback(operation: OperationType):
@@ -38,10 +41,25 @@ def with_repo_fallback(operation: OperationType):
     """
 
     def decorator(func):
+        # Get function signature to extract default values
+        sig = inspect.signature(func)
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Extract fallback param from Request object (if available)
-            fallback_enabled = None
+            # Extract fallback param - priority: query param > kwargs > function default > True
+            fallback_enabled = True  # Default to True
+
+            # Check function signature default
+            if "fallback" in sig.parameters:
+                default = sig.parameters["fallback"].default
+                if default != inspect.Parameter.empty:
+                    fallback_enabled = default
+
+            # Check kwargs (FastAPI injected value)
+            if "fallback" in kwargs:
+                fallback_enabled = kwargs["fallback"]
+
+            # Check query param (highest priority - overrides everything)
             request = kwargs.get("request")
             if request and hasattr(request, "query_params"):
                 fallback_param = request.query_params.get("fallback")
@@ -52,8 +70,8 @@ def with_repo_fallback(operation: OperationType):
                         "no",
                     )
 
-            # Check if fallback is enabled globally and not disabled by query param
-            if not cfg.fallback.enabled or fallback_enabled is False:
+            # Check if fallback is enabled globally and not disabled by param
+            if not cfg.fallback.enabled or not fallback_enabled:
                 return await func(*args, **kwargs)
 
             # Extract repo info from kwargs
@@ -189,16 +207,29 @@ def with_list_aggregation(repo_type: str):
     """
 
     def decorator(func):
+        # Get function signature to find 'fallback' parameter position
+        sig = inspect.signature(func)
+        param_names = list(sig.parameters.keys())
+        fallback_index = (
+            param_names.index("fallback") if "fallback" in param_names else -1
+        )
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Extract fallback parameter (5th arg or kwargs)
-            # Functions called as: _list_xxx_with_aggregation(author, limit, sort, user, fallback)
-            fallback_enabled = kwargs.get("fallback", True)
-            if fallback_enabled is None:
-                fallback_enabled = True
-            if len(args) > 4:
-                args = list(args)
-                fallback_enabled = args.pop()
+            # Extract fallback parameter from args or kwargs
+            fallback_enabled = True  # Default to True
+
+            # Try kwargs first
+            if "fallback" in kwargs:
+                fallback_enabled = kwargs["fallback"]
+            # Try positional args
+            elif fallback_index >= 0 and len(args) > fallback_index:
+                fallback_enabled = args[fallback_index]
+            # Use default from signature
+            elif fallback_index >= 0:
+                default = sig.parameters["fallback"].default
+                if default != inspect.Parameter.empty:
+                    fallback_enabled = default
 
             logger.info(
                 f"with_list_aggregation decorator params: fallback_enabled={fallback_enabled}"
@@ -206,7 +237,7 @@ def with_list_aggregation(repo_type: str):
 
             # Check if fallback is enabled globally and not disabled by param
             if not cfg.fallback.enabled or not fallback_enabled:
-                # Call without fallback - need to remove fallback from args
+                # Call without fallback
                 return await func(*args, **kwargs)
 
             # Get local results
@@ -308,10 +339,25 @@ def with_user_fallback(operation: UserOperationType):
     """
 
     def decorator(func):
+        # Get function signature to extract default values
+        sig = inspect.signature(func)
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Extract fallback param from Request object (if available)
-            fallback_enabled = None
+            # Extract fallback param - priority: query param > kwargs > function default > True
+            fallback_enabled = True  # Default to True
+
+            # Check function signature default
+            if "fallback" in sig.parameters:
+                default = sig.parameters["fallback"].default
+                if default != inspect.Parameter.empty:
+                    fallback_enabled = default
+
+            # Check kwargs (FastAPI injected value)
+            if "fallback" in kwargs:
+                fallback_enabled = kwargs["fallback"]
+
+            # Check query param (highest priority - overrides everything)
             request = kwargs.get("request")
             if request and hasattr(request, "query_params"):
                 fallback_param = request.query_params.get("fallback")
@@ -322,8 +368,8 @@ def with_user_fallback(operation: UserOperationType):
                         "no",
                     )
 
-            # Check if fallback is enabled globally and not disabled by query param
-            if not cfg.fallback.enabled or fallback_enabled is False:
+            # Check if fallback is enabled globally and not disabled by param
+            if not cfg.fallback.enabled or not fallback_enabled:
                 return await func(*args, **kwargs)
 
             # Extract username/org_name from kwargs
@@ -373,12 +419,29 @@ def with_user_fallback(operation: UserOperationType):
                     case "repos":
                         result = await try_fallback_user_repos(username)
 
+                    case "avatar":
+                        # Check if it's org or user based on parameter name
+                        org_name = kwargs.get("org_name")
+                        if org_name:
+                            result = await try_fallback_org_avatar(org_name)
+                        else:
+                            result = await try_fallback_user_avatar(username)
+
                     case _:
                         logger.warning(f"Unknown user fallback operation: {operation}")
                         result = None
 
                 if result:
                     logger.success(f"Fallback SUCCESS for user {operation}: {username}")
+                    # For avatar operation, wrap bytes in Response
+                    if operation == "avatar" and isinstance(result, bytes):
+                        return Response(
+                            content=result,
+                            media_type="image/jpeg",
+                            headers={
+                                "Cache-Control": "public, max-age=86400",  # 24 hour cache
+                            },
+                        )
                     return result
                 else:
                     # Not found in any source

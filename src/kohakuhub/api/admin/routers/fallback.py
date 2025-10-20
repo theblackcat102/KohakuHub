@@ -103,8 +103,16 @@ async def create_fallback_source(
             name=source.name,
             source_type=source.source_type,
             enabled=source.enabled,
-            created_at=source.created_at.isoformat(),
-            updated_at=source.updated_at.isoformat(),
+            created_at=(
+                source.created_at.isoformat()
+                if isinstance(source.created_at, datetime)
+                else source.created_at
+            ),
+            updated_at=(
+                source.updated_at.isoformat()
+                if isinstance(source.updated_at, datetime)
+                else source.updated_at
+            ),
         )
 
     except Exception as e:
@@ -149,8 +157,16 @@ async def list_fallback_sources(
                 name=s.name,
                 source_type=s.source_type,
                 enabled=s.enabled,
-                created_at=s.created_at.isoformat(),
-                updated_at=s.updated_at.isoformat(),
+                created_at=(
+                    s.created_at.isoformat()
+                    if isinstance(s.created_at, datetime)
+                    else s.created_at
+                ),
+                updated_at=(
+                    s.updated_at.isoformat()
+                    if isinstance(s.updated_at, datetime)
+                    else s.updated_at
+                ),
             )
             for s in sources
         ]
@@ -183,8 +199,16 @@ async def get_fallback_source(source_id: int, _admin=Depends(verify_admin_token)
             name=source.name,
             source_type=source.source_type,
             enabled=source.enabled,
-            created_at=source.created_at.isoformat(),
-            updated_at=source.updated_at.isoformat(),
+            created_at=(
+                source.created_at.isoformat()
+                if isinstance(source.created_at, datetime)
+                else source.created_at
+            ),
+            updated_at=(
+                source.updated_at.isoformat()
+                if isinstance(source.updated_at, datetime)
+                else source.updated_at
+            ),
         )
 
     except FallbackSource.DoesNotExist:
@@ -253,8 +277,16 @@ async def update_fallback_source(
             name=source.name,
             source_type=source.source_type,
             enabled=source.enabled,
-            created_at=source.created_at.isoformat(),
-            updated_at=source.updated_at.isoformat(),
+            created_at=(
+                source.created_at.isoformat()
+                if isinstance(source.created_at, datetime)
+                else source.created_at
+            ),
+            updated_at=(
+                source.updated_at.isoformat()
+                if isinstance(source.updated_at, datetime)
+                else source.updated_at
+            ),
         )
 
     except FallbackSource.DoesNotExist:

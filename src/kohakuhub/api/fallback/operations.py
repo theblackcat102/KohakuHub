@@ -452,6 +452,134 @@ async def try_fallback_user_profile(username: str) -> Optional[dict]:
     return None
 
 
+async def try_fallback_user_avatar(username: str) -> Optional[bytes]:
+    """Try to get user avatar from fallback sources.
+
+    For HuggingFace: Get avatar URL from overview, then download it
+    For KohakuHub: Call /api/users/{username}/avatar directly
+
+    Args:
+        username: Username to lookup
+
+    Returns:
+        Avatar image bytes (JPEG) or None if not found
+    """
+    sources = get_enabled_sources(namespace="")  # Global sources only
+
+    if not sources:
+        return None
+
+    for source in sources:
+        try:
+            client = FallbackClient(
+                source_url=source["url"],
+                source_type=source["source_type"],
+                token=source.get("token"),
+            )
+
+            match source["source_type"]:
+                case "huggingface":
+                    # Get avatar URL from user overview
+                    user_path = f"/api/users/{username}/overview"
+                    user_response = await client.get(user_path, "model")
+
+                    if 200 <= user_response.status_code < 400:
+                        hf_data = user_response.json()
+                        avatar_url = hf_data.get("avatarUrl")
+
+                        if avatar_url:
+                            # Download avatar image
+                            import httpx
+
+                            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                                avatar_response = await http_client.get(avatar_url)
+                                if avatar_response.status_code == 200:
+                                    logger.info(
+                                        f"Fallback user avatar SUCCESS: {username} from {source['name']}"
+                                    )
+                                    return avatar_response.content
+
+                    logger.debug(f"HF user avatar not found: {username}")
+                    continue
+
+                case "kohakuhub":
+                    # Other KohakuHub instances - call avatar endpoint directly
+                    avatar_path = f"/api/users/{username}/avatar"
+                    response = await client.get(avatar_path, "model")
+
+                    if response.status_code == 200:
+                        logger.info(
+                            f"Fallback user avatar SUCCESS: {username} from {source['name']}"
+                        )
+                        return response.content
+
+                    elif not should_retry_source(response):
+                        return None
+
+                case _:
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Fallback user avatar failed for {source['name']}: {e}")
+            continue
+
+    return None
+
+
+async def try_fallback_org_avatar(org_name: str) -> Optional[bytes]:
+    """Try to get organization avatar from fallback sources.
+
+    For KohakuHub: Call /api/organizations/{org_name}/avatar directly
+    For HuggingFace: Organizations don't have avatars in the API
+
+    Args:
+        org_name: Organization name to lookup
+
+    Returns:
+        Avatar image bytes (JPEG) or None if not found
+    """
+    sources = get_enabled_sources(namespace="")  # Global sources only
+
+    if not sources:
+        return None
+
+    for source in sources:
+        try:
+            client = FallbackClient(
+                source_url=source["url"],
+                source_type=source["source_type"],
+                token=source.get("token"),
+            )
+
+            match source["source_type"]:
+                case "kohakuhub":
+                    # Other KohakuHub instances - call avatar endpoint directly
+                    avatar_path = f"/api/organizations/{org_name}/avatar"
+                    response = await client.get(avatar_path, "model")
+
+                    if response.status_code == 200:
+                        logger.info(
+                            f"Fallback org avatar SUCCESS: {org_name} from {source['name']}"
+                        )
+                        return response.content
+
+                    elif not should_retry_source(response):
+                        return None
+
+                case "huggingface":
+                    # HuggingFace doesn't provide org avatars via API
+                    continue
+
+                case _:
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Fallback org avatar failed for {source['name']}: {e}")
+            continue
+
+    return None
+
+
 async def try_fallback_user_repos(username: str) -> Optional[dict]:
     """Try to get user repositories from fallback sources.
 

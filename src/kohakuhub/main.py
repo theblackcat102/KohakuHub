@@ -106,7 +106,9 @@ async def public_resolve_head(
     name: str,
     revision: str,
     path: str,
+    request: Request,
     type: str = "model",
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Public HEAD endpoint without /api prefix - returns file metadata only."""
@@ -137,6 +139,7 @@ async def public_resolve_get(
     path: str,
     request: Request,
     type: str = "model",
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Public GET endpoint without /api prefix - redirects to S3 download."""

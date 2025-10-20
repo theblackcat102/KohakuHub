@@ -276,7 +276,9 @@ async def get_revision(
     namespace: str,
     name: str,
     revision: str,
+    request: Request,
     expand: Optional[str] = None,
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Get revision information for a repository.
@@ -461,6 +463,8 @@ async def resolve_file_head(
     name: str,
     revision: str,
     path: str,
+    request: Request,
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Get file metadata (HEAD request).
@@ -487,6 +491,7 @@ async def resolve_file_get(
     revision: str,
     path: str,
     request: Request,
+    fallback: bool = True,
     user: User | None = Depends(get_optional_user),
 ):
     """Download file (GET request).
