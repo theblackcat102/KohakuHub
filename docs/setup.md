@@ -99,7 +99,17 @@ openssl rand -base64 48
 
 ## Post-Installation
 
-### 1. Create First User
+### 1. Admin Portal Access
+
+Administration is handled through the standalone admin portal at http://localhost:28080/admin
+
+**No "admin account" registration needed** - Access is controlled via the `KOHAKU_HUB_ADMIN_SECRET_TOKEN` in your docker-compose.yml
+
+See [docs/Admin.md](./Admin.md) for complete admin portal documentation.
+
+### 2. Create User Account (Optional)
+
+Regular user accounts can be created for testing uploads/downloads:
 
 **Via Web UI:**
 - Go to http://localhost:28080
@@ -112,7 +122,7 @@ pip install -e .
 kohub-cli auth register
 ```
 
-### 2. Get LakeFS Credentials
+### 3. Get LakeFS Credentials
 
 LakeFS credentials are auto-generated on first startup:
 
@@ -122,13 +132,13 @@ cat docker/hub-meta/hub-api/credentials.env
 
 Use these to login to LakeFS UI at http://localhost:28000
 
-### 3. Test with Python
+### 4. Test with Python
 
 ```bash
 pip install huggingface_hub
 
 export HF_ENDPOINT=http://localhost:28080
-export HF_TOKEN=your_token_from_ui
+export HF_TOKEN=your_token_from_ui  # Get from Web UI settings after login
 
 python scripts/test.py
 ```

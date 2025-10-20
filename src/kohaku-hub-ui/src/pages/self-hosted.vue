@@ -88,18 +88,20 @@ docker compose up -d --build
 
 **Access:** http://localhost:28080
 
-1. **Register admin account:**
-   - Username: admin (or your choice)
-   - Email: your@email.com
-   - Password: secure password
-
-2. **Access admin portal:**
+1. **Access admin portal:**
    - Visit: http://localhost:28080/admin
-   - Login with \`KOHAKU_HUB_ADMIN_SECRET_TOKEN\`
+   - Login with your \`KOHAKU_HUB_ADMIN_SECRET_TOKEN\` from docker-compose.yml
+   - **No user account registration needed** - Admin portal uses secret token authentication
 
-3. **Create first repository:**
-   - Click **New** → **Model**
-   - Test upload/download
+2. **Create user accounts (Optional):**
+   - Regular users can register at http://localhost:28080/register
+   - Or create invitations via Admin Portal → Invitations
+   - User accounts are for uploading/downloading models, not administration
+
+3. **Test functionality:**
+   - Create a test repository
+   - Upload a file
+   - Test download with HuggingFace Hub client
 
 ---
 
