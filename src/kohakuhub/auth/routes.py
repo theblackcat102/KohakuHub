@@ -29,6 +29,7 @@ from kohakuhub.db_operations import (
     update_user,
 )
 from kohakuhub.logger import get_logger
+from kohakuhub.api.validation import RESERVED_NAMES
 from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.auth.email import send_verification_email
 from kohakuhub.auth.utils import (
@@ -96,6 +97,16 @@ async def register(req: RegisterRequest, invitation_token: str | None = None):
             raise HTTPException(400, detail=error_msg)
 
     logger.info(f"Registration attempt for username: {req.username}")
+
+    # Check if username is reserved
+    if (
+        req.username.lower() in RESERVED_NAMES
+        or normalize_name(req.username) in RESERVED_NAMES
+    ):
+        logger.warning(f"Registration failed: username '{req.username}' is reserved")
+        raise HTTPException(
+            400, detail=f"Username '{req.username}' is reserved and cannot be used"
+        )
 
     # Check if username or email already exists and create user atomically
     with db.atomic():

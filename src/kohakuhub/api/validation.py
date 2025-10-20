@@ -10,6 +10,46 @@ from kohakuhub.utils.names import normalize_name
 
 router = APIRouter()
 
+# Reserved names that cannot be used as usernames or organization names
+RESERVED_NAMES = {
+    # Route names
+    "models",
+    "datasets",
+    "spaces",
+    "admin",
+    "organizations",
+    "api",
+    "org",
+    "auth",
+    # Common system names
+    "settings",
+    "new",
+    "login",
+    "register",
+    "logout",
+    "docs",
+    "swagger",
+    "health",
+    "version",
+    # Special paths
+    "resolve",
+    "tree",
+    "blob",
+    "commit",
+    "commits",
+    "branch",
+    "branches",
+    "tag",
+    "tags",
+    "upload",
+    "edit",
+    # Admin paths
+    "fallback-sources",
+    "cache",
+    "stats",
+    "quota",
+}
+
 
 class CheckNameRequest(BaseModel):
     """Request to check if name is available."""
@@ -44,6 +84,16 @@ async def check_name_availability(req: CheckNameRequest) -> CheckNameResponse:
     """
     name = req.name.strip()
     normalized = normalize_name(name)
+
+    # Check if name is reserved (only for usernames/org names, not repos)
+    if not (req.namespace and req.type):
+        if name.lower() in RESERVED_NAMES or normalized in RESERVED_NAMES:
+            return CheckNameResponse(
+                available=False,
+                normalized_name=normalized,
+                conflict_with=name,
+                message=f"Name '{name}' is reserved and cannot be used",
+            )
 
     # Check repository name
     if req.namespace and req.type:

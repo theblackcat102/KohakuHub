@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
+from kohakuhub.config import cfg
 from kohakuhub.db import User
 from kohakuhub.db_operations import (
     get_organization,
@@ -18,13 +19,12 @@ from kohakuhub.db_operations import (
     update_repository,
     update_user,
 )
-from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
-from kohakuhub.auth.dependencies import get_current_user
-from kohakuhub.auth.permissions import check_repo_delete_permission
 from kohakuhub.api.fallback import with_user_fallback
 from kohakuhub.api.quota.util import calculate_repository_storage, check_quota
 from kohakuhub.api.repo.utils.hf import hf_repo_not_found
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.auth.permissions import check_repo_delete_permission
 
 logger = get_logger("SETTINGS")
 

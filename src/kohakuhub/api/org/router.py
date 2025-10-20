@@ -16,8 +16,10 @@ from kohakuhub.db_operations import (
     update_user_organization,
 )
 from kohakuhub.logger import get_logger
-from kohakuhub.auth.dependencies import get_current_user
 from kohakuhub.api.fallback import with_user_fallback
+from kohakuhub.api.validation import RESERVED_NAMES
+from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.utils.names import normalize_name
 
 # Error messages
 _ERR_ORG_NOT_FOUND = "Organization not found"
@@ -37,6 +39,19 @@ async def create_organization_endpoint(
     payload: CreateOrganizationPayload, user: User = Depends(get_current_user)
 ):
     """Create a new organization with default quotas."""
+
+    # Check if organization name is reserved
+    if (
+        payload.name.lower() in RESERVED_NAMES
+        or normalize_name(payload.name) in RESERVED_NAMES
+    ):
+        logger.warning(
+            f"Organization creation failed: name '{payload.name}' is reserved"
+        )
+        raise HTTPException(
+            400,
+            detail=f"Organization name '{payload.name}' is reserved and cannot be used",
+        )
 
     # Check if organization already exists and create atomically
     with db.atomic():
