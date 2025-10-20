@@ -839,9 +839,9 @@ async function loadMembers() {
 async function loadRepos() {
   try {
     const [models, datasets, spaces] = await Promise.all([
-      repoAPI.listRepos("model", { author: orgname.value }),
-      repoAPI.listRepos("dataset", { author: orgname.value }),
-      repoAPI.listRepos("space", { author: orgname.value }),
+      repoAPI.listRepos("model", { author: orgname.value, limit: 100000 }),
+      repoAPI.listRepos("dataset", { author: orgname.value, limit: 100000 }),
+      repoAPI.listRepos("space", { author: orgname.value, limit: 100000 }),
     ]);
 
     repos.value = {

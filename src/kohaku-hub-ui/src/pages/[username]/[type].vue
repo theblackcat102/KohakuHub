@@ -1,7 +1,35 @@
 <!-- src/pages/[username]/[type].vue -->
 <template>
   <div class="container-main">
-    <div class="grid grid-cols-[280px_1fr] gap-6">
+    <!-- Loading State -->
+    <div v-if="loading" class="text-center py-20">
+      <div
+        class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-gray-300 border-t-blue-600 mb-4"
+      ></div>
+      <p class="text-xl text-gray-600 dark:text-gray-400">
+        Loading repositories...
+      </p>
+    </div>
+
+    <!-- User Not Found -->
+    <div v-else-if="userNotFound" class="text-center py-20">
+      <div
+        class="i-carbon-user-avatar-filled text-8xl text-gray-300 dark:text-gray-600 mb-6 inline-block"
+      />
+      <h1 class="text-4xl font-bold mb-4">User Not Found</h1>
+      <p class="text-xl text-gray-600 dark:text-gray-400 mb-8">
+        The user "<span class="font-mono text-blue-600 dark:text-blue-400">{{
+          username
+        }}</span
+        >" does not exist.
+      </p>
+      <el-button type="primary" @click="$router.push('/')">
+        <div class="i-carbon-home mr-2" />
+        Go to Homepage
+      </el-button>
+    </div>
+
+    <div v-else class="grid grid-cols-[280px_1fr] gap-6">
       <!-- Sidebar -->
       <aside class="space-y-4">
         <div class="card">
@@ -437,6 +465,7 @@
 
 <script setup>
 import { repoAPI, orgAPI } from "@/utils/api";
+import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -448,6 +477,8 @@ const router = useRouter();
 const username = computed(() => route.params.username);
 const currentType = computed(() => route.params.type); // 'models', 'datasets', or 'spaces'
 
+const loading = ref(true);
+const userNotFound = ref(false);
 const userInfo = ref(null);
 const repos = ref({ model: [], dataset: [], space: [] });
 const searchQuery = ref("");
@@ -490,14 +521,36 @@ function goToRepo(type, repo) {
 
 async function checkIfOrganization() {
   try {
-    // Check if this name is an organization
-    await orgAPI.get(username.value);
-    // If successful, it's an organization - redirect
+    // Only check local org (no fallback)
+    await axios.get(`/org/${username.value}`, {
+      params: { fallback: false },
+    });
+    // Found local org - redirect
     router.replace(`/organizations/${username.value}/${currentType.value}`);
     return true;
   } catch (err) {
-    // Not an organization, continue as user
+    // Not a local org - continue as user
     return false;
+  }
+}
+
+async function checkUserExists() {
+  try {
+    // Check if user exists by calling profile endpoint (WITH fallback to check all sources)
+    const { data } = await axios.get(`/api/users/${username.value}/profile`, {
+      params: { fallback: true },
+    });
+    userInfo.value = data;
+    return true;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      // User doesn't exist in local or any fallback source
+      userNotFound.value = true;
+      return false;
+    }
+    // Other errors - continue anyway
+    console.error("Failed to check user existence:", err);
+    return true;
   }
 }
 
@@ -507,14 +560,17 @@ async function loadRepos() {
       repoAPI.listRepos("model", {
         author: username.value,
         sort: sortBy.value,
+        limit: 100000, // Very high limit to get all repos
       }),
       repoAPI.listRepos("dataset", {
         author: username.value,
         sort: sortBy.value,
+        limit: 100000,
       }),
       repoAPI.listRepos("space", {
         author: username.value,
         sort: sortBy.value,
+        limit: 100000,
       }),
     ]);
 
@@ -539,11 +595,24 @@ watch(currentType, () => {
 });
 
 onMounted(async () => {
-  // Check if this is actually an organization
-  const isOrg = await checkIfOrganization();
-  if (isOrg) return; // Already redirected
+  try {
+    loading.value = true;
 
-  // Continue loading as user
-  loadRepos();
+    // Check if this is actually a local organization
+    const isOrg = await checkIfOrganization();
+    if (isOrg) return; // Already redirected
+
+    // Check if user exists (loads profile with fallback=true)
+    const userExists = await checkUserExists();
+    if (!userExists) {
+      // userNotFound already set to true
+      return;
+    }
+
+    // User exists - load repos
+    await loadRepos();
+  } finally {
+    loading.value = false;
+  }
 });
 </script>

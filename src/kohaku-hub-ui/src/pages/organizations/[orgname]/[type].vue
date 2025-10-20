@@ -1,7 +1,35 @@
 <!-- src/pages/organizations/[orgname]/[type].vue -->
 <template>
   <div class="container-main">
-    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+    <!-- Loading State -->
+    <div v-if="loading" class="text-center py-20">
+      <div
+        class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-gray-300 border-t-blue-600 mb-4"
+      ></div>
+      <p class="text-xl text-gray-600 dark:text-gray-400">
+        Loading repositories...
+      </p>
+    </div>
+
+    <!-- Organization Not Found -->
+    <div v-else-if="orgNotFound" class="text-center py-20">
+      <div
+        class="i-carbon-group text-8xl text-gray-300 dark:text-gray-600 mb-6 inline-block"
+      />
+      <h1 class="text-4xl font-bold mb-4">Organization Not Found</h1>
+      <p class="text-xl text-gray-600 dark:text-gray-400 mb-8">
+        The organization "<span
+          class="font-mono text-blue-600 dark:text-blue-400"
+          >{{ orgname }}</span
+        >" does not exist.
+      </p>
+      <el-button type="primary" @click="$router.push('/')">
+        <div class="i-carbon-home mr-2" />
+        Go to Homepage
+      </el-button>
+    </div>
+
+    <div v-else class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       <!-- Sidebar with members -->
       <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div class="card">
@@ -231,6 +259,7 @@
 
 <script setup>
 import { repoAPI, orgAPI } from "@/utils/api";
+import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -241,6 +270,8 @@ const router = useRouter();
 const orgname = computed(() => route.params.orgname);
 const currentType = computed(() => route.params.type);
 
+const loading = ref(true);
+const orgNotFound = ref(false);
 const orgInfo = ref(null);
 const members = ref([]);
 const repos = ref({ model: [], dataset: [], space: [] });
@@ -328,12 +359,22 @@ function goToUser(username) {
   router.push(`/${username}`);
 }
 
-async function loadOrgInfo() {
+async function checkOrgExists() {
   try {
-    const { data } = await orgAPI.get(orgname.value);
+    // Check org exists (WITH fallback to check all sources)
+    const { data } = await axios.get(`/org/${orgname.value}`, {
+      params: { fallback: true },
+    });
     orgInfo.value = data;
+    return true;
   } catch (err) {
+    if (err.response?.status === 404) {
+      // Not found in local or any fallback source
+      orgNotFound.value = true;
+      return false;
+    }
     console.error("Failed to load org info:", err);
+    return true; // Continue on non-404 errors
   }
 }
 
@@ -349,9 +390,9 @@ async function loadMembers() {
 async function loadRepos() {
   try {
     const [models, datasets, spaces] = await Promise.all([
-      repoAPI.listRepos("model", { author: orgname.value }),
-      repoAPI.listRepos("dataset", { author: orgname.value }),
-      repoAPI.listRepos("space", { author: orgname.value }),
+      repoAPI.listRepos("model", { author: orgname.value, limit: 100000 }),
+      repoAPI.listRepos("dataset", { author: orgname.value, limit: 100000 }),
+      repoAPI.listRepos("space", { author: orgname.value, limit: 100000 }),
     ]);
 
     repos.value = {
@@ -364,9 +405,22 @@ async function loadRepos() {
   }
 }
 
-onMounted(() => {
-  loadOrgInfo();
-  loadMembers();
-  loadRepos();
+onMounted(async () => {
+  try {
+    loading.value = true;
+
+    // Check if org exists (with fallback)
+    const orgExists = await checkOrgExists();
+    if (!orgExists) {
+      // Organization not found - stop loading other data
+      return;
+    }
+
+    // Organization exists - load members and repos
+    loadMembers();
+    await loadRepos();
+  } finally {
+    loading.value = false;
+  }
 });
 </script>

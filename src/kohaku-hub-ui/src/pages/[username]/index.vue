@@ -825,10 +825,11 @@ async function checkUserExists() {
 
 async function loadUserData() {
   try {
-    // Get user overview which returns all repos
+    // Get user overview which returns all repos (use very high limit to get all repos)
     const response = await repoAPI.getUserOverview(
       username.value,
       sortBy.value,
+      100000, // Very high limit to get all repos
     );
     repos.value = response.data;
     return true;
