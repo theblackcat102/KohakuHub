@@ -7,7 +7,6 @@ large file uploads (>10MB). It provides presigned S3 URLs for direct uploads.
 import asyncio
 import base64
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -23,12 +22,12 @@ from kohakuhub.auth.permissions import (
     check_repo_write_permission,
 )
 from kohakuhub.utils.s3 import (
-    MULTIPART_CHUNK_SIZE,
-    MULTIPART_THRESHOLD,
     complete_multipart_upload,
     generate_download_presigned_url,
     generate_multipart_upload_urls,
     generate_upload_presigned_url,
+    get_multipart_chunk_size,
+    get_multipart_threshold,
     get_object_metadata,
     object_exists,
 )
@@ -135,15 +134,17 @@ async def process_upload_object(
             # No actions = already exists
         )
 
-    # Check if multipart upload required (>100MB)
+    # Check if multipart upload required
     # HuggingFace clients detect multipart by presence of 'chunk_size' in header
-    use_multipart = size > MULTIPART_THRESHOLD
+    multipart_threshold = get_multipart_threshold()
+    multipart_chunk_size = get_multipart_chunk_size()
+    use_multipart = size > multipart_threshold
 
     if use_multipart:
         # Multipart upload for large files
         try:
             # Calculate number of parts needed
-            part_count = (size + MULTIPART_CHUNK_SIZE - 1) // MULTIPART_CHUNK_SIZE
+            part_count = (size + multipart_chunk_size - 1) // multipart_chunk_size
 
             # Generate multipart upload URLs
             multipart_info = await generate_multipart_upload_urls(
@@ -155,14 +156,14 @@ async def process_upload_object(
 
             logger.info(
                 f"Generated multipart upload for {oid[:8]}: "
-                f"{part_count} parts, chunk_size={MULTIPART_CHUNK_SIZE}"
+                f"{part_count} parts, chunk_size={multipart_chunk_size}"
             )
 
             # Build response compatible with HuggingFace clients
             # The 'chunk_size' in header tells client to use multipart upload
             # Part URLs must be in header with numeric string keys ("1", "2", "3", etc.)
             header = {
-                "chunk_size": str(MULTIPART_CHUNK_SIZE),  # Signal multipart upload
+                "chunk_size": str(multipart_chunk_size),  # Signal multipart upload
                 "upload_id": multipart_info["upload_id"],
             }
 

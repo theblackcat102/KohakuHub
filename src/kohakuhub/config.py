@@ -83,6 +83,13 @@ class AppConfig(BaseModel):
     # 5MB file -> ~6.7MB base64, leaving room for multiple files in one commit
     lfs_threshold_bytes: int = 5 * 1000 * 1000
     debug_log_payloads: bool = False
+    # LFS Multipart Upload settings
+    lfs_multipart_threshold_bytes: int = (
+        100 * 1000 * 1000
+    )  # 100 MB - use multipart for files larger than this
+    lfs_multipart_chunk_size_bytes: int = (
+        50 * 1000 * 1000
+    )  # 50 MB - size of each part (S3 minimum is 5MB except last part)
     # LFS Garbage Collection settings
     lfs_keep_versions: int = 5  # Keep last K versions of each file
     lfs_auto_gc: bool = False  # Auto-delete old LFS objects on commit

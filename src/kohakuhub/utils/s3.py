@@ -11,13 +11,29 @@ from kohakuhub.logger import get_logger
 
 logger = get_logger("S3")
 
-# Multipart upload configuration
-MULTIPART_THRESHOLD = (
-    128 * 1024 * 1024
-)  # 128 MB - use multipart for files larger than this
-MULTIPART_CHUNK_SIZE = (
-    32 * 1024 * 1024
-)  # 32 MB per part (minimum is 5MB, except last part)
+
+def get_multipart_threshold() -> int:
+    """Get multipart upload threshold from config.
+
+    Returns:
+        Threshold in bytes for when to use multipart upload
+    """
+    return cfg.app.lfs_multipart_threshold_bytes
+
+
+def get_multipart_chunk_size() -> int:
+    """Get multipart upload chunk size from config.
+
+    Returns:
+        Chunk size in bytes for each part in multipart upload
+    """
+    return cfg.app.lfs_multipart_chunk_size_bytes
+
+
+# Backward compatibility: Export as constants (values read from config)
+# These will always return current config values
+MULTIPART_THRESHOLD = property(lambda self: get_multipart_threshold())
+MULTIPART_CHUNK_SIZE = property(lambda self: get_multipart_chunk_size())
 
 
 def get_s3_client():
