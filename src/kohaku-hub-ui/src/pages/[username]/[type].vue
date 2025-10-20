@@ -598,6 +598,13 @@ onMounted(async () => {
   try {
     loading.value = true;
 
+    // Validate type parameter (must be models, datasets, or spaces)
+    if (!["models", "datasets", "spaces"].includes(currentType.value)) {
+      // Invalid type - redirect to user index page
+      router.replace(`/${username.value}`);
+      return;
+    }
+
     // Check if this is actually a local organization
     const isOrg = await checkIfOrganization();
     if (isOrg) return; // Already redirected

@@ -409,6 +409,13 @@ onMounted(async () => {
   try {
     loading.value = true;
 
+    // Validate type parameter (must be models, datasets, or spaces)
+    if (!["models", "datasets", "spaces"].includes(currentType.value)) {
+      // Invalid type - redirect to org index page
+      router.replace(`/organizations/${orgname.value}`);
+      return;
+    }
+
     // Check if org exists (with fallback)
     const orgExists = await checkOrgExists();
     if (!orgExists) {
