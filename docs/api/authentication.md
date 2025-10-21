@@ -10,36 +10,36 @@ All auth endpoints.
 
 ## Register
 
-\`\`\`bash
+```bash
 POST /auth/register
 {
   "username": "alice",
   "email": "alice@example.com",
   "password": "secure123"
 }
-\`\`\`
+```
 
 ## Login
 
-\`\`\`bash
+```bash
 POST /auth/login
 {
   "username": "alice",
   "password": "secure123"
 }
-\`\`\`
+```
 
 ## Tokens
 
-\`\`\`bash
+```bash
 POST /auth/tokens
 GET /auth/tokens
 DELETE /auth/tokens/{id}
-\`\`\`
+```
 
 ## Email Verification
 
-\`\`\`bash
+```bash
 POST /auth/verify-email/{token}
 POST /auth/resend-verification
-\`\`\`
+```

@@ -48,7 +48,7 @@ The fallback system allows transparent access to external repositories:
 
 ### Environment Variables
 
-\`\`\`yaml
+```yaml
 KOHAKU_HUB_FALLBACK_ENABLED: true
 KOHAKU_HUB_FALLBACK_CACHE_TTL: 300  # 5 minutes
 KOHAKU_HUB_FALLBACK_TIMEOUT: 10     # Request timeout
@@ -64,31 +64,31 @@ KOHAKU_HUB_FALLBACK_SOURCES: |
       "source_type": "huggingface"
     }
   ]
-\`\`\`
+```
 
 ### Multiple Sources
 
 Lower priority = checked first:
 
-\`\`\`json
+```json
 [
   {"url": "https://internal-hub.company.com", "priority": 1, "source_type": "kohakuhub"},
   {"url": "https://huggingface.co", "priority": 2, "source_type": "huggingface"}
 ]
-\`\`\`
+```
 
 ### Per-Namespace Sources
 
 Only active for specific user/org:
 
-\`\`\`json
+```json
 {
   "namespace": "ml-team",
   "url": "https://team-hub.company.com",
   "priority": 1,
   "source_type": "kohakuhub"
 }
-\`\`\`
+```
 
 ---
 
@@ -162,10 +162,10 @@ Automatic transformation by fallback client!
 
 Disable fallback per-request:
 
-\`\`\`
+```
 GET /api/models?fallback=false  # Local only
 GET /api/models?fallback=true   # With external (default)
-\`\`\`
+```
 
 Used on:
 - Homepage trending (local only)
@@ -244,7 +244,7 @@ Used on:
 
 **Admin endpoints:**
 
-\`\`\`
+```
 POST   /admin/api/fallback-sources        # Create
 GET    /admin/api/fallback-sources        # List
 GET    /admin/api/fallback-sources/{id}   # Get
@@ -252,18 +252,18 @@ PUT    /admin/api/fallback-sources/{id}   # Update
 DELETE /admin/api/fallback-sources/{id}   # Delete
 GET    /admin/api/fallback-sources/cache/stats   # Stats
 DELETE /admin/api/fallback-sources/cache/clear  # Clear
-\`\`\`
+```
 
 **Response fields:**
 
-\`\`\`json
+```json
 {
   "id": "repo-id",
   "_source": "HuggingFace",
   "_source_url": "https://huggingface.co",
   "_partial": true  // For user profiles with missing fields
 }
-\`\`\`
+```
 
 ---
 

@@ -29,22 +29,22 @@ Storage limits for users, organizations, and repositories.
 
 ### Server Defaults
 
-\`\`\`yaml
+```yaml
 # Environment variables
 KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES: null     # Unlimited
 KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES: null    # Unlimited
 KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES: null      # Unlimited
 KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES: null     # Unlimited
-\`\`\`
+```
 
 **Example with limits:**
 
-\`\`\`yaml
+```yaml
 KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES: 10737418240   # 10GB
 KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES: 5368709120   # 5GB
 KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES: 107374182400   # 100GB
 KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES: 53687091200   # 50GB
-\`\`\`
+```
 
 ### Per-User Quotas
 
@@ -57,7 +57,7 @@ KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES: 53687091200   # 50GB
 
 **API:**
 
-\`\`\`bash
+```bash
 # Get user quota
 curl http://localhost:28080/api/quota/username
 
@@ -70,17 +70,17 @@ curl http://localhost:28080/api/quota/username
   "public_percentage_used": 0.011,
   "private_percentage_used": 0.142
 }
-\`\`\`
+```
 
 ### Per-Repository Quotas
 
 **Repository-specific limits:**
 
-\`\`\`bash
+```bash
 # Via API (admin only)
 curl -X PUT http://localhost:28080/api/models/username/repo/settings \\
   -d '{"quota_bytes": 1073741824}'  # 1GB limit for this repo
-\`\`\`
+```
 
 **Inheritance:**
 - If repo quota is NULL → Inherits from namespace
@@ -99,14 +99,14 @@ curl -X PUT http://localhost:28080/api/models/username/repo/settings \\
 
 **API:**
 
-\`\`\`bash
+```bash
 # Public quota (anyone can view)
 curl http://localhost:28080/api/quota/username/public
 
 # Full quota (authenticated users)
 curl http://localhost:28080/api/quota/username \\
   -H "Authorization: Bearer token"
-\`\`\`
+```
 
 ### Repository Quota
 
@@ -116,9 +116,9 @@ curl http://localhost:28080/api/quota/username \\
 
 **API:**
 
-\`\`\`bash
+```bash
 curl http://localhost:28080/api/quota/repo/model/username/repo
-\`\`\`
+```
 
 ---
 
@@ -155,7 +155,7 @@ curl http://localhost:28080/api/quota/repo/model/username/repo
 
 **How:**
 
-\`\`\`bash
+```bash
 # Single user
 curl -X POST http://localhost:28080/admin/api/quota/username/recalculate \\
   -H "X-Admin-Token: admin_token"
@@ -165,7 +165,7 @@ curl -X POST http://localhost:28080/admin/api/quota/repo/model/username/repo/rec
 
 # All repos (slow!)
 curl -X POST http://localhost:28080/admin/api/repositories/recalculate-all
-\`\`\`
+```
 
 ### View Storage Breakdown
 

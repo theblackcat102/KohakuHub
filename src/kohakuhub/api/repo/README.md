@@ -1,192 +1,56 @@
-# Repository Management Module
+# Repository API Module
 
 ## Overview
 
-The `kohakuhub.api.repo` module is the core repository management system for KohakuHub, providing a comprehensive API layer for repository operations. This module implements HuggingFace Hub-compatible endpoints while integrating with LakeFS for Git-like version control and object storage management.
-
-## Purpose
-
-This module serves as the primary interface for:
-
-- Managing repository lifecycle (creation, deletion, moving, squashing)
-- Retrieving repository information and metadata
-- Browsing repository file trees and directory structures
-- Listing repositories with filtering and search capabilities
-- Maintaining HuggingFace Hub API compatibility
-- Managing large file storage (LFS) with garbage collection
+The `kohakuhub.api.repo` module is responsible for all repository-related operations in KohakuHub. It provides a comprehensive set of endpoints for creating, deleting, moving, and inspecting repositories, as well as browsing their file trees. This module is a cornerstone of the Hugging Face API compatibility layer.
 
 ## Key Features
 
-### Repository CRUD Operations
-- **Create**: Initialize new repositories (models, datasets, spaces) with LakeFS integration and database tracking
-- **Delete**: Remove repositories with proper cleanup of storage, metadata, and quota tracking
-- **Move**: Migrate repositories between namespaces (users/organizations) with preservation of history and files
-- **Squash**: Consolidate repository commits to optimize storage and history
-
-### Repository Information
-- **Individual Repository Info**: Retrieve detailed metadata including author, visibility, tags, and statistics
-- **Repository Listing**: Query repositories with filtering by type (models/datasets/spaces), search, author, and privacy settings
-- **User Repositories**: List all repositories owned by a specific user
-
-### Tree Browsing
-- **Directory Listing**: Navigate repository file structure with support for nested directories
-- **Path Information**: Retrieve metadata for multiple files/directories in a single request
-- **Statistics**: Calculate folder sizes and file counts recursively
-- **Revision Support**: Browse repository content at specific commits or branches
-
-### HuggingFace Integration
-- **API Compatibility**: Implements HuggingFace Hub-compatible endpoints and error responses
-- **Client Support**: Enables seamless integration with HuggingFace Hub Python client
-- **Error Handling**: Provides HF-compatible error codes and messages for standard scenarios
-
-### Garbage Collection
-- **LFS Object Tracking**: Monitor large file storage objects across repository versions
-- **Version Cleanup**: Remove old LFS versions while preserving recoverability
-- **Storage Optimization**: Identify and clean up unreferenced objects
-- **Commit Synchronization**: Maintain consistency between file tables and commit history
+- **Repository Lifecycle Management**: Endpoints for creating, deleting, and moving/renaming repositories.
+- **Repository Inspection**: Retrieve detailed information about a repository, including its files, commit history, and storage usage.
+- **File Tree Browsing**: List the contents of a repository at a specific revision, with support for recursive listing.
+- **Garbage Collection**: Utilities for cleaning up unreferenced LFS objects and other repository-related storage.
+- **Hugging Face Compatibility**: A utility sub-module (`hf.py`) provides helper functions for generating Hugging Face-compatible error responses and data formats.
 
 ## Module Structure
 
-### Core Components
+- **`routers/`**: Contains the FastAPI routers that define the API endpoints.
+  - **`crud.py`**: Handles repository creation, deletion, and moving (`/repos/create`, `/repos/delete`, `/repos/move`).
+  - **`info.py`**: Provides endpoints for listing repositories and retrieving detailed information about a specific repository.
+  - **`tree.py`**: Implements file tree browsing and path information endpoints.
+- **`utils/`**: Contains utility functions supporting the repository operations.
+  - **`gc.py`**: Implements the logic for garbage collecting old LFS objects and cleaning up storage when a repository is deleted or moved.
+  - **`hf.py`**: A crucial component for Hugging Face compatibility, providing functions to generate error responses with the specific headers and error codes that `huggingface_hub` client expects.
 
-**`__init__.py`**
-- Module initialization and documentation
+## How It Works
 
-### Routers
+### Repository Creation
+When a new repository is created, a corresponding repository is also created in LakeFS. The metadata, such as the owner and privacy status, is stored in the local database.
 
-The `routers/` subdirectory contains FastAPI route handlers organized by functionality:
+### Repository Deletion
+Deleting a repository is an irreversible operation that involves:
+1.  Cleaning up all associated S3 storage, including LFS objects (with checks to avoid deleting objects still used by other repositories).
+2.  Deleting the repository from LakeFS.
+3.  Deleting the repository's metadata from the local database.
 
-**`crud.py`** - Repository CRUD Operations
-- `POST /repos/create` - Create new repository
-- `DELETE /repos/delete` - Delete existing repository
-- `POST /repos/move` - Move repository to different namespace
-- `POST /repos/squash` - Squash repository commits
+### File Tree Browsing
+The file tree is generated by listing objects in the corresponding LakeFS repository at a given revision. The module enriches this information with metadata from the local database, such as LFS details.
 
-**`info.py`** - Repository Information Endpoints
-- `GET /{repo_type}s/{namespace}/{repo_name}` - Get repository details
-- `GET /{repo_type}s` - List repositories with filters
-- `GET /users/{username}/repos` - List user's repositories
+## API Endpoints
 
-**`tree.py`** - Repository Tree Browsing
-- `GET /{repo_type}s/{namespace}/{repo_name}/tree/{revision}{path}` - List directory contents
-- `POST /{repo_type}s/{namespace}/{repo_name}/paths-info/{revision}` - Get info for multiple paths
+### CRUD
+- `POST /repos/create`: Create a new repository.
+- `DELETE /repos/delete`: Delete a repository.
+- `POST /repos/move`: Move or rename a repository.
+- `POST /repos/squash`: Squash a repository's history.
 
-### Utilities
+### Info
+- `GET /models/{namespace}/{repo_name}`: Get information about a model repository.
+- `GET /datasets/{namespace}/{repo_name}`: Get information about a dataset repository.
+- `GET /spaces/{namespace}/{repo_name}`: Get information about a space repository.
+- `GET /models`, `/datasets`, `/spaces`: List repositories of a specific type.
+- `GET /users/{username}/repos`: List all repositories for a user or organization.
 
-The `utils/` subdirectory provides supporting functionality:
-
-**`hf.py`** - HuggingFace Hub Compatibility
-- Error response generators matching HF API format
-- Error code definitions and mappings
-- DateTime formatting for HF compatibility
-- LakeFS error detection and translation
-
-**`gc.py`** - Garbage Collection Utilities
-- LFS object tracking and version management
-- Storage cleanup and recoverability checks
-- Commit history synchronization
-- Object reference counting and cleanup
-
-## Repository Operations Management
-
-### Storage Architecture
-
-The module integrates multiple storage layers:
-
-1. **LakeFS**: Provides Git-like version control for repository content
-   - Branch and commit management
-   - Object storage with deduplication
-   - Staging and merging operations
-
-2. **S3-Compatible Storage**: Underlying object storage for LFS files
-   - Large file storage with content-addressable naming
-   - Efficient copying and deletion operations
-   - Support for multi-part uploads
-
-3. **Database**: PostgreSQL/SQLAlchemy for metadata
-   - Repository records (name, type, visibility, owner)
-   - File tracking for LFS objects
-   - Quota and usage statistics
-   - User and organization relationships
-
-### Permission System
-
-Repository operations enforce access control through:
-
-- User authentication via JWT tokens
-- Permission checks for read/write/admin operations
-- Organization membership validation
-- Privacy settings (public/private repositories)
-- Quota enforcement for storage limits
-
-### Lifecycle Management
-
-**Creation Flow**:
-1. Validate user permissions and quota availability
-2. Normalize and validate repository name
-3. Create LakeFS repository with initial branch
-4. Initialize database records
-5. Set up default files (README, .gitattributes)
-6. Track initial commit in quota system
-
-**Deletion Flow**:
-1. Verify user has delete permissions
-2. Mark repository as deleted in database
-3. Run garbage collection to clean up LFS objects
-4. Delete LakeFS repository
-5. Remove S3 objects with repository prefix
-6. Update user quota usage
-
-**Move Flow**:
-1. Validate source and destination permissions
-2. Rename LakeFS repository
-3. Copy S3 objects to new namespace prefix
-4. Update database records (repository, files, commits)
-5. Delete old S3 objects
-6. Update quota tracking for both parties
-
-### Version Control Integration
-
-The module maintains consistency across:
-
-- **Commits**: Tracked in database with metadata and parent relationships
-- **Branches**: Managed through LakeFS with HEAD tracking
-- **Files**: Versioned with LFS for large files, regular Git for small files
-- **Tags**: Supported through LakeFS tag mechanism
-
-### Error Handling
-
-Comprehensive error handling includes:
-
-- HuggingFace-compatible error responses for client integration
-- LakeFS error translation (404s, revision errors, etc.)
-- Database transaction rollbacks on failures
-- Detailed logging for debugging and auditing
-- Graceful degradation for non-critical operations
-
-## Dependencies
-
-Key dependencies include:
-
-- **FastAPI**: Web framework for API endpoints
-- **LakeFS**: Version control and object storage
-- **SQLAlchemy**: Database ORM for metadata
-- **Pydantic**: Request/response validation
-- **boto3**: S3 operations (via utils)
-
-## Usage Context
-
-This module is mounted into the main KohakuHub API application and provides endpoints that:
-
-- Support the web UI for repository management
-- Enable CLI operations for repository lifecycle
-- Provide HuggingFace Hub-compatible API for existing tools
-- Facilitate programmatic repository access via REST API
-
-## Notes
-
-- All repository operations are atomic with database transactions
-- LFS objects are tracked for efficient garbage collection
-- Quota enforcement prevents storage abuse
-- Repository names are validated and normalized for consistency
-- Operations support both user and organization namespaces
+### Tree
+- `GET /{repo_type}s/{namespace}/{repo_name}/tree/{revision}`: List the file tree of a repository at a specific revision.
+- `POST /{repo_type}s/{namespace}/{repo_name}/paths-info/{revision}`: Get information about specific paths in a repository.

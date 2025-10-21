@@ -11,7 +11,7 @@ Git-like branch management.
 ## Operations
 
 **Create:**
-\`\`\`bash
+```bash
 POST /api/repos/branches/create
 {
   "repo_type": "model",
@@ -20,26 +20,26 @@ POST /api/repos/branches/create
   "branch": "dev",
   "revision": "main"
 }
-\`\`\`
+```
 
 **Delete:**
-\`\`\`bash
+```bash
 DELETE /api/repos/branches/delete
-\`\`\`
+```
 
 **Revert:**
-\`\`\`bash
+```bash
 POST /api/repos/branches/revert
-\`\`\`
+```
 
 **Reset:**
-\`\`\`bash
+```bash
 POST /api/repos/branches/reset
-\`\`\`
+```
 
 **Cherry-pick:**
-\`\`\`bash
+```bash
 POST /api/repos/branches/cherry-pick
-\`\`\`
+```
 
 See API.md for full details.

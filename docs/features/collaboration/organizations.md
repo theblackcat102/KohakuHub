@@ -16,9 +16,9 @@ Create teams and manage shared repositories.
 3. Create
 
 **CLI:**
-\`\`\`bash
+```bash
 kohub-cli org create my-team --description "AI Team"
-\`\`\`
+```
 
 ## Roles
 
@@ -28,11 +28,11 @@ kohub-cli org create my-team --description "AI Team"
 
 ## Manage Members
 
-\`\`\`bash
+```bash
 kohub-cli org member add my-team alice --role admin
 kohub-cli org member remove my-team bob
 kohub-cli org member list my-team
-\`\`\`
+```
 
 ## Features
 

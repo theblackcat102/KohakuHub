@@ -29,13 +29,13 @@ Everything you need to start using KohakuHub.
 
 ### 3. Configure CLI
 
-\`\`\`bash
+```bash
 export HF_ENDPOINT=http://your-kohakuhub-instance:28080
 export HF_TOKEN=your_token_here
 
 # Permanent
 echo 'export HF_ENDPOINT=http://localhost:28080' >> ~/.bashrc
-\`\`\`
+```
 
 ---
 
@@ -43,27 +43,27 @@ echo 'export HF_ENDPOINT=http://localhost:28080' >> ~/.bashrc
 
 ### huggingface-cli
 
-\`\`\`bash
+```bash
 pip install -U huggingface_hub
 huggingface-cli login
 huggingface-cli download username/model-name
 huggingface-cli upload username/model-name file.safetensors
-\`\`\`
+```
 
 ### kohub-cli
 
-\`\`\`bash
+```bash
 pip install -e .  # From KohakuHub repo
 kohub-cli interactive  # TUI mode
 kohub-cli repo create username/model --type model
 kohub-cli org create my-team
-\`\`\`
+```
 
 ---
 
 ## 🐍 Python API
 
-\`\`\`python
+```python
 import os
 os.environ['HF_ENDPOINT'] = 'http://localhost:28080'
 os.environ['HF_TOKEN'] = 'your_token'
@@ -81,18 +81,18 @@ api.upload_file(
 # Download
 from huggingface_hub import hf_hub_download
 path = hf_hub_download(repo_id="username/model", filename="config.json")
-\`\`\`
+```
 
 ---
 
 ## 🔄 Git Clone
 
-\`\`\`bash
+```bash
 git clone http://localhost:28080/username/repo.git
 cd repo
 git lfs install
 git lfs pull  # Get large files
-\`\`\`
+```
 
 ---
 

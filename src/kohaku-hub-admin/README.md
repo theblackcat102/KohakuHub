@@ -6,9 +6,11 @@ Admin web interface for managing KohakuHub users, organizations, and storage quo
 
 - **User Management**: List, view, create, delete users
 - **Email Verification**: Manage email verification status
-- **Quota Management**: Set and monitor storage quotas (separate for private/public repos)
+- **Quota Management**: Set and monitor storage quotas
+- **Database Viewer**: Raw database table inspection
+- **Fallback Source Management**: Configure external repository sources
 - **System Statistics**: View system-wide statistics
-- **Secure Authentication**: Token-based admin authentication with SHA3-512 hashing
+- **Secure Authentication**: Token-based admin authentication
 - **Dark Mode**: Full dark mode support
 
 ## Development
@@ -69,6 +71,16 @@ python scripts/generate_secret.py 64
 - Recalculate storage usage
 - Visual progress bars
 - Detailed usage statistics
+
+### 5. Database Viewer (`/database`)
+- Raw, read-only access to database tables
+- Useful for debugging and data inspection
+- Supports pagination and sorting
+
+### 6. Fallback Sources (`/fallback-sources`)
+- Configure external sources (e.g., HuggingFace)
+- Set priority and credentials for fallback repositories
+- Enable/disable sources globally
 
 ## Configuration
 

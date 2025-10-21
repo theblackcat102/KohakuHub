@@ -138,7 +138,7 @@ from kohakuhub.api.quota.util import check_quota
 
 allowed, error_msg = check_quota(
     namespace="username",
-    additional_bytes=1024 * 1024 * 100,  # 100 MB
+    additional_bytes=100 * 1000 * 1000,  # 100 MB
     is_private=True,
     is_org=False
 )
@@ -194,46 +194,17 @@ print(f"Private percentage: {info['private_percentage_used']}%")
 
 ## API Endpoints
 
-### Get Quota Information
+### Namespace Quotas
+- `GET /api/quota/{namespace}` - Get complete quota information (authenticated)
+- `PUT /api/quota/{namespace}` - Set storage quotas (admin only)
+- `POST /api/quota/{namespace}/recalculate` - Manually recalculate storage
+- `GET /api/quota/{namespace}/public` - Get public quota info with conditional private data
+- `GET /api/quota/{namespace}/repos` - List storage for all repositories in a namespace
 
-```http
-GET /api/quota/{namespace}
-Authorization: Bearer <token>
-```
-
-Returns complete quota information including private and public storage usage.
-
-### Set Storage Quota
-
-```http
-PUT /api/quota/{namespace}
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "quota_bytes": 10737418240  # 10 GB, or null for unlimited
-}
-```
-
-Requires user to be the namespace owner or organization admin.
-
-### Recalculate Storage
-
-```http
-POST /api/quota/{namespace}/recalculate
-Authorization: Bearer <token>
-```
-
-Triggers full recalculation of storage usage from LakeFS and database.
-
-### Get Public Quota Information
-
-```http
-GET /api/quota/{namespace}/public
-Authorization: Bearer <token>  # Optional
-```
-
-Returns public storage info always, plus private storage info if authorized.
+### Repository Quotas
+- `GET /api/quota/repo/{repo_type}/{namespace}/{name}` - Get repository-specific quota information
+- `PUT /api/quota/repo/{repo_type}/{namespace}/{name}` - Set repository-specific quota
+- `POST /api/quota/repo/{repo_type}/{namespace}/{name}/recalculate` - Recalculate storage for a single repository
 
 ## Error Handling
 

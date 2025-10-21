@@ -21,6 +21,11 @@ The `kohakuhub.auth` module provides a comprehensive authentication and authoriz
   - HTML and plain-text email support via SMTP
   - Automatic login after successful verification
 
+- **Invitation System**
+  - Optional invitation-only registration
+  - Invitations for joining organizations with specific roles
+  - Multi-use and expiring invitation links
+
 - **API Token Management**
   - User-managed API tokens for programmatic access
   - Token hashing using SHA3-512
@@ -133,7 +138,7 @@ FastAPI routes implementing authentication endpoints:
 
 **Endpoints:**
 
-- `POST /auth/register` - User registration with username, email, and password. Validates uniqueness, checks normalized name conflicts with users and organizations. Creates user atomically and optionally sends verification email.
+- `POST /auth/register` - User registration with username, email, and password. Supports an optional `invitation_token` for invitation-only mode. Validates uniqueness, checks normalized name conflicts with users and organizations. Creates user atomically and optionally sends verification email.
 
 - `GET /auth/verify-email?token=<token>` - Email verification endpoint. Validates token, marks email as verified, creates login session, and redirects to user profile with session cookie set.
 

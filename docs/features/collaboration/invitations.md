@@ -10,9 +10,9 @@ Control who can register and auto-add to organizations.
 
 ## Enable Invitation-Only Mode
 
-\`\`\`yaml
+```yaml
 KOHAKU_HUB_INVITATION_ONLY: true
-\`\`\`
+```
 
 ## Create Invitations
 
@@ -29,7 +29,7 @@ KOHAKU_HUB_INVITATION_ONLY: true
 
 ## API
 
-\`\`\`bash
+```bash
 POST /admin/api/invitations/register
 {
   "max_usage": 10,
@@ -37,4 +37,4 @@ POST /admin/api/invitations/register
   "org_id": 5,
   "role": "member"
 }
-\`\`\`
+```

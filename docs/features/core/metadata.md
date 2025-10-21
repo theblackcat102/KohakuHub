@@ -31,7 +31,7 @@ KohakuHub parses YAML frontmatter from README.md and displays it beautifully:
 
 ### All Repository Types
 
-\`\`\`yaml
+```yaml
 ---
 license: mit                    # License identifier
 language:                       # Language codes
@@ -41,11 +41,11 @@ tags:                          # General tags
   - computer-vision
   - pytorch
 ---
-\`\`\`
+```
 
 ### Models
 
-\`\`\`yaml
+```yaml
 ---
 library_name: transformers     # Framework
 pipeline_tag: text-classification  # Task type
@@ -64,11 +64,11 @@ eval_results:                  # Structured evaluation
       accuracy: 0.953
       f1: 0.948
 ---
-\`\`\`
+```
 
 ### Datasets
 
-\`\`\`yaml
+```yaml
 ---
 task_categories:               # Task types
   - image-classification
@@ -80,7 +80,7 @@ annotations_creators:          # How annotated
 source_datasets:               # Source
   - original
 ---
-\`\`\`
+```
 
 ---
 
@@ -159,7 +159,7 @@ Tags like `dataset:KBlueLeaf/danbooru2023` become:
 
 ### Complete Model Card
 
-\`\`\`yaml
+```yaml
 ---
 license: apache-2.0
 language:
@@ -182,11 +182,11 @@ tags:
 # My Sentiment Classifier
 
 This model classifies text sentiment...
-\`\`\`
+```
 
 ### Complete Dataset Card
 
-\`\`\`yaml
+```yaml
 ---
 license: cc-by-4.0
 language: en
@@ -206,7 +206,7 @@ dataset:KBlueLeaf/danbooru2023-webp
 # My Dataset
 
 Contains 5M images...
-\`\`\`
+```
 
 ---
 
@@ -241,7 +241,7 @@ Contains 5M images...
 
 Metadata is returned in repo info responses:
 
-\`\`\`bash
+```bash
 # Get repo info (doesn't include metadata)
 curl http://localhost:28080/api/models/username/repo
 
@@ -250,7 +250,7 @@ curl http://localhost:28080/api/models/username/repo/tree/main
 
 # Download README to parse yourself
 curl http://localhost:28080/models/username/repo/resolve/main/README.md
-\`\`\`
+```
 
 **Client-side parsing:**
 - Frontend fetches README.md

@@ -16,11 +16,11 @@ Discover popular repositories and track favorites.
 - See likers: Repo page shows count
 
 **API:**
-\`\`\`bash
+```bash
 POST /{type}s/{namespace}/{name}/like
 DELETE /{type}s/{namespace}/{name}/like
 GET /users/{username}/likes
-\`\`\`
+```
 
 ## Trending Algorithm
 

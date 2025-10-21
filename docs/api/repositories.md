@@ -10,7 +10,7 @@ Manage repositories via API.
 
 ## Create
 
-\`\`\`bash
+```bash
 POST /api/repos/create
 {
   "repo_type": "model",
@@ -18,22 +18,22 @@ POST /api/repos/create
   "name": "my-model",
   "private": false
 }
-\`\`\`
+```
 
 ## Delete
 
-\`\`\`bash
+```bash
 DELETE /api/repos/delete
 {
   "repo_type": "model",
   "namespace": "username",
   "name": "my-model"
 }
-\`\`\`
+```
 
 ## Move
 
-\`\`\`bash
+```bash
 POST /api/repos/move
 {
   "from_namespace": "alice",
@@ -41,17 +41,17 @@ POST /api/repos/move
   "repo_type": "model",
   "name": "model"
 }
-\`\`\`
+```
 
 ## Squash
 
-\`\`\`bash
+```bash
 POST /api/repos/squash
 {
   "repo_type": "model",
   "namespace": "user",
   "name": "repo"
 }
-\`\`\`
+```
 
 Keeps only latest version of each file.

@@ -385,34 +385,129 @@ KohakuHub is organized into three primary modules that work together to provide 
 
 ### Configuration Requirements
 
-**Environment Variables:**
+Configuration is managed via `config.toml` and can be overridden by environment variables.
+
+**Primary Configuration:**
+- `HUB_CONFIG`: Path to a custom `config.toml` file. If not set, it defaults to `config.toml` in the working directory.
+
+**Environment Variables (override `config.toml`):**
+
 ```bash
-# Application
-KOHAKU_HUB_BASE_URL=https://hub.example.com
-KOHAKU_HUB_LFS_THRESHOLD_BYTES=10000000  # 10MB
-KOHAKU_HUB_SESSION_SECRET=<secure-random-secret>
+# -------------------------------------
+# --- Application Settings
+# -------------------------------------
+# Base URL of the application (e.g., https://hub.example.com)
+KOHAKU_HUB_BASE_URL=http://localhost:48888
+# API base path
+KOHAKU_HUB_API_BASE=/api
+# Site name displayed in the UI
+KOHAKU_HUB_SITE_NAME=KohakuHub
+# Log request/response payloads for debugging (can expose sensitive data)
+KOHAKU_HUB_DEBUG_LOG_PAYLOADS=false
 
-# LakeFS
-KOHAKU_HUB_LAKEFS_ENDPOINT=http://lakefs:8000
-KOHAKU_HUB_LAKEFS_ACCESS_KEY=<lakefs-access-key>
-KOHAKU_HUB_LAKEFS_SECRET_KEY=<lakefs-secret-key>
+# -------------------------------------
+# --- S3 Storage Settings
+# -------------------------------------
+# Public-facing S3 endpoint (for client downloads, can be a CDN)
+KOHAKU_HUB_S3_PUBLIC_ENDPOINT=http://localhost:9000
+# Internal S3 endpoint for the application
+KOHAKU_HUB_S3_ENDPOINT=http://localhost:9000
+KOHAKU_HUB_S3_ACCESS_KEY=test-access-key
+KOHAKU_HUB_S3_SECRET_KEY=test-secret-key
+KOHAKU_HUB_S3_BUCKET=test-bucket
+# S3 region (e.g., us-east-1)
+KOHAKU_HUB_S3_REGION=us-east-1
+# S3 signature version (e.g., s3v4 for AWS S3/R2)
+KOHAKU_HUB_S3_SIGNATURE_VERSION=
 
-# S3 Storage
-KOHAKU_HUB_S3_ENDPOINT=http://minio:9000
-KOHAKU_HUB_S3_PUBLIC_ENDPOINT=https://storage.example.com
-KOHAKU_HUB_S3_ACCESS_KEY=<s3-access-key>
-KOHAKU_HUB_S3_SECRET_KEY=<s3-secret-key>
-KOHAKU_HUB_S3_BUCKET=hub-storage
+# -------------------------------------
+# --- LakeFS Settings
+# -------------------------------------
+KOHAKU_HUB_LAKEFS_ENDPOINT=http://localhost:8000
+KOHAKU_HUB_LAKEFS_ACCESS_KEY=test-access-key
+KOHAKU_HUB_LAKEFS_SECRET_KEY=test-secret-key
+# Default namespace for repositories in LakeFS
+KOHAKU_HUB_LAKEFS_REPO_NAMESPACE=hf
 
-# Database
-KOHAKU_HUB_DB_BACKEND=postgres
-KOHAKU_HUB_DATABASE_URL=postgresql://user:pass@postgres:5432/hubdb
+# -------------------------------------
+# --- Database Settings
+# -------------------------------------
+# "sqlite" or "postgres"
+KOHAKU_HUB_DB_BACKEND=sqlite
+# Connection URL (e.g., "sqlite:///./hub.db" or "postgresql://user:pass@host:port/dbname")
+KOHAKU_HUB_DATABASE_URL=sqlite:///./hub.db
 
-# Auth & Email
-KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=true
-KOHAKU_HUB_SMTP_ENABLED=true
-KOHAKU_HUB_SMTP_HOST=smtp.example.com
+# -------------------------------------
+# --- Git LFS Settings
+# -------------------------------------
+# File size threshold to trigger LFS (bytes)
+KOHAKU_HUB_LFS_THRESHOLD_BYTES=5242880 # 5MB
+# Threshold for using multipart uploads for LFS (bytes)
+KOHAKU_HUB_LFS_MULTIPART_THRESHOLD_BYTES=104857600 # 100MB
+# Chunk size for LFS multipart uploads (bytes)
+KOHAKU_HUB_LFS_MULTIPART_CHUNK_SIZE_BYTES=52428800 # 50MB
+# Number of LFS file versions to keep during garbage collection
+KOHAKU_HUB_LFS_KEEP_VERSIONS=5
+# Automatically run garbage collection on commits
+KOHAKU_HUB_LFS_AUTO_GC=false
+
+# -------------------------------------
+# --- Authentication & Session Settings
+# -------------------------------------
+# Require email verification for new users
+KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
+# Disable public registration, require invitation
+KOHAKU_HUB_INVITATION_ONLY=false
+# Secret key for session management (CHANGE IN PRODUCTION)
+KOHAKU_HUB_SESSION_SECRET=change-me-in-production
+# Session cookie expiration (hours)
+KOHAKU_HUB_SESSION_EXPIRE_HOURS=168 # 7 days
+# API token expiration (days)
+KOHAKU_HUB_TOKEN_EXPIRE_DAYS=365
+
+# -------------------------------------
+# --- Admin API Settings
+# -------------------------------------
+KOHAKU_HUB_ADMIN_ENABLED=true
+# Secret token for accessing the admin API (CHANGE IN PRODUCTION)
+KOHAKU_HUB_ADMIN_SECRET_TOKEN=change-me-in-production
+
+# -------------------------------------
+# --- Storage Quota Settings
+# -------------------------------------
+# Default private repo quota for users (bytes, blank for unlimited)
+KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=
+# Default public repo quota for users (bytes, blank for unlimited)
+KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=
+# Default private repo quota for organizations (bytes, blank for unlimited)
+KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=
+# Default public repo quota for organizations (bytes, blank for unlimited)
+KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=
+
+# -------------------------------------
+# --- Fallback Source Settings
+# -------------------------------------
+# Enable fallback to external sources (e.g., HuggingFace)
+KOHAKU_HUB_FALLBACK_ENABLED=true
+# Cache TTL for fallback repo mappings (seconds)
+KOHAKU_HUB_FALLBACK_CACHE_TTL=300
+# HTTP request timeout for external sources (seconds)
+KOHAKU_HUB_FALLBACK_TIMEOUT=10
+# Max concurrent requests to external sources
+KOHAKU_HUB_FALLBACK_MAX_CONCURRENT=5
+# JSON list of global fallback sources
+KOHAKU_HUB_FALLBACK_SOURCES='[]'
+
+# -------------------------------------
+# --- SMTP (Email) Settings
+# -------------------------------------
+KOHAKU_HUB_SMTP_ENABLED=false
+KOHAKU_HUB_SMTP_HOST=localhost
 KOHAKU_HUB_SMTP_PORT=587
+KOHAKU_HUB_SMTP_USERNAME=
+KOHAKU_HUB_SMTP_PASSWORD=
+KOHAKU_HUB_SMTP_FROM=noreply@localhost
+KOHAKU_HUB_SMTP_TLS=true
 ```
 
 **Scaling Considerations:**

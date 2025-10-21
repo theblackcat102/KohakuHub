@@ -35,10 +35,10 @@ cp docker-compose.example.yml docker-compose.yml
 ### 3. Build Frontend
 
 ```bash
-npm install --prefix ./src/kohaku-hub-ui
-npm install --prefix ./src/kohaku-hub-admin
-npm run build --prefix ./src/kohaku-hub-ui
-npm run build --prefix ./src/kohaku-hub-admin
+npm install --prefix src/kohaku-hub-ui
+npm install --prefix src/kohaku-hub-admin
+npm run build --prefix src/kohaku-hub-ui
+npm run build --prefix src/kohaku-hub-admin
 ```
 
 ### 4. Start Services
@@ -107,40 +107,34 @@ Administration is handled through the standalone admin portal at http://localhos
 
 See [docs/Admin.md](./Admin.md) for complete admin portal documentation.
 
-### 2. Create User Account (Optional)
+### 2. Create User Account
 
-Regular user accounts can be created for testing uploads/downloads:
+Regular user accounts can be created for testing uploads/downloads via the Web UI:
 
-**Via Web UI:**
 - Go to http://localhost:28080
 - Click "Register"
 - Create account
-
-**Via CLI:**
-```bash
-pip install -e .
-kohub-cli auth register
-```
 
 ### 3. Get LakeFS Credentials
 
 LakeFS credentials are auto-generated on first startup:
 
 ```bash
-cat docker/hub-meta/hub-api/credentials.env
+cat hub-meta/hub-api/credentials.env
 ```
 
 Use these to login to LakeFS UI at http://localhost:28000
 
 ### 4. Test with Python
 
+After creating a user and getting an API token from the UI, you can test the API:
+
 ```bash
-pip install huggingface_hub
-
+pip install -r requirements.txt
 export HF_ENDPOINT=http://localhost:28080
-export HF_TOKEN=your_token_from_ui  # Get from Web UI settings after login
+export HF_TOKEN=your_token_from_ui
 
-python scripts/test.py
+python scripts/test_hf_client.py
 ```
 
 ## Troubleshooting

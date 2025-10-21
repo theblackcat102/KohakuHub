@@ -1095,7 +1095,7 @@ stats = response.json()
 
 # Alert if storage > 80%
 total_used = stats['storage']['total_used']
-if total_used > 0.8 * (100 * 1024 * 1024 * 1024):  # 80GB
+if total_used > 0.8 * (100 * 1000 * 1000 * 1000):  # 80GB
     print("WARNING: Storage usage high!")
 
 # Alert if too many inactive users

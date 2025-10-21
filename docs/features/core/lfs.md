@@ -24,11 +24,11 @@ Git LFS integration with flexible per-repository settings.
 
 **Environment variables:**
 
-\`\`\`yaml
+```yaml
 KOHAKU_HUB_LFS_THRESHOLD_BYTES: 5000000  # 5MB (decimal: 1MB = 1,000,000)
 KOHAKU_HUB_LFS_KEEP_VERSIONS: 5          # Keep last 5 versions
 KOHAKU_HUB_LFS_AUTO_GC: false            # Manual GC only
-\`\`\`
+```
 
 **32 default suffix rules** (always use LFS):
 
@@ -65,7 +65,7 @@ KOHAKU_HUB_LFS_AUTO_GC: false            # Manual GC only
 
 ### Via CLI
 
-\`\`\`bash
+```bash
 # Set custom threshold (10MB)
 kohub-cli settings repo lfs threshold username/repo --threshold 10000000
 
@@ -83,11 +83,11 @@ kohub-cli settings repo lfs suffix username/repo --remove .custom
 
 # Clear all custom rules (keep server defaults)
 kohub-cli settings repo lfs suffix username/repo --clear
-\`\`\`
+```
 
 ### Via API
 
-\`\`\`bash
+```bash
 # Get LFS settings
 curl http://localhost:28080/api/models/username/repo/settings/lfs
 
@@ -98,7 +98,7 @@ curl -X PUT http://localhost:28080/api/models/username/repo/settings \\
     "lfs_keep_versions": 10,
     "lfs_suffix_rules": [".safetensors", ".custom"]
   }'
-\`\`\`
+```
 
 ---
 
@@ -139,17 +139,17 @@ curl -X PUT http://localhost:28080/api/models/username/repo/settings \\
 
 **Manual GC:**
 
-\`\`\`bash
+```bash
 # Via admin API
 curl -X POST http://localhost:28080/admin/api/repositories/model/username/repo/gc \\
   -H "X-Admin-Token: admin_token"
-\`\`\`
+```
 
 **Auto GC:**
 
-\`\`\`yaml
+```yaml
 KOHAKU_HUB_LFS_AUTO_GC: true  # Runs on every commit (careful!)
-\`\`\`
+```
 
 ---
 
