@@ -6,10 +6,10 @@ Uses actual Pydantic models from the source code.
 
 import uuid
 
-import pytest
-
 from tests.base import HTTPClient
 from tests.config import config
+from kohakuhub.auth.routes import CreateTokenRequest, LoginRequest, RegisterRequest
+from kohakuhub.api.repo.routers.crud import CreateRepoPayload
 
 
 class TestAuthentication:
@@ -26,9 +26,6 @@ class TestAuthentication:
 
     def test_register_login_logout_flow(self, http_client):
         """Test complete user registration, login, and logout flow."""
-        # Import actual Pydantic models
-        from kohakuhub.auth.routes import RegisterRequest, LoginRequest
-
         # Use unique username for this test
         unique_id = uuid.uuid4().hex[:6]
         test_username = f"user-{unique_id}"  # Matches ^[a-z0-9][a-z0-9-]{2,62}$
@@ -76,8 +73,6 @@ class TestAuthentication:
 
     def test_token_creation_and_usage(self, authenticated_http_client):
         """Test API token creation and usage."""
-        from kohakuhub.auth.routes import CreateTokenRequest
-
         # 1. Create token using actual model
         unique_id = uuid.uuid4().hex[:6]
         token_payload = CreateTokenRequest(name=f"token-{unique_id}")
@@ -137,8 +132,6 @@ class TestAuthentication:
 
     def test_invalid_credentials(self, http_client):
         """Test login with invalid credentials."""
-        from kohakuhub.auth.routes import LoginRequest
-
         payload = LoginRequest(username="nonexistent", password="wrongpass")
 
         resp = http_client.post("/api/auth/login", json=payload.model_dump())
@@ -151,8 +144,6 @@ class TestAuthentication:
         assert resp.status_code == 401, "Should require authentication"
 
         # Try to create repo without auth
-        from kohakuhub.api.repo.routers.crud import CreateRepoPayload
-
         payload = CreateRepoPayload(type="model", name="test-repo")
 
         resp = http_client.post("/api/repos/create", json=payload.model_dump())
@@ -160,8 +151,6 @@ class TestAuthentication:
 
     def test_duplicate_registration(self, http_client):
         """Test that duplicate usernames are rejected."""
-        from kohakuhub.auth.routes import RegisterRequest
-
         unique_id = uuid.uuid4().hex[:6]
         test_username = f"dup-{unique_id}"
         test_email = f"dup-{unique_id}@example.com"
@@ -187,8 +176,6 @@ class TestAuthentication:
 
     def test_duplicate_email_registration(self, http_client):
         """Test that duplicate emails are rejected."""
-        from kohakuhub.auth.routes import RegisterRequest
-
         unique_id = uuid.uuid4().hex[:6]
         test_username = f"email-{unique_id}"
         test_email = f"email-{unique_id}@example.com"

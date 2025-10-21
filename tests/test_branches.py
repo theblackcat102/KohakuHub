@@ -7,11 +7,16 @@ Tests the complete workflow of:
 - LFS recoverability checks
 """
 
+import base64
+import json
 import os
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
 import pytest
+import requests
 
 from tests.base import HTTPClient
 
@@ -26,8 +31,6 @@ class TestBranchRevert:
         # Create files with random content
         test_content = os.urandom(100)  # Random bytes
         lfs_content = os.urandom(2000000)  # 2MB random LFS file
-
-        import tempfile
 
         temp_dir = Path(tempfile.mkdtemp())
         (temp_dir / "revert-test.txt").write_bytes(test_content)
@@ -73,15 +76,11 @@ class TestBranchRevert:
         assert "revert-test-lfs.bin" not in files_after
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
     def test_revert_non_conflicting(self, temp_repo):
         """Revert non-latest but non-conflicting commit with LFS."""
         repo_id, repo_type, hf_client = temp_repo
-
-        import tempfile
 
         temp_dir = Path(tempfile.mkdtemp())
 
@@ -136,8 +135,6 @@ class TestBranchRevert:
         assert "set1/file1.txt" not in files
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
 
@@ -147,8 +144,6 @@ class TestBranchReset:
     def test_reset_creates_new_commit(self, temp_repo):
         """Reset should create new commit, not delete history."""
         repo_id, repo_type, hf_client = temp_repo
-
-        import tempfile
 
         temp_dir = Path(tempfile.mkdtemp())
 
@@ -200,16 +195,12 @@ class TestBranchReset:
         assert Path(downloaded).exists()
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
     @pytest.mark.lfs
     def test_reset_with_lfs_files(self, temp_repo):
         """Reset with LFS files (should preserve LFS objects)."""
         repo_id, repo_type, hf_client = temp_repo
-
-        import tempfile
 
         temp_dir = Path(tempfile.mkdtemp())
 
@@ -252,8 +243,6 @@ class TestBranchReset:
         assert Path(downloaded).stat().st_size == 2000000  # 2MB
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
 
@@ -263,8 +252,6 @@ class TestBranchMerge:
     def test_merge_branches(self, temp_repo):
         """Merge dev branch into main."""
         repo_id, repo_type, hf_client = temp_repo
-
-        import tempfile
 
         temp_dir = Path(tempfile.mkdtemp())
 
@@ -287,9 +274,6 @@ class TestBranchMerge:
         assert resp.status_code == 200
 
         # Upload different files to dev branch using direct API
-        import base64
-        import json
-
         dev_txt_content = os.urandom(200)  # Random content
         dev_lfs_content = os.urandom(2000000)  # Random 2MB LFS
 
@@ -321,8 +305,6 @@ class TestBranchMerge:
         )
 
         # Dev LFS file - upload to S3 first
-        import hashlib
-
         sha256 = hashlib.sha256(dev_lfs_content).hexdigest()
 
         # Get LFS upload URL
@@ -338,8 +320,6 @@ class TestBranchMerge:
         upload_url = lfs_resp.json()["objects"][0]["actions"]["upload"]["href"]
 
         # Upload to S3
-        import requests
-
         s3_resp = requests.put(upload_url, data=dev_lfs_content)
         assert s3_resp.status_code in (200, 204)
 
@@ -381,8 +361,6 @@ class TestBranchMerge:
         assert "dev-lfs.bin" in files
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
 

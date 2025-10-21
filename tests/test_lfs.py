@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.base import HTTPClient
+
 
 class TestLFSOperations:
     """Test LFS file operations for large files."""
@@ -60,8 +62,6 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create 50MB file
-        import tempfile
-
         size_mb = 50
         test_content = os.urandom(size_mb * 1000 * 1000)
         original_hash = hashlib.sha256(test_content).hexdigest()
@@ -98,8 +98,6 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create 5MB file (below LFS threshold)
-        import tempfile
-
         size_mb = 5
         test_content = os.urandom(size_mb * 1000 * 1000)
 
@@ -180,8 +178,6 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create HTTP client with the same user's token
-        from tests.base import HTTPClient
-
         user_http_client = HTTPClient(token=token)
 
         # Prepare LFS batch request
@@ -222,8 +218,6 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create temp folder with mixed sizes
-        import tempfile
-
         temp_dir = Path(tempfile.mkdtemp())
 
         # Small files (regular upload)
@@ -265,8 +259,6 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload LFS file
-        import tempfile
-
         test_content = os.urandom(15 * 1000 * 1000)  # 15MB
         test_file = (
             Path(tempfile.gettempdir()) / f"test_lfs_meta_{os.urandom(4).hex()}.bin"
@@ -281,8 +273,6 @@ class TestLFSOperations:
         )
 
         # Query tree with expand=true to get LFS metadata using repo owner's token
-        from tests.base import HTTPClient
-
         user_http_client = HTTPClient(token=token)
 
         namespace, repo_name = repo_id.split("/")

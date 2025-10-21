@@ -6,9 +6,13 @@ Covers both small files (inline) and large files (LFS).
 
 import hashlib
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
+
+from tests.base import HTTPClient
 
 
 class TestFileOperations:
@@ -19,8 +23,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create small test file in temp directory
-        import tempfile
-
         test_content = b"Hello, KohakuHub! This is a small test file."
         test_file = (
             Path(tempfile.gettempdir()) / f"test_small_{os.urandom(4).hex()}.txt"
@@ -52,8 +54,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create temp folder with files
-        import tempfile
-
         temp_dir = Path(tempfile.mkdtemp())
         (temp_dir / "file1.txt").write_bytes(b"File 1 content")
         (temp_dir / "file2.txt").write_bytes(b"File 2 content")
@@ -76,8 +76,6 @@ class TestFileOperations:
         assert "uploaded_folder/subdir/file3.txt" in files
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
     def test_download_file_hf_client(self, temp_repo):
@@ -85,8 +83,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload a file first
-        import tempfile
-
         test_content = b"Download test content"
         test_file = (
             Path(tempfile.gettempdir()) / f"test_download_{os.urandom(4).hex()}.txt"
@@ -118,8 +114,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload a file first
-        import tempfile
-
         test_content = b"File to be deleted"
         test_file = (
             Path(tempfile.gettempdir()) / f"test_delete_{os.urandom(4).hex()}.txt"
@@ -157,8 +151,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload multiple files
-        import tempfile
-
         temp_dir = Path(tempfile.mkdtemp())
         files_to_upload = {
             "file1.txt": b"Content 1",
@@ -186,8 +178,6 @@ class TestFileOperations:
         assert "subdir/file3.txt" in files
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
     def test_file_metadata_head_request(self, random_user, temp_repo):
@@ -196,8 +186,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload a file
-        import tempfile
-
         test_content = b"Metadata test content"
         test_file = (
             Path(tempfile.gettempdir()) / f"test_metadata_{os.urandom(4).hex()}.txt"
@@ -212,8 +200,6 @@ class TestFileOperations:
         )
 
         # HEAD request to get metadata using repo owner's token
-        from tests.base import HTTPClient
-
         user_http_client = HTTPClient(token=token)
 
         namespace, repo_name = repo_id.split("/")
@@ -235,8 +221,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload file with custom message
-        import tempfile
-
         test_content = b"Commit message test"
         test_file = (
             Path(tempfile.gettempdir()) / f"test_commit_{os.urandom(4).hex()}.txt"
@@ -265,8 +249,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create file with random content
-        import tempfile
-
         test_content = os.urandom(100 * 1000)  # 100KB random data
         original_hash = hashlib.sha256(test_content).hexdigest()
 
@@ -320,8 +302,6 @@ class TestFileOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload some files
-        import tempfile
-
         temp_dir = Path(tempfile.mkdtemp())
         (temp_dir / "file1.txt").write_bytes(b"Content 1")
         (temp_dir / "dir1").mkdir()
@@ -335,8 +315,6 @@ class TestFileOperations:
         )
 
         # Query tree endpoint using repo owner's token
-        from tests.base import HTTPClient
-
         user_http_client = HTTPClient(token=token)
 
         namespace, repo_name = repo_id.split("/")
@@ -352,6 +330,4 @@ class TestFileOperations:
         assert "file1.txt" in paths
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)

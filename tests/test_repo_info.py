@@ -3,6 +3,11 @@
 Tests repository metadata, listing, filtering, and privacy.
 """
 
+import shutil
+import tempfile
+import uuid
+from pathlib import Path
+
 import pytest
 
 from tests.base import HTTPClient
@@ -41,8 +46,6 @@ class TestRepositoryInfo:
 
     def test_list_repos_by_author(self, random_user):
         """Test listing repositories by author."""
-        import uuid
-
         username, token, hf_client = random_user
 
         unique_id = uuid.uuid4().hex[:6]
@@ -74,9 +77,6 @@ class TestRepositoryInfo:
         assert len(repos) <= 5
 
     def test_list_namespace_repos(self, random_user):
-        """Test listing all repos under a namespace (user)."""
-        import uuid
-
         username, token, hf_client = random_user
 
         unique_id = uuid.uuid4().hex[:6]
@@ -109,8 +109,6 @@ class TestRepositoryInfo:
 
     def test_private_repo_visibility(self, random_user):
         """Test that private repositories are only visible to owner."""
-        import uuid
-
         username, token, hf_client = random_user
 
         unique_id = uuid.uuid4().hex[:6]
@@ -146,9 +144,6 @@ class TestRepositoryInfo:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload file to create commit
-        import tempfile
-        from pathlib import Path
-
         temp_file = Path(tempfile.mktemp())
         temp_file.write_bytes(b"Test content")
 
@@ -204,9 +199,6 @@ class TestRepositoryInfo:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload some files
-        import tempfile
-        from pathlib import Path
-
         temp_dir = Path(tempfile.mkdtemp())
         (temp_dir / "README.md").write_bytes(b"# Test Repo")
         (temp_dir / "config.json").write_bytes(b'{"key": "value"}')
@@ -228,8 +220,6 @@ class TestRepositoryInfo:
         assert "data/file.txt" in files
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)
 
     def test_tree_recursive_listing(self, random_user, temp_repo):
@@ -238,9 +228,6 @@ class TestRepositoryInfo:
         repo_id, repo_type, hf_client = temp_repo
 
         # Upload nested structure
-        import tempfile
-        from pathlib import Path
-
         temp_dir = Path(tempfile.mkdtemp())
         (temp_dir / "level1").mkdir()
         (temp_dir / "level1" / "file1.txt").write_bytes(b"File 1")
@@ -271,6 +258,4 @@ class TestRepositoryInfo:
         assert any("level1/level2/file2.txt" in p for p in paths)
 
         # Cleanup
-        import shutil
-
         shutil.rmtree(temp_dir)

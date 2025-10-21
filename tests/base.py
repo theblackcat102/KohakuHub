@@ -1,6 +1,7 @@
 """Base test classes and utilities for KohakuHub API tests."""
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -219,8 +220,6 @@ class BaseTestCase:
     @classmethod
     def teardown_class(cls):
         """Cleanup test class."""
-        import shutil
-
         if hasattr(cls, "temp_dir") and Path(cls.temp_dir).exists():
             shutil.rmtree(cls.temp_dir)
 
