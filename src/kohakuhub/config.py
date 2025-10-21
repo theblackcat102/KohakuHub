@@ -331,6 +331,12 @@ def load_config(path: str = None) -> Config:
             lfs_threshold_bytes=int(
                 os.environ.get("KOHAKU_HUB_LFS_THRESHOLD_BYTES", "5242880")
             ),
+            lfs_multipart_threshold_bytes=int(
+                os.environ.get("KOHAKU_HUB_LFS_MULTIPART_THRESHOLD_BYTES", "104857600")
+            ),
+            lfs_multipart_chunk_size_bytes=int(
+                os.environ.get("KOHAKU_HUB_LFS_MULTIPART_CHUNK_SIZE_BYTES", "52428800")
+            ),
             lfs_keep_versions=int(os.environ.get("KOHAKU_HUB_LFS_KEEP_VERSIONS", "5")),
             lfs_auto_gc=os.environ.get("KOHAKU_HUB_LFS_AUTO_GC", "false").lower()
             == "true",
