@@ -31,25 +31,14 @@ use_tls = true
 
 [auth]
 require_email_verification = false
+invitation_only = false  # Set to true to require invitation for registration
 session_secret = "CHANGE-ME-GENERATE-RANDOM"  # Use: python -c "import secrets; print(secrets.token_urlsafe(48))"
 session_expire_hours = 168  # 7 days
 token_expire_days = 365
-# Admin secret token (for /admin/* endpoints)
-admin_secret_token = "CHANGE-ME-GENERATE-RANDOM"  # Use: python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-[app]
-base_url = "http://127.0.0.1:28080"  # Use nginx port (28080), not direct backend (48888)
-api_base = "/api"
-db_backend = "postgres"  # or "sqlite"
-database_url = "postgresql://hub:hubpass@127.0.0.1:25432/hubdb"
-auto_migrate = false  # Auto-confirm database migrations (set true for Docker)
-lfs_threshold_bytes = 10485760 # 10MB
-debug_log_payloads = false  # Log commit payloads (development only)
-# LFS Garbage Collection settings
-lfs_keep_versions = 5  # Keep last K versions of each LFS file
-lfs_auto_gc = true  # Automatically delete old LFS objects on commit
-# Site identification
-site_name = "KohakuHub"  # Customizable site name (e.g., "MyCompany Hub")
+[admin]
+enabled = true
+secret_token = "CHANGE-ME-GENERATE-RANDOM"  # Use: python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 [quota]
 # Default storage quotas for new users/organizations (in bytes, null = unlimited)
@@ -57,3 +46,30 @@ default_user_private_quota_bytes = 10_000_000_000    # 10GB for private repos
 default_user_public_quota_bytes = 100_000_000_000   # 100GB for public repos
 default_org_private_quota_bytes = 10_000_000_000    # 10GB for private repos
 default_org_public_quota_bytes = 100_000_000_000    # 100GB for public repos
+
+[fallback]
+enabled = true
+cache_ttl_seconds = 300  # 5 minutes cache for repo→source mappings
+timeout_seconds = 10
+max_concurrent_requests = 5
+# sources = []  # JSON list of fallback sources (optional)
+
+[app]
+base_url = "http://127.0.0.1:28080"  # Use nginx port (28080), not direct backend (48888)
+api_base = "/api"
+db_backend = "postgres"  # or "sqlite"
+database_url = "postgresql://hub:hubpass@127.0.0.1:25432/hubdb"
+auto_migrate = false  # Auto-confirm database migrations (set true for Docker)
+# LFS Configuration (sizes in decimal: 1MB = 1,000,000 bytes)
+lfs_threshold_bytes = 5_000_000  # 5MB - files larger use LFS
+lfs_multipart_threshold_bytes = 100_000_000  # 100MB - files larger use multipart upload
+lfs_multipart_chunk_size_bytes = 50_000_000  # 50MB - size of each part (min 5MB except last)
+lfs_keep_versions = 5  # Keep last K versions of each LFS file
+lfs_auto_gc = true  # Automatically delete old LFS objects on commit
+# Download tracking settings
+download_time_bucket_seconds = 900  # 15 minutes - session deduplication window
+download_session_cleanup_threshold = 100  # Trigger cleanup when sessions > this
+download_keep_sessions_days = 30  # Keep sessions from last N days
+debug_log_payloads = false  # Log commit payloads (development only)
+# Site identification
+site_name = "KohakuHub"  # Customizable site name (e.g., "MyCompany Hub")
