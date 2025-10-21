@@ -200,7 +200,7 @@ def display_summary(bucket, stats, detailed=False):
 
 def display_quota_warning(total_size, quota_gb=10):
     """Display warning if approaching quota limit."""
-    quota_bytes = quota_gb * 1024**3
+    quota_bytes = quota_gb * 1000**3
     percentage = (total_size / quota_bytes * 100) if quota_bytes > 0 else 0
 
     console.print()

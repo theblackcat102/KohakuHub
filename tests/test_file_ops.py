@@ -267,7 +267,7 @@ class TestFileOperations:
         # Create file with random content
         import tempfile
 
-        test_content = os.urandom(1024 * 100)  # 100KB random data
+        test_content = os.urandom(100 * 1000)  # 100KB random data
         original_hash = hashlib.sha256(test_content).hexdigest()
 
         test_file = (

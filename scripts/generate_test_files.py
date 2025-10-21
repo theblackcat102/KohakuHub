@@ -53,7 +53,7 @@ def generate_structured_content(file_number, size_bytes):
     header = f"""# Test File {file_number:04d}
 
 This is a generated test file for upload testing.
-File size: {size_bytes / (1024*1024):.2f} MB
+File size: {size_bytes / (1000*1000):.2f} MB
 
 ## Content Section
 
@@ -86,13 +86,13 @@ def main():
     output_dir = Path("large_file_test")
     num_files = 1000
     file_size_mb = 1.5
-    file_size_bytes = int(file_size_mb * 1024 * 1024)
+    file_size_bytes = int(file_size_mb * 1000 * 1000)
 
     # Create output directory
     output_dir.mkdir(exist_ok=True)
     print(f"Creating {num_files} files of {file_size_mb}MB each...")
     print(f"Output directory: {output_dir.absolute()}")
-    print(f"Total size: {num_files * file_size_mb / 1024:.2f} GB")
+    print(f"Total size: {num_files * file_size_mb / 1000:.2f} GB")
     print()
 
     # Generate files
@@ -119,7 +119,7 @@ def main():
 
     # Calculate actual size
     total_size = sum(f.stat().st_size for f in output_dir.glob("*.txt"))
-    print(f"✓ Total size: {total_size / (1024**3):.2f} GB")
+    print(f"✓ Total size: {total_size / (1000**3):.2f} GB")
     print()
     print("You can now test with:")
     print("  - Upload via web UI")

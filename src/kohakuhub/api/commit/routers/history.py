@@ -361,7 +361,7 @@ async def get_commit_diff(
 
             # For non-LFS files, fetch actual diff (let frontend decide if renderable)
             # Skip diff for very large files (>1MB) to avoid memory issues
-            max_diff_size = 1024 * 1024  # 1MB
+            max_diff_size = 1000 * 1000  # 1MB
 
             if not is_lfs and diff_entry.get("type") in ["changed", "added", "removed"]:
                 # Check size constraints

@@ -126,8 +126,8 @@ def step2_populate_mock_data():
         is_org=True,
         email=None,
         password_hash=None,
-        private_quota_bytes=10 * 1024 * 1024 * 1024,  # 10GB
-        public_quota_bytes=50 * 1024 * 1024 * 1024,  # 50GB
+        private_quota_bytes=10 * 1000 * 1000 * 1000,  # 10GB
+        public_quota_bytes=50 * 1000 * 1000 * 1000,  # 50GB
     )
     print(f"  Created organization: {org.username}")
 
@@ -140,8 +140,8 @@ def step2_populate_mock_data():
         password_hash="dummy_hash",
         email_verified=True,
         is_active=True,
-        private_quota_bytes=5 * 1024 * 1024 * 1024,  # 5GB
-        public_quota_bytes=20 * 1024 * 1024 * 1024,  # 20GB
+        private_quota_bytes=5 * 1000 * 1000 * 1000,  # 5GB
+        public_quota_bytes=20 * 1000 * 1000 * 1000,  # 20GB
     )
     print(f"  Created user: {user.username}")
 
@@ -154,7 +154,7 @@ def step2_populate_mock_data():
         private=False,
         owner=org,
         quota_bytes=None,  # Inherit from org
-        used_bytes=1024 * 1024 * 100,  # 100MB
+        used_bytes=100 * 1000 * 1000,  # 100MB
     )
     print(f"  Created repository: {repo1.full_id}")
 
@@ -165,8 +165,8 @@ def step2_populate_mock_data():
         full_id="test-user/test-dataset",
         private=True,
         owner=user,
-        quota_bytes=2 * 1024 * 1024 * 1024,  # Custom 2GB quota
-        used_bytes=500 * 1024 * 1024,  # 500MB used
+        quota_bytes=2 * 1000 * 1000 * 1000,  # Custom 2GB quota
+        used_bytes=500 * 1000 * 1000,  # 500MB used
     )
     print(f"  Created repository: {repo2.full_id}")
 
@@ -346,11 +346,11 @@ def step4_verify_migration():
         print("  ✗ quota_bytes should still be NULL!")
         return False
 
-    if repo1.used_bytes != 1024 * 1024 * 100:
+    if repo1.used_bytes != 100 * 1000 * 1000:
         print(f"  ✗ used_bytes changed! Expected 104857600, got {repo1.used_bytes}")
         return False
 
-    if repo2.quota_bytes != 2 * 1024 * 1024 * 1024:
+    if repo2.quota_bytes != 2 * 1000 * 1000 * 1000:
         print(f"  ✗ quota_bytes changed! Expected 2147483648, got {repo2.quota_bytes}")
         return False
 
@@ -390,7 +390,7 @@ def step5_test_new_functionality():
     keep_versions = get_effective_lfs_keep_versions(repo)
     suffix_rules = get_effective_lfs_suffix_rules(repo)
 
-    print(f"    Effective threshold: {threshold / (1024*1024):.1f} MB")
+    print(f"    Effective threshold: {threshold / (1000*1000):.1f} MB")
     print(f"    Effective keep_versions: {keep_versions}")
     print(f"    Suffix rules: {suffix_rules}")
 
@@ -411,9 +411,8 @@ def step5_test_new_functionality():
         return False
 
     # Test 2: should_use_lfs with defaults
-    test_small = should_use_lfs(repo, "config.json", 1024)  # 1KB
-    test_large = should_use_lfs(repo, "model.bin", 10 * 1024 * 1024)  # 10MB
-
+    test_small = should_use_lfs(repo, "config.json", 1000)  # 1KB
+    test_large = should_use_lfs(repo, "model.bin", 10 * 1000 * 1000)  # 10MB
     print(f"    config.json (1KB) uses LFS: {test_small}")
     print(f"    model.bin (10MB) uses LFS: {test_large}")
 
@@ -425,14 +424,13 @@ def step5_test_new_functionality():
 
     # Test 3: Custom threshold
     print("\n  Test 2: Custom threshold (1MB)")
-    repo.lfs_threshold_bytes = 1024 * 1024
+    repo.lfs_threshold_bytes = 1000 * 1000
     repo.save()
 
     threshold = get_effective_lfs_threshold(repo)
-    test_500kb = should_use_lfs(repo, "file.bin", 500 * 1024)
-    test_2mb = should_use_lfs(repo, "file.bin", 2 * 1024 * 1024)
-
-    print(f"    Effective threshold: {threshold / (1024*1024):.1f} MB")
+    test_500kb = should_use_lfs(repo, "file.bin", 500 * 1000)
+    test_2mb = should_use_lfs(repo, "file.bin", 2 * 1000 * 1000)
+    print(f"    Effective threshold: {threshold / (1000*1000):.1f} MB")
     print(f"    file.bin (500KB) uses LFS: {test_500kb}")
     print(f"    file.bin (2MB) uses LFS: {test_2mb}")
 

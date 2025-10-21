@@ -249,7 +249,7 @@ class BaseTestCase:
         Returns:
             Path to created file
         """
-        size_bytes = int(size_mb * 1024 * 1024)
+        size_bytes = int(size_mb * 1000 * 1000)
         content = os.urandom(size_bytes)
         return self.create_temp_file(name, content)
 

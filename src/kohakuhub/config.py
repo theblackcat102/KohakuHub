@@ -194,7 +194,7 @@ class Config(BaseModel):
             )
 
         # LFS threshold validation
-        if self.app.lfs_threshold_bytes < 1024 * 1024:  # Less than 1MB
+        if self.app.lfs_threshold_bytes < 1000 * 1000:  # Less than 1MB
             warnings.append(
                 f"LFS threshold is very low ({self.app.lfs_threshold_bytes} bytes). "
                 f"Consider setting to at least 5MB (5242880 bytes)."

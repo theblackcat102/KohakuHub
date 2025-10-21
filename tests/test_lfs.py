@@ -6,6 +6,8 @@ Files >10MB should use LFS, files <=10MB should use regular upload.
 
 import hashlib
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -20,10 +22,8 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create 15MB file
-        import tempfile
-
         size_mb = 15
-        test_content = os.urandom(size_mb * 1024 * 1024)
+        test_content = os.urandom(size_mb * 1000 * 1000)
         original_hash = hashlib.sha256(test_content).hexdigest()
 
         test_file = Path(tempfile.gettempdir()) / f"test_15mb_{os.urandom(4).hex()}.bin"
@@ -63,7 +63,7 @@ class TestLFSOperations:
         import tempfile
 
         size_mb = 50
-        test_content = os.urandom(size_mb * 1024 * 1024)
+        test_content = os.urandom(size_mb * 1000 * 1000)
         original_hash = hashlib.sha256(test_content).hexdigest()
 
         test_file = Path(tempfile.gettempdir()) / f"test_50mb_{os.urandom(4).hex()}.bin"
@@ -101,7 +101,7 @@ class TestLFSOperations:
         import tempfile
 
         size_mb = 5
-        test_content = os.urandom(size_mb * 1024 * 1024)
+        test_content = os.urandom(size_mb * 1000 * 1000)
 
         test_file = Path(tempfile.gettempdir()) / f"test_5mb_{os.urandom(4).hex()}.bin"
         test_file.write_bytes(test_content)
@@ -128,10 +128,8 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create 12MB file
-        import tempfile
-
         size_mb = 12
-        test_content = os.urandom(size_mb * 1024 * 1024)
+        test_content = os.urandom(size_mb * 1000 * 1000)
         test_file = (
             Path(tempfile.gettempdir()) / f"test_dedup_{os.urandom(4).hex()}.bin"
         )
@@ -188,7 +186,7 @@ class TestLFSOperations:
 
         # Prepare LFS batch request
         fake_oid = "a" * 64  # SHA256 hex
-        fake_size = 15 * 1024 * 1024  # 15MB
+        fake_size = 15 * 1000 * 1000  # 15MB
 
         batch_request = {
             "operation": "upload",
@@ -233,7 +231,7 @@ class TestLFSOperations:
         (temp_dir / "small2.txt").write_bytes(b"Small file 2" * 100)
 
         # Large file (LFS)
-        (temp_dir / "large.bin").write_bytes(os.urandom(12 * 1024 * 1024))  # 12MB
+        (temp_dir / "large.bin").write_bytes(os.urandom(12 * 1000 * 1000))  # 12MB
 
         # Upload folder
         hf_client.upload_folder(
@@ -254,10 +252,9 @@ class TestLFSOperations:
         downloaded = hf_client.download_file(
             repo_id=repo_id, filename="mixed/large.bin", repo_type=repo_type
         )
-        assert Path(downloaded).stat().st_size == 12 * 1024 * 1024
+        assert Path(downloaded).stat().st_size == 12 * 1000 * 1000
 
         # Cleanup
-        import shutil
 
         shutil.rmtree(temp_dir)
 
@@ -270,7 +267,7 @@ class TestLFSOperations:
         # Upload LFS file
         import tempfile
 
-        test_content = os.urandom(15 * 1024 * 1024)  # 15MB
+        test_content = os.urandom(15 * 1000 * 1000)  # 15MB
         test_file = (
             Path(tempfile.gettempdir()) / f"test_lfs_meta_{os.urandom(4).hex()}.bin"
         )
@@ -318,9 +315,7 @@ class TestLFSOperations:
         repo_id, repo_type, hf_client = temp_repo
 
         # Create exactly 10MB file
-        import tempfile
-
-        size_bytes = 10 * 1024 * 1024
+        size_bytes = 10 * 1000 * 1000
         test_content = os.urandom(size_bytes)
 
         test_file = (

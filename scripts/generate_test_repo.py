@@ -255,10 +255,9 @@ def generate_test_repo(base_path: str = "test_folder"):
     lfs_size = sum(size for _, size in lfs_files)
     regular_size = sum(size for _, size in regular_files)
 
-    print(f"\n  Total size: {total_size / 1024 / 1024:.2f} MB")
-    print(f"  LFS size: {lfs_size / 1024 / 1024:.2f} MB")
-    print(f"  Regular size: {regular_size / 1024:.2f} KB")
-
+    print(f"\n  Total size: {total_size / 1000 / 1000:.2f} MB")
+    print(f"  LFS size: {lfs_size / 1000 / 1000:.2f} MB")
+    print(f"  Regular size: {regular_size / 1000:.2f} KB")
     print(f"\n  Directory structure:")
     print(f"    - Root: 2 files")
     print(f"    - config/: 2 files")

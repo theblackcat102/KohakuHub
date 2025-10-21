@@ -25,7 +25,7 @@ router = APIRouter()
 
 # Avatar configuration
 AVATAR_SIZE = 1024  # Output size (1024x1024)
-AVATAR_MAX_INPUT_SIZE = 10 * 1024 * 1024  # 10MB max input
+AVATAR_MAX_INPUT_SIZE = 10 * 1000 * 1000  # 10MB max input
 AVATAR_JPEG_QUALITY = 95
 ALLOWED_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]
 
@@ -166,7 +166,7 @@ async def upload_user_avatar(
     if len(content) > AVATAR_MAX_INPUT_SIZE:
         raise HTTPException(
             400,
-            detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1024 // 1024}MB",
+            detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1000 // 1000}MB",
         )
 
     # Process image (resize, crop, convert to JPEG)
@@ -314,7 +314,7 @@ async def upload_org_avatar(
     if len(content) > AVATAR_MAX_INPUT_SIZE:
         raise HTTPException(
             400,
-            detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1024 // 1024}MB",
+            detail=f"Image too large. Maximum: {AVATAR_MAX_INPUT_SIZE // 1000 // 1000}MB",
         )
 
     # Process image
