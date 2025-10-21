@@ -176,7 +176,7 @@ async function handleFileSelect(event) {
   }
 
   // Validate file size (max 10MB)
-  if (file.size > 10 * 1024 * 1024) {
+  if (file.size > 10 * 1000 * 1000) {
     ElMessage.error("Image is too large. Maximum size is 10MB");
     return;
   }

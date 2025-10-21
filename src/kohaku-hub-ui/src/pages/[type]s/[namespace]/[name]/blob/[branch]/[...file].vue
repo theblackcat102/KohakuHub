@@ -277,7 +277,7 @@ const branch = computed(() => route.params.branch || "main");
 const filePath = computed(() => route.params.file || "");
 
 // Constants
-const maxPreviewSize = 100 * 1024; // 100KB
+const maxPreviewSize = 100 * 1000; // 100KB
 
 // State
 const loading = ref(true);
@@ -497,11 +497,11 @@ function getFileIcon(filename) {
 
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return "0 B";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  if (bytes < 1024 * 1024 * 1024)
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+  if (bytes < 1000) return bytes + " B";
+  if (bytes < 1000 * 1000) return (bytes / 1000).toFixed(1) + " KB";
+  if (bytes < 1000 * 1000 * 1000)
+    return (bytes / (1000 * 1000)).toFixed(1) + " MB";
+  return (bytes / (1000 * 1000 * 1000)).toFixed(1) + " GB";
 }
 
 async function loadFileInfo() {

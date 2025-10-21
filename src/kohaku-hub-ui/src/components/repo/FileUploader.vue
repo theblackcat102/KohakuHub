@@ -133,7 +133,7 @@ const uploadData = computed(() => {
 });
 
 function beforeUpload(file) {
-  const maxSize = 100 * 1024 * 1024; // 100MB per file for regular upload
+  const maxSize = 100 * 1000 * 1000; // 100MB per file for regular upload
   if (file.size > maxSize) {
     ElMessage.warning(
       `File ${file.name} is too large. Maximum size is 100MB per file.`,
