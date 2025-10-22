@@ -396,21 +396,62 @@ async def prepare_delete_prefix(
         Confirmation token, prefix, estimated count, expiration
     """
 
+    # Handle R2 path-in-endpoint (same logic as list_objects)
+    parsed = urlparse(cfg.s3.endpoint)
+    endpoint_path = parsed.path.strip("/")
+
+    if endpoint_path:
+        # Endpoint has path - need to add base prefix
+        path_parts = endpoint_path.split("/")
+        actual_bucket = path_parts[0]
+        base_prefix_parts = path_parts[1:] + [cfg.s3.bucket]
+        base_prefix = "/".join(base_prefix_parts)
+        actual_prefix = f"{base_prefix}/{prefix}" if prefix else f"{base_prefix}/"
+    else:
+        # Standard S3 - use prefix as-is
+        actual_bucket = cfg.s3.bucket
+        actual_prefix = prefix
+
+    logger.info(f"Counting objects: bucket={actual_bucket}, prefix={actual_prefix}")
+
     # Count objects with prefix
     def _count():
-        s3 = get_s3_client()
+        # Parse endpoint for R2 support
+        if endpoint_path:
+            root_endpoint = f"{parsed.scheme}://{parsed.netloc}"
+            s3_config = {}
+            if cfg.s3.force_path_style:
+                s3_config["addressing_style"] = "path"
+            boto_config = BotoConfig(signature_version="s3v4", s3=s3_config)
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=root_endpoint,
+                aws_access_key_id=cfg.s3.access_key,
+                aws_secret_access_key=cfg.s3.secret_key,
+                region_name=cfg.s3.region,
+                config=boto_config,
+            )
+        else:
+            s3 = get_s3_client()
+
         paginator = s3.get_paginator("list_objects_v2")
         count = 0
-        for page in paginator.paginate(Bucket=cfg.s3.bucket, Prefix=prefix):
+        for page in paginator.paginate(Bucket=actual_bucket, Prefix=actual_prefix):
             count += len(page.get("Contents", []))
         return count
 
     estimated = await run_in_s3_executor(_count)
 
     # Create confirmation token in database (works across workers)
+    # Store ACTUAL prefix (with base prefix if needed) for deletion
     conf_token = create_confirmation_token(
         action_type="delete_s3_prefix",
-        action_data={"prefix": prefix, "estimated_count": estimated},
+        action_data={
+            "display_prefix": prefix,  # What frontend sees
+            "actual_prefix": actual_prefix,  # What S3 sees
+            "actual_bucket": actual_bucket,  # Actual bucket name
+            "estimated_count": estimated,
+        },
         ttl_seconds=60,
     )
 
@@ -449,12 +490,18 @@ async def delete_s3_prefix(
     if not action_data:
         raise HTTPException(400, detail="Invalid or expired confirmation token")
 
-    # Verify action type and prefix match
-    if action_data.get("prefix") != prefix:
+    # Verify display prefix matches (what user requested)
+    if action_data.get("display_prefix") != prefix:
         raise HTTPException(400, detail="Prefix mismatch with confirmation token")
 
-    # Delete objects
-    deleted_count = await delete_objects_with_prefix(cfg.s3.bucket, prefix)
+    # Use actual S3 prefix and bucket from token (handles R2 path-in-endpoint)
+    actual_prefix = action_data.get("actual_prefix")
+    actual_bucket = action_data.get("actual_bucket")
+
+    logger.info(f"Deleting: bucket={actual_bucket}, prefix={actual_prefix}")
+
+    # Delete objects using ACTUAL prefix and bucket
+    deleted_count = await delete_objects_with_prefix(actual_bucket, actual_prefix)
 
     logger.warning(f"Admin deleted S3 prefix: {prefix} ({deleted_count} objects)")
 
