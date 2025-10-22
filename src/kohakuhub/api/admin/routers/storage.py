@@ -1,5 +1,11 @@
 """S3 storage browser endpoints for admin API."""
 
+import asyncio
+import json
+import time
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 
 import boto3
@@ -8,9 +14,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from kohakuhub.async_utils import run_in_s3_executor
 from kohakuhub.config import cfg
+from kohakuhub.db_operations import (
+    cleanup_expired_confirmation_tokens,
+    consume_confirmation_token,
+    create_confirmation_token,
+)
 from kohakuhub.logger import get_logger
+from kohakuhub.utils.s3 import delete_objects_with_prefix, get_s3_client
 from kohakuhub.api.admin.utils import verify_admin_token
-from kohakuhub.utils.s3 import get_s3_client
 
 logger = get_logger("ADMIN")
 router = APIRouter()
@@ -375,6 +386,7 @@ async def prepare_delete_prefix(
 
     Returns estimated object count and confirmation token.
     Token expires in 60 seconds.
+    Stored in database to work across multiple workers.
 
     Args:
         prefix: S3 prefix to delete
@@ -383,8 +395,6 @@ async def prepare_delete_prefix(
     Returns:
         Confirmation token, prefix, estimated count, expiration
     """
-    import time
-    import uuid
 
     # Count objects with prefix
     def _count():
@@ -397,28 +407,20 @@ async def prepare_delete_prefix(
 
     estimated = await run_in_s3_executor(_count)
 
-    # Generate confirmation token
-    token = str(uuid.uuid4())
-    _delete_confirmations[token] = {
-        "prefix": prefix,
-        "timestamp": time.time(),
-        "estimated_count": estimated,
-    }
+    # Create confirmation token in database (works across workers)
+    conf_token = create_confirmation_token(
+        action_type="delete_s3_prefix",
+        action_data={"prefix": prefix, "estimated_count": estimated},
+        ttl_seconds=60,
+    )
 
-    # Cleanup old tokens (>60 seconds)
-    current_time = time.time()
-    expired = [
-        t
-        for t, data in _delete_confirmations.items()
-        if current_time - data["timestamp"] > 60
-    ]
-    for t in expired:
-        del _delete_confirmations[t]
+    # Cleanup expired tokens (async, non-blocking)
+    cleanup_expired_confirmation_tokens()
 
     logger.warning(f"Admin prepared delete for prefix: {prefix} ({estimated} objects)")
 
     return {
-        "confirm_token": token,
+        "confirm_token": conf_token.token,
         "prefix": prefix,
         "estimated_objects": estimated,
         "expires_in": 60,
@@ -441,29 +443,18 @@ async def delete_s3_prefix(
     Returns:
         Success message with deleted count
     """
-    import time
-    from kohakuhub.utils.s3 import delete_objects_with_prefix
+    # Validate and consume confirmation token from database
+    action_data = consume_confirmation_token(confirm_token)
 
-    # Validate confirmation token
-    if confirm_token not in _delete_confirmations:
+    if not action_data:
         raise HTTPException(400, detail="Invalid or expired confirmation token")
 
-    confirmation = _delete_confirmations[confirm_token]
-
-    # Check token not expired
-    if time.time() - confirmation["timestamp"] > 60:
-        del _delete_confirmations[confirm_token]
-        raise HTTPException(400, detail="Confirmation token expired (60 seconds)")
-
-    # Check prefix matches
-    if confirmation["prefix"] != prefix:
+    # Verify action type and prefix match
+    if action_data.get("prefix") != prefix:
         raise HTTPException(400, detail="Prefix mismatch with confirmation token")
 
     # Delete objects
     deleted_count = await delete_objects_with_prefix(cfg.s3.bucket, prefix)
-
-    # Cleanup confirmation token
-    del _delete_confirmations[confirm_token]
 
     logger.warning(f"Admin deleted S3 prefix: {prefix} ({deleted_count} objects)")
 

@@ -8,12 +8,14 @@ All operations now use proper ForeignKey relationships with backref for convenie
 """
 
 import json
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
 from kohakuhub.db import (
     Commit,
+    ConfirmationToken,
     DailyRepoStats,
     DownloadSession,
     EmailVerification,
@@ -1173,3 +1175,83 @@ def get_latest_daily_stat(repository: Repository):
         .order_by(DailyRepoStats.date.desc())
         .first()
     )
+
+
+# ===== Confirmation Token operations =====
+
+
+def create_confirmation_token(
+    action_type: str, action_data: dict, ttl_seconds: int = 60
+) -> ConfirmationToken:
+    """Create a confirmation token for dangerous operations.
+
+    Args:
+        action_type: Type of action (e.g., "delete_s3_prefix")
+        action_data: Dict of action-specific data (will be JSON-serialized)
+        ttl_seconds: Token lifetime in seconds (default: 60)
+
+    Returns:
+        ConfirmationToken instance with unique token
+    """
+    token_str = str(uuid.uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+
+    return ConfirmationToken.create(
+        token=token_str,
+        action_type=action_type,
+        action_data=json.dumps(action_data),
+        expires_at=expires_at,
+    )
+
+
+def get_confirmation_token(token_str: str) -> ConfirmationToken | None:
+    """Get and validate confirmation token.
+
+    Automatically checks expiration.
+
+    Args:
+        token_str: Token string (UUID)
+
+    Returns:
+        ConfirmationToken if valid and not expired, None otherwise
+    """
+    return ConfirmationToken.get_or_none(
+        (ConfirmationToken.token == token_str)
+        & (ConfirmationToken.expires_at > datetime.now(timezone.utc))
+    )
+
+
+def consume_confirmation_token(token_str: str) -> dict | None:
+    """Get, validate, and consume (delete) confirmation token.
+
+    Args:
+        token_str: Token string (UUID)
+
+    Returns:
+        Action data dict if valid, None if invalid/expired
+    """
+    conf = get_confirmation_token(token_str)
+    if not conf:
+        return None
+
+    # Parse action data
+    action_data = json.loads(conf.action_data)
+
+    # Delete token (single-use)
+    conf.delete_instance()
+
+    return action_data
+
+
+def cleanup_expired_confirmation_tokens() -> int:
+    """Delete all expired confirmation tokens.
+
+    Returns:
+        Number of tokens deleted
+    """
+    deleted = (
+        ConfirmationToken.delete()
+        .where(ConfirmationToken.expires_at < datetime.now(timezone.utc))
+        .execute()
+    )
+    return deleted

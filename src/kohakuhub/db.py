@@ -466,6 +466,48 @@ class FallbackSource(BaseModel):
         )
 
 
+class ConfirmationToken(BaseModel):
+    """General-purpose confirmation tokens for dangerous operations.
+
+    Provides two-step confirmation for destructive actions with automatic expiration.
+    Works across multiple workers (database-backed).
+
+    Use cases:
+    - S3 prefix deletion: action_type="delete_s3_prefix", action_data='{"prefix": "path/"}'
+    - Bulk operations: action_type="bulk_delete_repos", action_data='{"repo_ids": [...]}'
+    - Any operation requiring explicit user confirmation
+
+    Example usage:
+        # Step 1: Create token
+        token = ConfirmationToken.create(
+            token=str(uuid.uuid4()),
+            action_type="delete_s3_prefix",
+            action_data=json.dumps({"prefix": "hf-model-org-repo/"}),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=60)
+        )
+
+        # Step 2: Validate and consume token
+        conf = ConfirmationToken.get_or_none(
+            ConfirmationToken.token == token_str,
+            ConfirmationToken.expires_at > datetime.now(timezone.utc)
+        )
+        if conf:
+            data = json.loads(conf.action_data)
+            # Execute action
+            conf.delete_instance()  # Consume token (single-use)
+    """
+
+    id = AutoField()
+    token = CharField(unique=True, index=True)  # UUID token
+    action_type = CharField(index=True)  # Type of action (e.g., "delete_s3_prefix")
+    action_data = TextField()  # JSON data for the action
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+    expires_at = DateTimeField(index=True)  # For automatic cleanup
+
+    class Meta:
+        indexes = ((("action_type", "expires_at"), False),)  # For cleanup queries
+
+
 def init_db():
     db.connect(reuse_if_open=True)
     db.create_tables(
@@ -487,6 +529,7 @@ def init_db():
             DownloadSession,
             DailyRepoStats,
             FallbackSource,
+            ConfirmationToken,
         ],
         safe=True,
     )
