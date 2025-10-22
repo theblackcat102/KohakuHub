@@ -9,8 +9,12 @@ Can read configuration from kohakuhub.conf file for automation.
 import argparse
 import configparser
 import os
+import re
 import secrets
+import shutil
 import sys
+import tomllib
+from datetime import datetime
 from pathlib import Path
 
 
@@ -540,6 +544,162 @@ builtin = true
     print(f"  python scripts/generate_docker_compose.py --config {output_path}")
 
 
+def migrate_existing_config(
+    docker_compose_path: Path, config_toml_path: Path
+) -> dict:
+    """Migrate existing configuration files interactively.
+
+    Reads existing values and only prompts for new fields.
+
+    Args:
+        docker_compose_path: Path to docker-compose.yml
+        config_toml_path: Path to config.toml
+
+    Returns:
+        Config dict with migrated values
+    """
+    config = {}
+
+    # Read existing docker-compose.yml
+    existing_env = {}
+    if docker_compose_path.exists():
+        try:
+            with open(docker_compose_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Extract environment variables
+            for line in content.split("\n"):
+                match = re.match(r"\s*- (KOHAKU_HUB_\w+)=(.+?)(?:\s+#.*)?$", line.strip())
+                if match:
+                    key, value = match.groups()
+                    existing_env[key] = value.strip()
+
+            print(f"✓ Loaded {len(existing_env)} settings from docker-compose.yml")
+        except Exception as e:
+            print(f"⚠ Failed to read docker-compose.yml: {e}")
+
+    # Read existing config.toml
+    existing_toml = {}
+    if config_toml_path.exists():
+        try:
+            with open(config_toml_path, "rb") as f:
+                existing_toml = tomllib.load(f)
+            print(f"✓ Loaded settings from config.toml")
+        except Exception as e:
+            print(f"⚠ Failed to read config.toml: {e}")
+
+    print()
+    print("=" * 60)
+    print("Migration Mode - Only New Fields Will Be Asked")
+    print("=" * 60)
+    print()
+
+    # Helper to get value from env or toml
+    def get_existing(env_key: str, toml_path: str = None):
+        if env_key in existing_env:
+            return existing_env[env_key]
+        if toml_path:
+            keys = toml_path.split(".")
+            val = existing_toml
+            for key in keys:
+                if isinstance(val, dict) and key in val:
+                    val = val[key]
+                else:
+                    return None
+            return val
+        return None
+
+    # PostgreSQL Configuration
+    print("--- PostgreSQL Configuration ---")
+    config["postgres_builtin"] = get_existing("KOHAKU_HUB_DB_BACKEND") != "sqlite"
+    print(f"Using: {'Built-in PostgreSQL' if config['postgres_builtin'] else 'SQLite'}")
+
+    if config["postgres_builtin"]:
+        # Parse DATABASE_URL
+        db_url = get_existing("KOHAKU_HUB_DATABASE_URL", "app.database_url")
+        if db_url and db_url.startswith("postgresql://"):
+            # Parse: postgresql://user:pass@host:port/db
+            match = re.match(
+                r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)", db_url
+            )
+            if match:
+                user, password, host, port, db = match.groups()
+                config["postgres_user"] = user
+                config["postgres_password"] = password
+                config["postgres_host"] = host
+                config["postgres_port"] = int(port)
+                config["postgres_db"] = db
+                print(f"   User: {user}")
+                print(f"   Database: {db}")
+            else:
+                # Fallback defaults
+                config["postgres_user"] = "hub"
+                config["postgres_password"] = "hubpass"
+                config["postgres_host"] = "postgres"
+                config["postgres_port"] = 5432
+                config["postgres_db"] = "kohakuhub"
+        else:
+            config["postgres_user"] = "hub"
+            config["postgres_password"] = "hubpass"
+            config["postgres_host"] = "postgres"
+            config["postgres_port"] = 5432
+            config["postgres_db"] = "kohakuhub"
+    else:
+        config["postgres_user"] = ""
+        config["postgres_password"] = ""
+        config["postgres_host"] = ""
+        config["postgres_port"] = 5432
+        config["postgres_db"] = ""
+
+    # LakeFS Configuration
+    config["lakefs_use_postgres"] = True  # Most installations use postgres
+    config["lakefs_db"] = "kohakuhub_lakefs"
+
+    # S3 Configuration
+    print("\n--- S3 Configuration ---")
+    s3_endpoint = get_existing("KOHAKU_HUB_S3_ENDPOINT", "s3.endpoint")
+    config["s3_builtin"] = s3_endpoint and "minio" in s3_endpoint
+    print(f"Using: {'Built-in MinIO' if config['s3_builtin'] else 'External S3'}")
+
+    config["s3_access_key"] = get_existing("KOHAKU_HUB_S3_ACCESS_KEY", "s3.access_key") or "minioadmin"
+    config["s3_secret_key"] = get_existing("KOHAKU_HUB_S3_SECRET_KEY", "s3.secret_key") or "minioadmin"
+    config["s3_endpoint"] = s3_endpoint or "http://minio:9000"
+    config["s3_region"] = get_existing("KOHAKU_HUB_S3_REGION", "s3.region") or "us-east-1"
+    config["s3_signature_version"] = get_existing("KOHAKU_HUB_S3_SIGNATURE_VERSION", "s3.signature_version") or ""
+
+    # Security Configuration
+    print("\n--- Security Configuration ---")
+    config["session_secret"] = get_existing("KOHAKU_HUB_SESSION_SECRET", "auth.session_secret")
+    config["admin_secret"] = get_existing("KOHAKU_HUB_ADMIN_SECRET_TOKEN", "admin.secret_token")
+
+    # NEW FIELD: database_key
+    config["database_key"] = get_existing("KOHAKU_HUB_DATABASE_KEY", "app.database_key")
+    if not config["database_key"]:
+        print("\n🆕 New field: DATABASE_KEY (for encrypting external fallback tokens)")
+        default_db_key = generate_secret(32)
+        print(f"   Generated: {default_db_key}")
+        use_generated = ask_yes_no("Use generated database key?", default=True)
+        config["database_key"] = default_db_key if use_generated else ask_string("Database encryption key")
+    else:
+        print(f"   Database key: (exists)")
+
+    if not config["session_secret"]:
+        config["session_secret"] = generate_secret(48)
+    if not config["admin_secret"]:
+        config["admin_secret"] = generate_secret(48)
+
+    # LakeFS encryption
+    config["lakefs_encrypt_key"] = generate_secret(32)
+
+    # Network
+    config["external_network"] = ""
+
+    print("\n✓ Migration complete - all existing values preserved")
+    print("✓ New fields added with generated defaults")
+
+    return config
+
+
 def main():
     """Main function."""
     # Parse command-line arguments
@@ -570,8 +730,49 @@ def main():
     print("=" * 60)
     print()
 
-    # Load config from file if provided
-    if args.config:
+    # Check for existing configuration files
+    repo_root = Path(__file__).parent.parent
+    existing_docker_compose = repo_root / "docker-compose.yml"
+    existing_config_toml = repo_root / "config.toml"
+
+    has_existing_config = existing_docker_compose.exists() or existing_config_toml.exists()
+
+    if has_existing_config and not args.config:
+        print("🔍 Found existing configuration files:")
+        if existing_docker_compose.exists():
+            print(f"   ✓ {existing_docker_compose}")
+        if existing_config_toml.exists():
+            print(f"   ✓ {existing_config_toml}")
+        print()
+
+        use_migrate = ask_yes_no(
+            "Use migration mode? (preserves existing values, only asks for new fields)",
+            default=True,
+        )
+        print()
+
+        if use_migrate:
+            # Create timestamped backups
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if existing_docker_compose.exists():
+                backup_path = repo_root / f"docker-compose.yml.backup.{timestamp}"
+                shutil.copy2(existing_docker_compose, backup_path)
+                print(f"✓ Created backup: {backup_path}")
+            if existing_config_toml.exists():
+                backup_path = repo_root / f"config.toml.backup.{timestamp}"
+                shutil.copy2(existing_config_toml, backup_path)
+                print(f"✓ Created backup: {backup_path}")
+            print()
+
+            # Load existing config and migrate
+            config = migrate_existing_config(
+                existing_docker_compose, existing_config_toml
+            )
+        else:
+            print("⚠ Starting fresh configuration (existing files will be overwritten)")
+            print()
+            config = interactive_config()
+    elif args.config:
         print(f"Loading configuration from: {args.config}")
         print()
         config = load_config_file(args.config)
@@ -593,7 +794,7 @@ def main():
             print(f"    Endpoint: {config['s3_endpoint']}")
         print()
     else:
-        # Interactive mode
+        # Interactive mode - fresh config
         config = interactive_config()
 
     # Generate and write files
@@ -827,6 +1028,7 @@ enabled = true
 cache_ttl_seconds = 300
 timeout_seconds = 10
 max_concurrent_requests = 5
+require_auth = false  # Set true to require authentication for fallback access
 
 [app]
 base_url = "http://localhost:48888"  # Dev server URL

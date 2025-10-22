@@ -34,6 +34,7 @@ services:
       ## ===== CRITICAL: Security Configuration (MUST CHANGE) =====
       - KOHAKU_HUB_SESSION_SECRET=change-this-to-random-string-in-production
       - KOHAKU_HUB_ADMIN_SECRET_TOKEN=change-this-to-random-admin-token-in-production
+      - KOHAKU_HUB_DATABASE_KEY=change-this-to-random-encryption-key-in-production # For external tokens (generate with: openssl rand -hex 32)
 
       ## ===== Performance Configuration =====  
       - KOHAKU_HUB_WORKERS=4 # Number of worker processes (1-8, recommend: CPU cores)
@@ -84,6 +85,11 @@ services:
       - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=100_000_000
       - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=10_000_000
       - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=100_000_000
+
+      ## ===== Fallback Configuration (Optional) =====
+      # - KOHAKU_HUB_FALLBACK_ENABLED=true
+      # - KOHAKU_HUB_FALLBACK_REQUIRE_AUTH=false # Set true to require authentication for fallback access
+      # - KOHAKU_HUB_FALLBACK_SOURCES=[{"url":"https://huggingface.co","name":"HuggingFace","source_type":"huggingface","priority":1}]
     volumes:
       - ./hub-meta/hub-api:/hub-api-creds
 
