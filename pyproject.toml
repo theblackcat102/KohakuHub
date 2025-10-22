@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kohaku-hub"
 version = "0.0.1"
-description = ""
+description = "A self-hosted HuggingFace alternative"
 authors = [
     { name = "Shih-Ying Yeh(KohakuBlueLeaf)", email = "apolloyeh0123@gmail.com" },
 ]
