@@ -662,3 +662,120 @@ export async function clearFallbackCache(token) {
   const response = await client.delete("/fallback-sources/cache/clear");
   return response.data;
 }
+
+// ===== Repository Management =====
+
+/**
+ * Delete repository (admin)
+ * @param {string} token - Admin token
+ * @param {string} repoType - Repository type (model/dataset/space)
+ * @param {string} namespace - Repository namespace
+ * @param {string} name - Repository name
+ * @returns {Promise<Object>} Deletion result
+ */
+export async function deleteRepositoryAdmin(token, repoType, namespace, name) {
+  const response = await axios.delete("/api/repos/delete", {
+    headers: { "X-Admin-Token": token },
+    data: { type: repoType, name: name, organization: namespace },
+  });
+  return response.data;
+}
+
+/**
+ * Move repository (admin)
+ * @param {string} token - Admin token
+ * @param {string} repoType - Repository type
+ * @param {string} namespace - Source namespace
+ * @param {string} name - Source name
+ * @param {string} toNamespace - Target namespace
+ * @param {string} toName - Target name
+ * @returns {Promise<Object>} Move result
+ */
+export async function moveRepositoryAdmin(
+  token,
+  repoType,
+  namespace,
+  name,
+  toNamespace,
+  toName,
+) {
+  const response = await axios.post(
+    "/api/repos/move",
+    {
+      fromRepo: `${namespace}/${name}`,
+      toRepo: `${toNamespace}/${toName}`,
+      type: repoType,
+    },
+    {
+      headers: { "X-Admin-Token": token },
+    },
+  );
+  return response.data;
+}
+
+/**
+ * Squash repository (admin)
+ * @param {string} token - Admin token
+ * @param {string} repoType - Repository type
+ * @param {string} namespace - Repository namespace
+ * @param {string} name - Repository name
+ * @returns {Promise<Object>} Squash result
+ */
+export async function squashRepositoryAdmin(token, repoType, namespace, name) {
+  const response = await axios.post(
+    "/api/repos/squash",
+    {
+      repo: `${namespace}/${name}`,
+      type: repoType,
+    },
+    {
+      headers: { "X-Admin-Token": token },
+    },
+  );
+  return response.data;
+}
+
+// ===== S3 Storage Management =====
+
+/**
+ * Delete S3 object
+ * @param {string} token - Admin token
+ * @param {string} key - Object key
+ * @returns {Promise<Object>} Deletion result
+ */
+export async function deleteS3Object(token, key) {
+  const client = createAdminClient(token);
+  const response = await client.delete(
+    `/storage/objects/${encodeURIComponent(key)}`,
+  );
+  return response.data;
+}
+
+/**
+ * Prepare S3 prefix deletion (step 1)
+ * @param {string} token - Admin token
+ * @param {string} prefix - S3 prefix
+ * @returns {Promise<Object>} Confirmation token and estimated count
+ */
+export async function prepareDeleteS3Prefix(token, prefix) {
+  const client = createAdminClient(token);
+  const response = await client.post("/storage/prefix/prepare-delete", null, {
+    params: { prefix },
+  });
+  return response.data;
+}
+
+/**
+ * Delete S3 prefix (step 2)
+ * @param {string} token - Admin token
+ * @param {string} prefix - S3 prefix
+ * @param {string} confirmToken - Confirmation token from prepare step
+ * @returns {Promise<Object>} Deletion result with count
+ */
+export async function deleteS3Prefix(token, prefix, confirmToken) {
+  const client = createAdminClient(token);
+  const response = await client.delete("/storage/prefix", {
+    params: { prefix, confirm_token: confirmToken },
+  });
+  return response.data;
+}

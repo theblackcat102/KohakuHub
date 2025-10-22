@@ -101,6 +101,11 @@ export default defineConfig({
       '/admin/api': {
         target: 'http://localhost:48888',
         changeOrigin: true
+      },
+      // Proxy standard API calls (for admin token usage)
+      '/api': {
+        target: 'http://localhost:48888',
+        changeOrigin: true
       }
     }
   }

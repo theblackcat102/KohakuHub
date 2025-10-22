@@ -10,6 +10,9 @@ import {
   getRepositoryStorageBreakdown,
   recalculateAllRepoStorage,
   listCommits,
+  deleteRepositoryAdmin,
+  moveRepositoryAdmin,
+  squashRepositoryAdmin,
 } from "@/utils/api";
 import { formatBytes } from "@/utils/api";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -27,6 +30,10 @@ const storageBreakdown = ref(null);
 const repoCommits = ref([]);
 const loadingStorage = ref(false);
 const loadingCommits = ref(false);
+
+// Actions
+const actionLoading = ref(false);
+const moveForm = ref({ toNamespace: "", toName: "" });
 
 // Search
 const searchQuery = ref("");
@@ -286,6 +293,102 @@ function getProgressColor(percentage) {
   if (percentage >= 90) return "danger";
   if (percentage >= 75) return "warning";
   return "success";
+}
+
+// Repository actions
+async function confirmMoveRepo() {
+  if (!moveForm.value.toNamespace || !moveForm.value.toName) {
+    ElMessage.warning("Please enter both namespace and name");
+    return;
+  }
+
+  const from = selectedRepo.value.full_id;
+  const to = `${moveForm.value.toNamespace}/${moveForm.value.toName}`;
+
+  try {
+    await ElMessageBox.confirm(
+      `Move repository from ${from} to ${to}?`,
+      "Confirm Move",
+      { type: "warning" },
+    );
+
+    actionLoading.value = true;
+    await moveRepositoryAdmin(
+      adminStore.token,
+      selectedRepo.value.repo_type,
+      selectedRepo.value.namespace,
+      selectedRepo.value.name,
+      moveForm.value.toNamespace,
+      moveForm.value.toName,
+    );
+    ElMessage.success("Repository moved successfully");
+    repoDialogVisible.value = false;
+    loadRepositories();
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error(
+        err.response?.data?.detail || "Failed to move repository",
+      );
+    }
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function confirmSquashRepo() {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `Type "${selectedRepo.value.name}" to confirm squash`,
+      "Confirm Squash",
+      {
+        inputPattern: new RegExp(`^${selectedRepo.value.name}$`),
+        inputErrorMessage: "Name does not match",
+      },
+    );
+
+    actionLoading.value = true;
+    await squashRepositoryAdmin(
+      adminStore.token,
+      selectedRepo.value.repo_type,
+      selectedRepo.value.namespace,
+      selectedRepo.value.name,
+    );
+    ElMessage.success("Repository squashed successfully");
+    await handleViewRepo(selectedRepo.value);
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error(err.response?.data?.detail || "Failed to squash");
+    }
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function confirmDeleteRepo() {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      'Type "DELETE" to confirm permanent deletion',
+      "Confirm Delete",
+      { inputPattern: /^DELETE$/, inputErrorMessage: "Must type DELETE" },
+    );
+
+    actionLoading.value = true;
+    await deleteRepositoryAdmin(
+      adminStore.token,
+      selectedRepo.value.repo_type,
+      selectedRepo.value.namespace,
+      selectedRepo.value.name,
+    );
+    ElMessage.success("Repository deleted successfully");
+    repoDialogVisible.value = false;
+    loadRepositories();
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error(err.response?.data?.detail || "Failed to delete");
+    }
+  } finally {
+    actionLoading.value = false;
+  }
 }
 
 onMounted(() => {
@@ -730,6 +833,76 @@ onMounted(() => {
                 <el-button type="primary" @click="loadStorageBreakdown">
                   Load Storage Analytics
                 </el-button>
+              </div>
+            </el-tab-pane>
+
+            <!-- Actions Tab -->
+            <el-tab-pane label="Actions" name="actions">
+              <div class="space-y-4">
+                <!-- Move Repository -->
+                <el-card class="bg-white dark:bg-gray-800">
+                  <template #header>
+                    <div class="font-semibold">Move/Rename Repository</div>
+                  </template>
+                  <el-form label-position="top">
+                    <el-form-item label="To Namespace">
+                      <el-input
+                        v-model="moveForm.toNamespace"
+                        placeholder="target-org"
+                      />
+                    </el-form-item>
+                    <el-form-item label="To Name">
+                      <el-input
+                        v-model="moveForm.toName"
+                        placeholder="new-name"
+                      />
+                    </el-form-item>
+                    <el-button
+                      type="primary"
+                      @click="confirmMoveRepo"
+                      :loading="actionLoading"
+                    >
+                      Move Repository
+                    </el-button>
+                  </el-form>
+                </el-card>
+
+                <!-- Squash Repository -->
+                <el-card class="bg-white dark:bg-gray-800">
+                  <template #header>
+                    <div class="font-semibold">Squash Repository</div>
+                  </template>
+                  <el-alert type="warning" :closable="false" class="mb-4">
+                    Clears all commit history. Only current state preserved.
+                    IRREVERSIBLE!
+                  </el-alert>
+                  <el-button
+                    type="warning"
+                    @click="confirmSquashRepo"
+                    :loading="actionLoading"
+                  >
+                    Squash Repository
+                  </el-button>
+                </el-card>
+
+                <!-- Delete Repository -->
+                <el-card class="bg-white dark:bg-gray-800">
+                  <template #header>
+                    <div class="font-semibold text-red-600">
+                      Delete Repository
+                    </div>
+                  </template>
+                  <el-alert type="error" :closable="false" class="mb-4">
+                    IRREVERSIBLE! Deletes all files, history, and metadata.
+                  </el-alert>
+                  <el-button
+                    type="danger"
+                    @click="confirmDeleteRepo"
+                    :loading="actionLoading"
+                  >
+                    Delete Repository
+                  </el-button>
+                </el-card>
               </div>
             </el-tab-pane>
           </el-tabs>

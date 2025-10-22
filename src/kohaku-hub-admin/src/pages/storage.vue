@@ -3,9 +3,15 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import AdminLayout from "@/components/AdminLayout.vue";
 import { useAdminStore } from "@/stores/admin";
-import { listS3Buckets, listS3Objects } from "@/utils/api";
+import {
+  listS3Buckets,
+  listS3Objects,
+  deleteS3Object,
+  prepareDeleteS3Prefix,
+  deleteS3Prefix,
+} from "@/utils/api";
 import { formatBytes } from "@/utils/api";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 
 const router = useRouter();
@@ -147,6 +153,57 @@ function getFileIcon(fileName) {
   return iconMap[ext] || iconMap.default;
 }
 
+async function confirmDeleteObject(key) {
+  try {
+    await ElMessageBox.confirm(`Delete object: ${key}?`, "Confirm Delete", {
+      type: "warning",
+    });
+
+    await deleteS3Object(adminStore.token, key);
+    ElMessage.success("Object deleted");
+    loadObjects(currentPath.value); // Refresh
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error("Failed to delete object");
+    }
+  }
+}
+
+async function confirmDeleteFolder(folderName) {
+  const prefix = currentPath.value + folderName + "/";
+
+  // Step 1: Prepare deletion (get count)
+  let prepareResult;
+  try {
+    prepareResult = await prepareDeleteS3Prefix(adminStore.token, prefix);
+  } catch (err) {
+    ElMessage.error("Failed to prepare deletion");
+    return;
+  }
+
+  // Step 2: Confirm with count
+  try {
+    await ElMessageBox.confirm(
+      `Delete ${prepareResult.estimated_objects} objects under ${prefix}? This is IRREVERSIBLE!`,
+      "Confirm Folder Deletion",
+      { type: "error", confirmButtonText: "Delete All" },
+    );
+
+    // Step 3: Execute deletion
+    const result = await deleteS3Prefix(
+      adminStore.token,
+      prefix,
+      prepareResult.confirm_token,
+    );
+    ElMessage.success(`Deleted ${result.deleted_count} objects`);
+    loadObjects(currentPath.value); // Refresh
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error(err.response?.data?.detail || "Failed to delete folder");
+    }
+  }
+}
+
 onMounted(() => {
   loadObjects(""); // Load root directly
 });
@@ -239,10 +296,22 @@ onMounted(() => {
                   v-for="folder in folderStructure.folders"
                   :key="folder"
                   class="folder-item"
-                  @click="navigateToFolder(folder)"
                 >
-                  <div class="i-carbon-folder text-4xl text-orange-500" />
-                  <span class="folder-name">{{ folder }}</span>
+                  <div
+                    @click="navigateToFolder(folder)"
+                    class="flex items-center gap-2 flex-1 cursor-pointer"
+                  >
+                    <div class="i-carbon-folder text-4xl text-orange-500" />
+                    <span class="folder-name">{{ folder }}</span>
+                  </div>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    text
+                    @click.stop="confirmDeleteFolder(folder)"
+                  >
+                    Delete
+                  </el-button>
                 </div>
               </div>
             </div>
@@ -282,6 +351,18 @@ onMounted(() => {
                 <el-table-column label="Last Modified" width="180">
                   <template #default="{ row }">
                     {{ formatDate(row.last_modified) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="Actions" width="100" fixed="right">
+                  <template #default="{ row }">
+                    <el-button
+                      size="small"
+                      type="danger"
+                      text
+                      @click="confirmDeleteObject(row.key)"
+                    >
+                      Delete
+                    </el-button>
                   </template>
                 </el-table-column>
               </el-table>

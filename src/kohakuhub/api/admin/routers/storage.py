@@ -332,3 +332,139 @@ async def list_s3_objects(
 
     logger.info(f"Returning {result['key_count']} objects to client")
     return result
+
+
+# ========== S3 Storage Management Operations (Admin Only) ==========
+
+# In-memory store for delete confirmations (TTL: 60 seconds)
+_delete_confirmations = {}
+
+
+@router.delete("/storage/objects/{key:path}")
+async def delete_s3_object(
+    key: str,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Delete a single S3 object.
+
+    Args:
+        key: Full S3 object key (path parameter, auto URL-decoded)
+        _admin: Admin authentication
+
+    Returns:
+        Success message
+    """
+
+    def _delete():
+        s3 = get_s3_client()
+        s3.delete_object(Bucket=cfg.s3.bucket, Key=key)
+        return {"deleted": 1}
+
+    result = await run_in_s3_executor(_delete)
+    logger.warning(f"Admin deleted S3 object: {key}")
+
+    return {"success": True, "message": f"Object deleted: {key}"}
+
+
+@router.post("/storage/prefix/prepare-delete")
+async def prepare_delete_prefix(
+    prefix: str,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Step 1: Prepare prefix deletion (generate confirmation token).
+
+    Returns estimated object count and confirmation token.
+    Token expires in 60 seconds.
+
+    Args:
+        prefix: S3 prefix to delete
+        _admin: Admin authentication
+
+    Returns:
+        Confirmation token, prefix, estimated count, expiration
+    """
+    import time
+    import uuid
+
+    # Count objects with prefix
+    def _count():
+        s3 = get_s3_client()
+        paginator = s3.get_paginator("list_objects_v2")
+        count = 0
+        for page in paginator.paginate(Bucket=cfg.s3.bucket, Prefix=prefix):
+            count += len(page.get("Contents", []))
+        return count
+
+    estimated = await run_in_s3_executor(_count)
+
+    # Generate confirmation token
+    token = str(uuid.uuid4())
+    _delete_confirmations[token] = {
+        "prefix": prefix,
+        "timestamp": time.time(),
+        "estimated_count": estimated,
+    }
+
+    # Cleanup old tokens (>60 seconds)
+    current_time = time.time()
+    expired = [
+        t
+        for t, data in _delete_confirmations.items()
+        if current_time - data["timestamp"] > 60
+    ]
+    for t in expired:
+        del _delete_confirmations[t]
+
+    logger.warning(f"Admin prepared delete for prefix: {prefix} ({estimated} objects)")
+
+    return {
+        "confirm_token": token,
+        "prefix": prefix,
+        "estimated_objects": estimated,
+        "expires_in": 60,
+    }
+
+
+@router.delete("/storage/prefix")
+async def delete_s3_prefix(
+    prefix: str,
+    confirm_token: str,
+    _admin: bool = Depends(verify_admin_token),
+):
+    """Step 2: Delete all objects under prefix (requires confirmation token).
+
+    Args:
+        prefix: S3 prefix to delete
+        confirm_token: Token from /prepare-delete
+        _admin: Admin authentication
+
+    Returns:
+        Success message with deleted count
+    """
+    import time
+    from kohakuhub.utils.s3 import delete_objects_with_prefix
+
+    # Validate confirmation token
+    if confirm_token not in _delete_confirmations:
+        raise HTTPException(400, detail="Invalid or expired confirmation token")
+
+    confirmation = _delete_confirmations[confirm_token]
+
+    # Check token not expired
+    if time.time() - confirmation["timestamp"] > 60:
+        del _delete_confirmations[confirm_token]
+        raise HTTPException(400, detail="Confirmation token expired (60 seconds)")
+
+    # Check prefix matches
+    if confirmation["prefix"] != prefix:
+        raise HTTPException(400, detail="Prefix mismatch with confirmation token")
+
+    # Delete objects
+    deleted_count = await delete_objects_with_prefix(cfg.s3.bucket, prefix)
+
+    # Cleanup confirmation token
+    del _delete_confirmations[confirm_token]
+
+    logger.warning(f"Admin deleted S3 prefix: {prefix} ({deleted_count} objects)")
+
+    return {"success": True, "deleted_count": deleted_count, "prefix": prefix}

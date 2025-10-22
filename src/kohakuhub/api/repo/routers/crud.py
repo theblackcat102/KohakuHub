@@ -23,7 +23,7 @@ from kohakuhub.db_operations import (
     should_use_lfs,
 )
 from kohakuhub.logger import get_logger
-from kohakuhub.auth.dependencies import get_current_user
+from kohakuhub.auth.dependencies import get_current_user, get_current_user_or_admin
 from kohakuhub.auth.permissions import (
     check_namespace_permission,
     check_repo_delete_permission,
@@ -151,21 +151,33 @@ class DeleteRepoPayload(BaseModel):
 @router.delete("/repos/delete")
 async def delete_repo(
     payload: DeleteRepoPayload,
-    user: User = Depends(get_current_user),
+    auth: tuple[User | None, bool] = Depends(get_current_user_or_admin),
 ):
     """Delete a repository. (NOTE: This is IRREVERSIBLE)
+
+    Accepts both user authentication and admin token (X-Admin-Token header).
 
     Args:
         name: Repository name.
         organization: Organization name (optional, defaults to user namespace).
         type: Repository type.
-        user: Current authenticated user.
+        auth: Tuple of (user, is_admin) from authentication
 
     Returns:
         Success message or error response.
     """
+    user, is_admin = auth
     repo_type = payload.type
-    namespace = payload.organization or user.username
+
+    # Determine namespace
+    if is_admin:
+        # Admin must specify organization (no default namespace)
+        if not payload.organization:
+            raise HTTPException(400, detail="Admin must specify organization parameter")
+        namespace = payload.organization
+    else:
+        namespace = payload.organization or user.username
+
     full_id = f"{namespace}/{payload.name}"
     lakefs_repo = lakefs_repo_name(repo_type, full_id)
 
@@ -173,12 +185,10 @@ async def delete_repo(
     repo_row = get_repository(repo_type, namespace, payload.name)
 
     if not repo_row:
-        # NOTE: HuggingFace client expects 400 for delete repo not found
-        # but 404 for getting repo not found. Use 400 with RepoNotFound code.
         return hf_repo_not_found(full_id, repo_type)
 
-    # 2. Check if user has permission to delete this repository
-    check_repo_delete_permission(repo_row, user)
+    # 2. Check if user has permission to delete this repository (admin bypasses)
+    check_repo_delete_permission(repo_row, user, is_admin=is_admin)
 
     # 3. Clean up S3 storage FIRST (before deleting DB, so we can access repo FK)
     try:
@@ -548,63 +558,62 @@ def _update_repository_database_records(
 @router.post("/repos/move")
 async def move_repo(
     payload: MoveRepoPayload,
-    user: User = Depends(get_current_user),
+    auth: tuple[User | None, bool] = Depends(get_current_user_or_admin),
 ):
     """Move/rename a repository.
 
     Matches HuggingFace Hub API: POST /api/repos/move
+    Accepts both user authentication and admin token (X-Admin-Token header).
 
     Args:
         payload: Move parameters
-        user: Current authenticated user
+        auth: Tuple of (user, is_admin) from authentication
 
     Returns:
         Success message with new URL
     """
+    user, is_admin = auth
     from_id = payload.fromRepo
     to_id = payload.toRepo
     repo_type = payload.type
 
-    # Check if source repository exists
+    # Parse IDs
     from_parts = from_id.split("/", 1)
+    to_parts = to_id.split("/", 1)
+
     if len(from_parts) != 2:
         return hf_error_response(
             400, HFErrorCode.INVALID_REPO_ID, "Invalid source repository ID"
         )
-
-    from_namespace, from_name = from_parts
-    repo_row = get_repository(repo_type, from_namespace, from_name)
-
-    if not repo_row:
-        return hf_repo_not_found(from_id, repo_type)
-
-    # Check if user has permission to move this repository
-    check_repo_delete_permission(repo_row, user)
-
-    # Check if destination already exists
-    to_parts = to_id.split("/", 1)
     if len(to_parts) != 2:
         return hf_error_response(
             400, HFErrorCode.INVALID_REPO_ID, "Invalid destination repository ID"
         )
 
+    from_namespace, from_name = from_parts
     to_namespace, to_name = to_parts
+
+    # Check if source repository exists
+    repo_row = get_repository(repo_type, from_namespace, from_name)
+    if not repo_row:
+        return hf_repo_not_found(from_id, repo_type)
+
+    # Check permissions (admin bypasses)
+    check_repo_delete_permission(repo_row, user, is_admin=is_admin)
+    check_namespace_permission(to_namespace, user, is_admin=is_admin)
+
+    # Check if destination already exists
     existing = get_repository(repo_type, to_namespace, to_name)
     if existing:
         return hf_error_response(
-            400,
-            HFErrorCode.REPO_EXISTS,
-            f"Repository {to_id} already exists",
+            400, HFErrorCode.REPO_EXISTS, f"Repository {to_id} already exists"
         )
 
-    # Check if user has permission to use destination namespace
-    check_namespace_permission(to_namespace, user)
-
-    # Check storage quota and prepare for namespace change if moving to different namespace
+    # Check storage quota (only for users, admin bypasses)
     repo_size = 0
     moving_namespace = from_namespace != to_namespace
 
-    if moving_namespace:
+    if moving_namespace and not is_admin:
         logger.info(
             f"Checking storage quota for moving {from_id} to {to_namespace} namespace"
         )
@@ -694,7 +703,7 @@ async def move_repo(
 @router.post("/repos/squash")
 async def squash_repo(
     payload: SquashRepoPayload,
-    user: User = Depends(get_current_user),
+    auth: tuple[User | None, bool] = Depends(get_current_user_or_admin),
 ):
     """Squash repository to clear all commit history and compress storage.
 
@@ -703,9 +712,11 @@ async def squash_repo(
     2. Moves back to original name
     3. Result: All commit history cleared, only current state preserved
 
+    Accepts both user authentication and admin token (X-Admin-Token header).
+
     Args:
         payload: Squash parameters
-        user: Current authenticated user
+        auth: Tuple of (user, is_admin) from authentication
 
     Returns:
         Success message
@@ -713,7 +724,7 @@ async def squash_repo(
     Raises:
         HTTPException: If operation fails
     """
-
+    user, is_admin = auth
     repo_id = payload.repo
     repo_type = payload.type
 
@@ -731,8 +742,8 @@ async def squash_repo(
     if not repo_row:
         return hf_repo_not_found(repo_id, repo_type)
 
-    # Check if user has permission
-    check_repo_delete_permission(repo_row, user)
+    # Check if user has permission (admin bypasses)
+    check_repo_delete_permission(repo_row, user, is_admin=is_admin)
 
     # Generate temporary repository name
     temp_suffix = uuid.uuid4().hex[:8]

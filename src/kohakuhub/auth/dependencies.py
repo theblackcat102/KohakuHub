@@ -1,10 +1,13 @@
 """FastAPI dependencies for authentication."""
 
+import hashlib
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Cookie, Header, HTTPException, Request
 
+from kohakuhub.config import cfg
 from kohakuhub.db import Session, Token, User
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.utils import hash_token
@@ -116,3 +119,42 @@ def get_external_tokens(request: Request) -> dict[str, str]:
     Returns empty dict if no external tokens were provided.
     """
     return getattr(request.state, "external_tokens", {})
+
+
+def get_current_user_or_admin(
+    request: Request,
+    session_id: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
+    x_admin_token: Optional[str] = Header(None),
+) -> tuple[User | None, bool]:
+    """Get current user or check admin token.
+
+    Returns tuple of (user, is_admin):
+    - If admin token valid: (None, True)
+    - If user authenticated: (User, False)
+    - If neither: raises 401
+
+    This allows endpoints to accept both user auth AND admin auth.
+    """
+    # Try admin token first
+    if x_admin_token:
+        # Validate admin token (same logic as verify_admin_token)
+        if cfg.admin.enabled:
+            provided_hash = hashlib.sha3_512(x_admin_token.encode()).hexdigest()
+            expected_hash = hashlib.sha3_512(
+                cfg.admin.secret_token.encode()
+            ).hexdigest()
+
+            if secrets.compare_digest(provided_hash, expected_hash):
+                # Admin token valid - set flag in request.state
+                request.state.is_admin = True
+                logger.debug("Authenticated as admin")
+                return (None, True)
+
+    # Try user authentication
+    try:
+        user = get_current_user(request, session_id, authorization)
+        request.state.is_admin = False
+        return (user, False)
+    except HTTPException:
+        raise HTTPException(401, detail="Not authenticated")

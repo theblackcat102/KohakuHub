@@ -9,14 +9,18 @@ from kohakuhub.db_operations import get_organization, get_user_organization
 
 
 def check_namespace_permission(
-    namespace: str, user: User, require_admin: bool = False
+    namespace: str,
+    user: Optional[User],
+    require_admin: bool = False,
+    is_admin: bool = False,
 ) -> bool:
     """Check if user has permission to use a namespace.
 
     Args:
         namespace: The namespace (username or org name)
-        user: The authenticated user
+        user: The authenticated user (None if admin token used)
         require_admin: If True, require admin/super-admin role for orgs
+        is_admin: If True, bypass all checks (admin token authenticated)
 
     Returns:
         True if user has permission
@@ -24,6 +28,13 @@ def check_namespace_permission(
     Raises:
         HTTPException: If user doesn't have permission
     """
+    # Admin bypass
+    if is_admin:
+        return True
+
+    if not user:
+        raise HTTPException(403, detail="User authentication required")
+
     # User's own namespace
     if namespace == user.username:
         return True
@@ -53,7 +64,9 @@ def check_namespace_permission(
     return True
 
 
-def check_repo_read_permission(repo: Repository, user: Optional[User] = None) -> bool:
+def check_repo_read_permission(
+    repo: Repository, user: Optional[User] = None, is_admin: bool = False
+) -> bool:
     """Check if user can read a repository.
 
     Public repos: anyone can read
@@ -62,6 +75,7 @@ def check_repo_read_permission(repo: Repository, user: Optional[User] = None) ->
     Args:
         repo: The repository to check
         user: The authenticated user (optional for public repos)
+        is_admin: If True, bypass all checks (admin token authenticated)
 
     Returns:
         True if user has permission
@@ -69,6 +83,10 @@ def check_repo_read_permission(repo: Repository, user: Optional[User] = None) ->
     Raises:
         HTTPException: If user doesn't have permission
     """
+    # Admin bypass
+    if is_admin:
+        return True
+
     # Public repos are accessible to everyone
     if not repo.private:
         return True
@@ -95,7 +113,9 @@ def check_repo_read_permission(repo: Repository, user: Optional[User] = None) ->
     )
 
 
-def check_repo_write_permission(repo: Repository, user: User) -> bool:
+def check_repo_write_permission(
+    repo: Repository, user: Optional[User], is_admin: bool = False
+) -> bool:
     """Check if user can modify a repository.
 
     Users can modify:
@@ -104,7 +124,8 @@ def check_repo_write_permission(repo: Repository, user: User) -> bool:
 
     Args:
         repo: The repository to check
-        user: The authenticated user
+        user: The authenticated user (None if admin token used)
+        is_admin: If True, bypass all checks (admin token authenticated)
 
     Returns:
         True if user has permission
@@ -112,6 +133,13 @@ def check_repo_write_permission(repo: Repository, user: User) -> bool:
     Raises:
         HTTPException: If user doesn't have permission
     """
+    # Admin bypass
+    if is_admin:
+        return True
+
+    if not user:
+        raise HTTPException(403, detail="User authentication required")
+
     # Check if user owns the repo (namespace matches username)
     if repo.namespace == user.username:
         return True
@@ -130,7 +158,9 @@ def check_repo_write_permission(repo: Repository, user: User) -> bool:
     )
 
 
-def check_repo_delete_permission(repo: Repository, user: User) -> bool:
+def check_repo_delete_permission(
+    repo: Repository, user: Optional[User], is_admin: bool = False
+) -> bool:
     """Check if user can delete a repository.
 
     Users can delete:
@@ -139,7 +169,8 @@ def check_repo_delete_permission(repo: Repository, user: User) -> bool:
 
     Args:
         repo: The repository to check
-        user: The authenticated user
+        user: The authenticated user (None if admin token used)
+        is_admin: If True, bypass all checks (admin token authenticated)
 
     Returns:
         True if user has permission
@@ -147,6 +178,13 @@ def check_repo_delete_permission(repo: Repository, user: User) -> bool:
     Raises:
         HTTPException: If user doesn't have permission
     """
+    # Admin bypass
+    if is_admin:
+        return True
+
+    if not user:
+        raise HTTPException(403, detail="User authentication required")
+
     # Check if user owns the repo (namespace matches username)
     if repo.namespace == user.username:
         return True
