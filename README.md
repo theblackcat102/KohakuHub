@@ -27,6 +27,7 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 
 - **HuggingFace Compatible** - Drop-in replacement for `huggingface_hub`, `hfutils`, `transformers`, `diffusers`
 - **External Source Fallback** - Browse HuggingFace (or other KohakuHub instances) when repos not found locally
+- **User External Tokens** - Configure your own tokens for external sources (HuggingFace, etc.) with encrypted storage
 - **Native Git Clone** - Standard Git operations (clone) with Git LFS support
 - **Git-Like Versioning** - Branches, commits, tags via LakeFS
 - **S3 Storage** - Works with MinIO, AWS S3, Cloudflare R2, etc.
@@ -199,9 +200,38 @@ KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
 # Admin Portal
 KOHAKU_HUB_ADMIN_ENABLED=true
 KOHAKU_HUB_ADMIN_SECRET_TOKEN=change-me-in-production
+
+# External Tokens (for user-specific fallback tokens)
+KOHAKU_HUB_DATABASE_KEY=$(openssl rand -hex 32)  # Required for encryption
 ```
 
 See [config-example.toml](./config-example.toml) for all options.
+
+### External Fallback Tokens
+
+Users can provide their own tokens for external sources (e.g., HuggingFace) to access private repositories:
+
+**Via Web UI:**
+1. Go to Settings → External Tokens
+2. Add your HuggingFace token
+3. Tokens are encrypted and stored securely
+
+**Via CLI:**
+```bash
+kohub-cli settings user external-tokens add --url https://huggingface.co --token hf_abc123
+```
+
+**Via Authorization Header (API/programmatic):**
+```bash
+curl -H "Authorization: Bearer my_token|https://huggingface.co,hf_abc123" \
+  http://localhost:28080/api/models/org/model
+```
+
+**How it works:**
+- User tokens override admin-configured tokens
+- Tokens encrypted at rest using AES-256
+- Works with session auth, API tokens, and anonymous requests
+- Automatically used when repos not found locally
 
 ## Development
 

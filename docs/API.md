@@ -513,6 +513,16 @@ erDiagram
 | `/api/auth/tokens/create` | POST | ✓ | Create new API token |
 | `/api/auth/tokens/{token_id}` | DELETE | ✓ | Revoke API token |
 
+### External Token Operations (Fallback System)
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/fallback-sources/available` | GET | ✗ | List available fallback sources |
+| `/api/users/{username}/external-tokens` | GET | ✓ | List user's external tokens (masked) |
+| `/api/users/{username}/external-tokens` | POST | ✓ | Add/update external token |
+| `/api/users/{username}/external-tokens/{url}` | DELETE | ✓ | Delete external token |
+| `/api/users/{username}/external-tokens/bulk` | PUT | ✓ | Bulk update external tokens |
+
 ### Organization Operations
 
 | Endpoint | Method | Auth | Description |
@@ -1011,3 +1021,160 @@ KohakuHub implements smart download tracking:
 - **Development**: MinIO (included in docker-compose)
 - **Public Hub**: Cloudflare R2 (free egress saves costs)
 - **Private/Enterprise**: Self-hosted MinIO or AWS S3 with VPC endpoints
+
+---
+
+## External Token API (User Fallback Tokens)
+
+Users can configure their own tokens for external fallback sources to access private repositories.
+
+### List Available Sources
+
+**Public endpoint - no authentication required**
+
+```bash
+GET /api/fallback-sources/available
+```
+
+**Response:**
+```json
+[
+  {
+    "url": "https://huggingface.co",
+    "name": "HuggingFace",
+    "source_type": "huggingface",
+    "priority": 1
+  }
+]
+```
+
+### List User's External Tokens
+
+```bash
+GET /api/users/{username}/external-tokens
+Authorization: Bearer YOUR_TOKEN
+```
+
+**Response (tokens are masked):**
+```json
+[
+  {
+    "url": "https://huggingface.co",
+    "token_preview": "hf_a***",
+    "created_at": "2025-01-22T10:30:00Z",
+    "updated_at": "2025-01-22T10:30:00Z"
+  }
+]
+```
+
+### Add/Update External Token
+
+```bash
+POST /api/users/{username}/external-tokens
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+
+{
+  "url": "https://huggingface.co",
+  "token": "hf_abc123xyz"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "External token saved"
+}
+```
+
+**Notes:**
+- If token exists for this URL, it will be updated
+- Token is encrypted before storage (AES-256)
+- User can only manage their own tokens
+
+### Delete External Token
+
+```bash
+DELETE /api/users/{username}/external-tokens/https%3A%2F%2Fhuggingface.co
+Authorization: Bearer YOUR_TOKEN
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "External token deleted"
+}
+```
+
+**Note:** URL must be URL-encoded in path
+
+### Bulk Update External Tokens
+
+Replace all external tokens at once:
+
+```bash
+PUT /api/users/{username}/external-tokens/bulk
+Authorization: Bearer YOUR_TOKEN
+Content-Type: application/json
+
+{
+  "tokens": [
+    {"url": "https://huggingface.co", "token": "hf_abc123"},
+    {"url": "https://other-hub.com", "token": "token456"}
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Updated 2 external tokens"
+}
+```
+
+**Notes:**
+- Deletes tokens not in the new list
+- Atomic operation (all or nothing)
+
+### Using External Tokens in Requests
+
+**Authorization Header Format:**
+```
+Bearer <auth_token>|<url1>,<token1>|<url2>,<token2>...
+```
+
+**Examples:**
+
+1. **API token + external token:**
+```bash
+curl -H "Authorization: Bearer my_api_token|https://huggingface.co,hf_abc123" \
+  http://localhost:28080/api/models/org/model
+```
+
+2. **Session auth + external token:**
+```bash
+# Frontend automatically sends: "Bearer |https://huggingface.co,hf_abc123"
+```
+
+3. **Anonymous + external token:**
+```bash
+curl -H "Authorization: Bearer |https://huggingface.co,hf_abc123" \
+  http://localhost:28080/api/models/facebook/gpt2
+```
+
+**Token Priority:**
+1. Authorization header tokens (highest - per-request override)
+2. Database tokens (medium - user preferences)
+3. Admin tokens (lowest - server defaults)
+
+**Configuration:**
+```bash
+# Required: Encryption key
+export KOHAKU_HUB_DATABASE_KEY="$(openssl rand -hex 32)"
+
+# Optional: Require auth for fallback
+export KOHAKU_HUB_FALLBACK_REQUIRE_AUTH=false  # Default: false
+```

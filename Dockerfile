@@ -9,12 +9,14 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 COPY ./pyproject.toml .
+RUN mkdir -p /app/src/kohakuhub
+RUN echo "" > /app/src/kohakuhub/__init__.py
+RUN uv pip install --system -e .
+
 COPY ./src/kohakuhub ./src/kohakuhub
 COPY ./scripts ./scripts
 COPY ./docker/startup.py /app/startup.py
 RUN chmod +x /app/startup.py
-
-RUN uv pip install --system -e .
 
 EXPOSE 48888
 CMD ["/app/startup.py"]
