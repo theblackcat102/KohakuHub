@@ -95,38 +95,50 @@ def migrate_sqlite():
 
 
 def run():
-    """Run migration 014."""
-    print("\n" + "=" * 60)
-    print(f"Migration {MIGRATION_NUMBER}: Add UserExternalToken table")
-    print("=" * 60)
+    """Run migration 014.
 
-    # Connect to database
+    Returns:
+        True if successful or already applied, False otherwise
+    """
     db.connect(reuse_if_open=True)
 
-    # Check if should skip
-    if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
-        print(
-            f"\n⚠️  Skipping migration {MIGRATION_NUMBER} - already applied or superseded by future migrations\n"
-        )
-        return
+    try:
+        # Check if should skip due to future migrations
+        if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
+            print(
+                f"Migration {MIGRATION_NUMBER}: Skipped (superseded by future migration)"
+            )
+            return True
 
-    # Check if already applied
-    if is_applied(db, cfg):
-        print(
-            f"\n✓ Migration {MIGRATION_NUMBER} already applied (UserExternalToken table exists)\n"
-        )
-        return
+        # Check if already applied
+        if is_applied(db, cfg):
+            print(
+                f"Migration {MIGRATION_NUMBER}: Already applied (UserExternalToken table exists)"
+            )
+            return True
 
-    # Run migration in transaction
-    print(f"\nApplying migration {MIGRATION_NUMBER}...\n")
+        print("=" * 70)
+        print(f"Migration {MIGRATION_NUMBER}: Add UserExternalToken table")
+        print("=" * 70)
 
-    with db.atomic():
-        if cfg.app.db_backend == "postgres":
-            migrate_postgres()
-        else:
-            migrate_sqlite()
+        # Run migration in transaction
+        with db.atomic():
+            if cfg.app.db_backend == "postgres":
+                migrate_postgres()
+            else:
+                migrate_sqlite()
 
-    print(f"\n✓ Migration {MIGRATION_NUMBER} completed successfully!\n")
+        print("\n" + "=" * 70)
+        print(f"Migration {MIGRATION_NUMBER}: ✓ Completed Successfully")
+        print("=" * 70)
+        return True
+
+    except Exception as e:
+        print(f"\n✗ Migration {MIGRATION_NUMBER} failed: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
 
 
 if __name__ == "__main__":
