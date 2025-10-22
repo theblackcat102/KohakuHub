@@ -125,6 +125,15 @@ async def try_fallback_resolve(
                     if get_response.status_code == 200:
                         # Proxy the content with original headers
                         resp_headers = dict(get_response.headers)
+
+                        # Remove compression headers since httpx already decompressed
+                        # Otherwise browser will try to decompress already-decompressed content
+                        resp_headers.pop("content-encoding", None)
+                        resp_headers.pop(
+                            "content-length", None
+                        )  # Length may be wrong after decompression
+                        resp_headers.pop("transfer-encoding", None)
+
                         resp_headers.update(
                             add_source_headers(
                                 get_response, source["name"], source["url"]

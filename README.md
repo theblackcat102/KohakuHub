@@ -18,8 +18,8 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 
 </div>
 
-|![1760453905163](image/README/1760453905163.png)|![1760453924852](image/README/1760453924852.png)|![1760453957231](image/README/1760453957231.png)|
-|-|-|-|
+|![1761148256913](image/README/1761148256913.png)|![1761148225463](image/README/1761148225463.png)|
+|-|-|
 
 **Join our community:** https://discord.gg/xWYrkyvJ2s
 
@@ -289,7 +289,6 @@ While core features are stable for alpha release, some advanced features are sti
 - Repository transfer/squash/delete are experimental/not stable
 - Some HuggingFace API endpoints may be incomplete
     - Feel free to open issue in this case, but remember to provide full information and minimal reproduction!
-- LFS strategy is not yet configurable
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md#project-status) for full roadmap.
 
