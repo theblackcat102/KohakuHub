@@ -227,6 +227,66 @@ class KohubClient:
         response = self._request("DELETE", f"/api/auth/tokens/{token_id}")
         return response.json()
 
+    # ========== External Token Operations ==========
+
+    def list_available_sources(self) -> list[dict[str, Any]]:
+        """List available fallback sources.
+
+        Returns:
+            List of available sources with url, name, source_type
+        """
+        response = self._request("GET", "/api/fallback-sources/available")
+        return response.json()
+
+    def list_external_tokens(self, username: str) -> list[dict[str, Any]]:
+        """List user's external fallback tokens.
+
+        Args:
+            username: Username
+
+        Returns:
+            List of external tokens (tokens are masked)
+        """
+        response = self._request("GET", f"/api/users/{username}/external-tokens")
+        return response.json()
+
+    def add_external_token(self, username: str, url: str, token: str) -> dict[str, Any]:
+        """Add or update external token for a source.
+
+        Args:
+            username: Username
+            url: Source URL (e.g., "https://huggingface.co")
+            token: Token for this source
+
+        Returns:
+            Success message
+        """
+        from urllib.parse import quote
+
+        response = self._request(
+            "POST",
+            f"/api/users/{username}/external-tokens",
+            json={"url": url, "token": token},
+        )
+        return response.json()
+
+    def delete_external_token(self, username: str, url: str) -> dict[str, Any]:
+        """Delete external token for a source.
+
+        Args:
+            username: Username
+            url: Source URL
+
+        Returns:
+            Success message
+        """
+        from urllib.parse import quote
+
+        response = self._request(
+            "DELETE", f"/api/users/{username}/external-tokens/{quote(url, safe='')}"
+        )
+        return response.json()
+
     # ========== Organization Operations ==========
 
     def create_organization(

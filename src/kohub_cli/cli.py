@@ -1023,6 +1023,119 @@ def update_user(ctx, email):
         handle_error(e, ctx)
 
 
+@user.group(name="external-tokens")
+def external_tokens():
+    """Manage external fallback source tokens."""
+    pass
+
+
+@external_tokens.command("sources")
+@click.pass_context
+def list_sources(ctx):
+    """List available fallback sources."""
+    client = ctx.obj["client"]
+    try:
+        sources = client.list_available_sources()
+        if ctx.obj.get("json"):
+            output_result(ctx, sources)
+        else:
+            console = ctx.obj["console"]
+            if not sources:
+                console.print("[yellow]No fallback sources configured[/yellow]")
+                return
+
+            console.print(
+                f"\n[bold]Available Fallback Sources ({len(sources)}):[/bold]\n"
+            )
+            for source in sources:
+                console.print(f"  • [cyan]{source['name']}[/cyan]")
+                console.print(f"    URL: {source['url']}")
+                console.print(f"    Type: {source['source_type']}")
+                console.print()
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@external_tokens.command("list")
+@click.argument("username", required=False)
+@click.pass_context
+def list_external_tokens_cmd(ctx, username):
+    """List user's external tokens (tokens are masked).
+
+    USERNAME: User to list tokens for (default: current user)
+    """
+    client = ctx.obj["client"]
+    try:
+        if not username:
+            user_info = client.whoami()
+            username = user_info["username"]
+
+        tokens = client.list_external_tokens(username)
+        if ctx.obj.get("json"):
+            output_result(ctx, tokens)
+        else:
+            console = ctx.obj["console"]
+            if not tokens:
+                console.print(
+                    f"[yellow]No external tokens configured for {username}[/yellow]"
+                )
+                return
+
+            console.print(
+                f"\n[bold]External Tokens for {username} ({len(tokens)}):[/bold]\n"
+            )
+            for token in tokens:
+                console.print(f"  • [cyan]{token['url']}[/cyan]")
+                console.print(f"    Token: {token['token_preview']}")
+                console.print(f"    Created: {token['created_at']}")
+                console.print()
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@external_tokens.command("add")
+@click.argument("username", required=False)
+@click.option("--url", required=True, help="Source URL (e.g., https://huggingface.co)")
+@click.option("--token", required=True, help="Token for this source")
+@click.pass_context
+def add_external_token_cmd(ctx, username, url, token):
+    """Add or update external token for a source.
+
+    USERNAME: User to add token for (default: current user)
+    """
+    client = ctx.obj["client"]
+    try:
+        if not username:
+            user_info = client.whoami()
+            username = user_info["username"]
+
+        result = client.add_external_token(username, url, token)
+        output_result(ctx, result, f"External token added for {url}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
+@external_tokens.command("delete")
+@click.argument("username", required=False)
+@click.option("--url", required=True, help="Source URL")
+@click.pass_context
+def delete_external_token_cmd(ctx, username, url):
+    """Delete external token for a source.
+
+    USERNAME: User to delete token for (default: current user)
+    """
+    client = ctx.obj["client"]
+    try:
+        if not username:
+            user_info = client.whoami()
+            username = user_info["username"]
+
+        result = client.delete_external_token(username, url)
+        output_result(ctx, result, f"External token deleted for {url}")
+    except Exception as e:
+        handle_error(e, ctx)
+
+
 @settings.group(name="repo")
 def repo_settings():
     """Repository settings management."""
