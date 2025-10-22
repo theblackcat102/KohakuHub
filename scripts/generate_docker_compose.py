@@ -695,19 +695,174 @@ def migrate_existing_config(docker_compose_path: Path, config_toml_path: Path) -
     else:
         print(f"   Database key: (exists)")
 
+    # Preserve existing secrets (DO NOT regenerate!)
     if not config["session_secret"]:
+        print("\n⚠ Session secret missing - generating new one")
         config["session_secret"] = generate_secret(48)
-    if not config["admin_secret"]:
-        config["admin_secret"] = generate_secret(48)
+    else:
+        print(f"   Session secret: (exists)")
 
-    # LakeFS encryption
-    config["lakefs_encrypt_key"] = generate_secret(32)
+    if not config["admin_secret"]:
+        print("\n⚠ Admin secret missing - generating new one")
+        config["admin_secret"] = generate_secret(48)
+    else:
+        print(f"   Admin secret: (exists)")
+
+    # LakeFS encryption key - MUST preserve existing value or generate only if missing
+    config["lakefs_encrypt_key"] = get_existing("LAKEFS_ENCRYPT_SECRET_KEY")
+    if not config["lakefs_encrypt_key"]:
+        print("\n⚠ LakeFS encryption key missing - generating new one")
+        print("   WARNING: This will make existing LakeFS data inaccessible!")
+        config["lakefs_encrypt_key"] = generate_secret(32)
+    else:
+        print(f"   LakeFS encrypt key: (exists - PRESERVED)")
 
     # Network
     config["external_network"] = ""
 
     print("\n✓ Migration complete - all existing values preserved")
-    print("✓ New fields added with generated defaults")
+    print("✓ New fields added")
+
+    # Write updated values back to docker-compose.yml IN PLACE
+    if docker_compose_path.exists():
+        update_docker_compose_inplace(
+            docker_compose_path,
+            {
+                "KOHAKU_HUB_DATABASE_KEY": config["database_key"],
+                "LAKEFS_ENCRYPT_SECRET_KEY": config["lakefs_encrypt_key"],
+            },
+        )
+
+    # Write updated config.toml IN PLACE
+    if config_toml_path.exists():
+        update_config_toml_inplace(
+            config_toml_path,
+            {
+                "app.database_key": config["database_key"],
+                "fallback.require_auth": False,
+            },
+        )
+
+    return config
+
+
+def update_docker_compose_inplace(filepath: Path, new_vars: dict):
+    """Update docker-compose.yml in place, adding new environment variables.
+
+    Args:
+        filepath: Path to docker-compose.yml
+        new_vars: Dict of {ENV_VAR: value} to add/update
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    output_lines = []
+    in_hub_api_env = False
+    added_vars = set()
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        # Detect hub-api environment section
+        if "hub-api:" in line:
+            in_hub_api_env = False
+        elif in_hub_api_env and stripped.startswith("environment:"):
+            in_hub_api_env = True
+        elif (
+            "environment:" in line
+            and i > 0
+            and "hub-api" in "".join(lines[max(0, i - 10) : i])
+        ):
+            in_hub_api_env = True
+
+        # Check if this is an env var line
+        if in_hub_api_env and stripped.startswith("- "):
+            for var_name, var_value in new_vars.items():
+                if var_name in line:
+                    # Update existing variable
+                    indent = len(line) - len(line.lstrip())
+                    comment_match = re.search(r"(#.+)$", line)
+                    comment = " " + comment_match.group(1) if comment_match else ""
+                    output_lines.append(
+                        f"{' ' * indent}- {var_name}={var_value}{comment}\n"
+                    )
+                    added_vars.add(var_name)
+                    break
+            else:
+                # Not updating this line, keep as-is
+                output_lines.append(line)
+
+            # If we're at the last env var and haven't added new vars, add them
+            if i + 1 < len(lines) and not lines[i + 1].strip().startswith("- "):
+                for var_name, var_value in new_vars.items():
+                    if var_name not in added_vars:
+                        indent = len(line) - len(line.lstrip())
+                        output_lines.append(f"{' ' * indent}- {var_name}={var_value}\n")
+                        added_vars.add(var_name)
+        else:
+            output_lines.append(line)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.writelines(output_lines)
+
+    print(f"✓ Updated {filepath} with {len(added_vars)} new variables")
+
+
+def update_config_toml_inplace(filepath: Path, new_fields: dict):
+    """Update config.toml in place, adding new fields.
+
+    Args:
+        filepath: Path to config.toml
+        new_fields: Dict of {"section.key": value} to add
+    """
+    try:
+        with open(filepath, "rb") as f:
+            existing = tomllib.load(f)
+    except:
+        existing = {}
+
+    # Add new fields
+    for path, value in new_fields.items():
+        keys = path.split(".")
+        current = existing
+        for key in keys[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+
+        # Only add if doesn't exist
+        if keys[-1] not in current:
+            current[keys[-1]] = value
+
+    # Write back (simple TOML format)
+    lines = []
+    for section in [
+        "s3",
+        "lakefs",
+        "smtp",
+        "auth",
+        "admin",
+        "app",
+        "quota",
+        "fallback",
+    ]:
+        if section in existing:
+            lines.append(f"[{section}]")
+            for key, val in existing[section].items():
+                if isinstance(val, bool):
+                    lines.append(f"{key} = {str(val).lower()}")
+                elif isinstance(val, (int, float)):
+                    lines.append(f"{key} = {val}")
+                elif isinstance(val, str):
+                    lines.append(f'{key} = "{val}"')
+                else:
+                    lines.append(f'{key} = "{val}"')
+            lines.append("")
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    print(f"✓ Updated {filepath}")
 
     return config
 
