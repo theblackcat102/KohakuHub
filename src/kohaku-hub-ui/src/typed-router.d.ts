@@ -19,7 +19,6 @@ declare module 'vue-router/auto-routes' {
    */
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
-    '/[type]s/': RouteRecordInfo<'/[type]s/', '/:type()s', { type: ParamValue<true> }, { type: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/': RouteRecordInfo<'/[type]s/[namespace]/[name]/', '/:type()s/:namespace/:name', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/blob/[branch]/[...file]': RouteRecordInfo<'/[type]s/[namespace]/[name]/blob/[branch]/[...file]', '/:type()s/:namespace/:name/blob/:branch/:file(.*)', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, branch: ParamValue<true>, file: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, branch: ParamValue<false>, file: ParamValue<false> }>,
     '/[type]s/[namespace]/[name]/commit/[commit_id]': RouteRecordInfo<'/[type]s/[namespace]/[name]/commit/[commit_id]', '/:type()s/:namespace/:name/commit/:commit_id', { type: ParamValue<true>, namespace: ParamValue<true>, name: ParamValue<true>, commit_id: ParamValue<true> }, { type: ParamValue<false>, namespace: ParamValue<false>, name: ParamValue<false>, commit_id: ParamValue<false> }>,
@@ -34,11 +33,13 @@ declare module 'vue-router/auto-routes' {
     '/[username]/storage': RouteRecordInfo<'/[username]/storage', '/:username/storage', { username: ParamValue<true> }, { username: ParamValue<false> }>,
     '/about': RouteRecordInfo<'/about', '/about', Record<never, never>, Record<never, never>>,
     '/contributing': RouteRecordInfo<'/contributing', '/contributing', Record<never, never>, Record<never, never>>,
+    '/datasets': RouteRecordInfo<'/datasets', '/datasets', Record<never, never>, Record<never, never>>,
     '/docs/': RouteRecordInfo<'/docs/', '/docs', Record<never, never>, Record<never, never>>,
     '/docs/[...slug]': RouteRecordInfo<'/docs/[...slug]', '/docs/:slug(.*)', { slug: ParamValue<true> }, { slug: ParamValue<false> }>,
     '/get-started': RouteRecordInfo<'/get-started', '/get-started', Record<never, never>, Record<never, never>>,
     '/invite/[token]': RouteRecordInfo<'/invite/[token]', '/invite/:token', { token: ParamValue<true> }, { token: ParamValue<false> }>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
+    '/models': RouteRecordInfo<'/models', '/models', Record<never, never>, Record<never, never>>,
     '/new': RouteRecordInfo<'/new', '/new', Record<never, never>, Record<never, never>>,
     '/organizations/': RouteRecordInfo<'/organizations/', '/organizations', Record<never, never>, Record<never, never>>,
     '/organizations/[org]/settings': RouteRecordInfo<'/organizations/[org]/settings', '/organizations/:org/settings', { org: ParamValue<true> }, { org: ParamValue<false> }>,
@@ -51,6 +52,7 @@ declare module 'vue-router/auto-routes' {
     '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
     '/self-hosted': RouteRecordInfo<'/self-hosted', '/self-hosted', Record<never, never>, Record<never, never>>,
     '/settings': RouteRecordInfo<'/settings', '/settings', Record<never, never>, Record<never, never>>,
+    '/spaces': RouteRecordInfo<'/spaces', '/spaces', Record<never, never>, Record<never, never>>,
     '/terms': RouteRecordInfo<'/terms', '/terms', Record<never, never>, Record<never, never>>,
   }
 
@@ -67,10 +69,6 @@ declare module 'vue-router/auto-routes' {
   export interface _RouteFileInfoMap {
     'src/pages/index.vue': {
       routes: '/'
-      views: never
-    }
-    'src/pages/[type]s/index.vue': {
-      routes: '/[type]s/'
       views: never
     }
     'src/pages/[type]s/[namespace]/[name]/index.vue': {
@@ -129,6 +127,10 @@ declare module 'vue-router/auto-routes' {
       routes: '/contributing'
       views: never
     }
+    'src/pages/datasets.vue': {
+      routes: '/datasets'
+      views: never
+    }
     'src/pages/docs/index.vue': {
       routes: '/docs/'
       views: never
@@ -147,6 +149,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/login.vue': {
       routes: '/login'
+      views: never
+    }
+    'src/pages/models.vue': {
+      routes: '/models'
       views: never
     }
     'src/pages/new.vue': {
@@ -195,6 +201,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/settings.vue': {
       routes: '/settings'
+      views: never
+    }
+    'src/pages/spaces.vue': {
+      routes: '/spaces'
       views: never
     }
     'src/pages/terms.vue': {

@@ -136,6 +136,101 @@
         </div>
       </el-tab-pane>
 
+      <!-- External Tokens -->
+      <el-tab-pane label="External Tokens" name="external-tokens">
+        <div class="max-w-2xl">
+          <div class="card mb-4">
+            <h2 class="text-xl font-semibold mb-4">
+              External Fallback Source Tokens
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Configure your own tokens for external fallback sources (e.g.,
+              HuggingFace). These tokens allow you to access private
+              repositories from external sources.
+            </p>
+
+            <div class="mb-4">
+              <h3 class="text-md font-semibold mb-2">Available Sources</h3>
+              <div
+                v-if="availableSources.length === 0"
+                class="text-sm text-gray-500"
+              >
+                No fallback sources configured
+              </div>
+              <div v-else class="space-y-2">
+                <div
+                  v-for="source in availableSources"
+                  :key="source.url"
+                  class="p-3 border border-gray-200 dark:border-gray-700 rounded"
+                >
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="font-medium">{{ source.name }}</div>
+                      <div class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ source.url }}
+                      </div>
+                    </div>
+                    <el-button
+                      v-if="!hasTokenForSource(source.url)"
+                      size="small"
+                      @click="startAddToken(source)"
+                    >
+                      Add Token
+                    </el-button>
+                    <el-button
+                      v-else
+                      size="small"
+                      type="warning"
+                      @click="startEditToken(source)"
+                    >
+                      Edit Token
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="externalTokens.length > 0" class="mt-4">
+              <h3 class="text-md font-semibold mb-2">Your Configured Tokens</h3>
+              <div class="space-y-2">
+                <div
+                  v-for="(token, index) in externalTokens"
+                  :key="index"
+                  class="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded"
+                >
+                  <div class="flex-1">
+                    <div class="font-medium">
+                      {{ getSourceName(token.url) }}
+                    </div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                      {{ token.url }}
+                    </div>
+                    <div class="text-sm text-gray-500 font-mono mt-1">
+                      {{ token.token ? maskToken(token.token) : "***" }}
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    <el-button
+                      size="small"
+                      @click="startEditToken({ url: token.url })"
+                    >
+                      Edit
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click="handleDeleteExternalToken(token.url)"
+                    >
+                      Delete
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+
       <!-- API Tokens -->
       <el-tab-pane label="API Tokens" name="tokens">
         <div class="max-w-2xl">
@@ -210,6 +305,11 @@ import { useAuthStore } from "@/stores/auth";
 import { useRouter } from "vue-router";
 import { authAPI, settingsAPI } from "@/utils/api";
 import { copyToClipboard } from "@/utils/clipboard";
+import {
+  getExternalTokens,
+  addExternalToken,
+  removeExternalToken,
+} from "@/utils/externalTokens";
 import { ElMessage, ElMessageBox } from "element-plus";
 import dayjs from "dayjs";
 import AvatarUpload from "@/components/profile/AvatarUpload.vue";
@@ -236,6 +336,10 @@ const profileForm = ref({
     huggingface: "",
   },
 });
+
+// External tokens
+const availableSources = ref([]);
+const externalTokens = ref([]);
 
 const hasProfileChanges = computed(() => {
   if (!user.value) return false;
@@ -359,10 +463,139 @@ async function copyToken() {
   }
 }
 
+// External tokens management
+async function loadAvailableSources() {
+  try {
+    const { data } = await authAPI.getAvailableSources();
+    availableSources.value = data || [];
+  } catch (err) {
+    console.error("Failed to load available sources:", err);
+  }
+}
+
+function loadExternalTokens() {
+  externalTokens.value = getExternalTokens();
+}
+
+function hasTokenForSource(url) {
+  return externalTokens.value.some((t) => t.url === url);
+}
+
+function getSourceName(url) {
+  const source = availableSources.value.find((s) => s.url === url);
+  return source ? source.name : url;
+}
+
+function maskToken(token) {
+  if (!token || token.length <= 4) return "***";
+  return `${token.substring(0, 4)}***`;
+}
+
+async function startAddToken(source) {
+  const { value: token } = await ElMessageBox.prompt(
+    `Enter your token for ${source.name}`,
+    `Add Token for ${source.name}`,
+    {
+      confirmButtonText: "Add",
+      cancelButtonText: "Cancel",
+      inputPlaceholder: "Enter token (e.g., hf_xxx)",
+      inputType: "password",
+    },
+  );
+
+  if (token) {
+    try {
+      // Save to localStorage (for API token users)
+      addExternalToken(source.url, token);
+
+      // Save to database (for session-based auth users)
+      if (user.value) {
+        await authAPI.addExternalToken(user.value.username, source.url, token);
+      }
+
+      loadExternalTokens();
+      ElMessage.success(`Token added for ${source.name}`);
+    } catch (err) {
+      console.error("Failed to add external token:", err);
+      ElMessage.error("Failed to add token");
+    }
+  }
+}
+
+async function startEditToken(source) {
+  const existing = externalTokens.value.find((t) => t.url === source.url);
+
+  const { value: token } = await ElMessageBox.prompt(
+    `Update your token for ${getSourceName(source.url)}`,
+    `Edit Token`,
+    {
+      confirmButtonText: "Update",
+      cancelButtonText: "Cancel",
+      inputPlaceholder: "Enter new token",
+      inputType: "password",
+      inputValue: existing?.token || "",
+    },
+  );
+
+  if (token) {
+    try {
+      // Save to localStorage (for API token users)
+      addExternalToken(source.url, token);
+
+      // Save to database (for session-based auth users)
+      if (user.value) {
+        await authAPI.addExternalToken(user.value.username, source.url, token);
+      }
+
+      loadExternalTokens();
+      ElMessage.success("Token updated");
+    } catch (err) {
+      console.error("Failed to update external token:", err);
+      ElMessage.error("Failed to update token");
+    }
+  }
+}
+
+async function handleDeleteExternalToken(url) {
+  try {
+    await ElMessageBox.confirm(
+      `Remove token for ${getSourceName(url)}?`,
+      "Confirm Delete",
+      {
+        type: "warning",
+        confirmButtonText: "Delete",
+        cancelButtonText: "Cancel",
+      },
+    );
+
+    // Remove from localStorage (for API token users)
+    removeExternalToken(url);
+
+    // Remove from database (for session-based auth users)
+    if (user.value) {
+      try {
+        await authAPI.deleteExternalToken(user.value.username, url);
+      } catch (err) {
+        console.error("Failed to delete from database:", err);
+        // Continue anyway - localStorage is already cleared
+      }
+    }
+
+    loadExternalTokens();
+    ElMessage.success("Token removed");
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error("Failed to delete token");
+    }
+  }
+}
+
 onMounted(() => {
   loadUserProfile();
   loadTokens();
   loadUserOrgs();
+  loadAvailableSources();
+  loadExternalTokens();
 });
 
 watch(user, (newUser) => {

@@ -1,4 +1,4 @@
-<!-- src/kohaku-hub-ui/src/pages/[type]s/index.vue -->
+<!-- src/kohaku-hub-ui/src/components/pages/RepoListPage.vue -->
 <template>
   <div class="container-main">
     <div
@@ -110,28 +110,26 @@ import { useAuthStore } from "@/stores/auth";
 import RepoList from "@/components/repo/RepoList.vue";
 import { ElMessage } from "element-plus";
 
-const route = useRoute();
+const props = defineProps({
+  repoType: {
+    type: String,
+    required: true,
+    validator: (value) => ["model", "dataset", "space"].includes(value),
+  },
+});
+
 const router = useRouter();
 const authStore = useAuthStore();
 const { isAuthenticated, username: currentUser } = storeToRefs(authStore);
 
-// Determine repo type from route path
-const repoType = computed(() => {
-  const path = route.path;
-  if (path.startsWith("/models")) return "model";
-  if (path.startsWith("/datasets")) return "dataset";
-  if (path.startsWith("/spaces")) return "space";
-  return "model";
-});
-
 const repoTypeLabel = computed(() => {
   const labels = { model: "Model", dataset: "Dataset", space: "Space" };
-  return labels[repoType.value] || "Model";
+  return labels[props.repoType] || "Model";
 });
 
 const pageTitle = computed(() => {
   const titles = { model: "Models", dataset: "Datasets", space: "Spaces" };
-  return titles[repoType.value] || "Models";
+  return titles[props.repoType] || "Models";
 });
 
 const pageDescription = computed(() => {
@@ -140,7 +138,7 @@ const pageDescription = computed(() => {
     dataset: "Discover and share datasets for machine learning",
     space: "Discover ML demos and applications",
   };
-  return descriptions[repoType.value] || "";
+  return descriptions[props.repoType] || "";
 });
 
 const loading = ref(true);
@@ -162,7 +160,7 @@ const rules = {
   name: [
     {
       required: true,
-      message: `Please enter ${repoType.value} name`,
+      message: `Please enter ${props.repoType} name`,
       trigger: "blur",
     },
     {
@@ -207,15 +205,15 @@ async function loadRepos() {
         break;
     }
 
-    const { data } = await repoAPI.listRepos(repoType.value, {
+    const { data } = await repoAPI.listRepos(props.repoType, {
       limit: 100,
       sort: apiSort,
       fallback: false, // Don't aggregate external repos on main list pages
     });
     repos.value = data;
   } catch (err) {
-    console.error(`Failed to load ${repoType.value}s:`, err);
-    ElMessage.error(`Failed to load ${repoType.value}s`);
+    console.error(`Failed to load ${props.repoType}s:`, err);
+    ElMessage.error(`Failed to load ${props.repoType}s`);
   } finally {
     loading.value = false;
   }
@@ -241,7 +239,7 @@ async function handleCreate() {
     creating.value = true;
     try {
       const { data } = await repoAPI.create({
-        type: repoType.value,
+        type: props.repoType,
         name: form.name,
         organization: form.organization || null,
         private: form.private,
@@ -253,10 +251,10 @@ async function handleCreate() {
       const repoId =
         data.repo_id ||
         `${form.organization || currentUser.value}/${form.name}`;
-      router.push(`/${repoType.value}s/${repoId}`);
+      router.push(`/${props.repoType}s/${repoId}`);
     } catch (err) {
       ElMessage.error(
-        err.response?.data?.detail || `Failed to create ${repoType.value}`,
+        err.response?.data?.detail || `Failed to create ${props.repoType}`,
       );
     } finally {
       creating.value = false;
@@ -278,15 +276,6 @@ watch(showCreateDialog, (val) => {
 watch(sortBy, () => {
   loadRepos();
 });
-
-// Reload repos when route changes
-watch(
-  () => route.path,
-  () => {
-    loadRepos();
-  },
-  { immediate: true },
-);
 
 onMounted(() => {
   loadRepos();

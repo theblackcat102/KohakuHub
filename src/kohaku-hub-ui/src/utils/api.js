@@ -1,5 +1,6 @@
 // src/kohaku-hub-ui/src/utils/api.js
 import axios from "axios";
+import { formatAuthHeader, getExternalTokens } from "./externalTokens";
 
 const api = axios.create({
   timeout: 30000,
@@ -10,9 +11,15 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("hf_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const externalTokens = getExternalTokens();
+
+    // Always send Authorization header if we have token or external tokens
+    // Format: "Bearer token|url1,token1|url2,token2"
+    // Even for session-based auth, we send external tokens with empty auth token
+    if (token || externalTokens.length > 0) {
+      config.headers.Authorization = formatAuthHeader(token, externalTokens);
     }
+    // Session cookie is still sent via withCredentials: true
     return config;
   },
   (error) => {
@@ -54,6 +61,19 @@ export const authAPI = {
   createToken: (data) => api.post("/api/auth/tokens/create", data),
   listTokens: () => api.get("/api/auth/tokens"),
   revokeToken: (id) => api.delete(`/api/auth/tokens/${id}`),
+
+  // External fallback tokens
+  getAvailableSources: () => api.get("/api/fallback-sources/available"),
+  listExternalTokens: (username) =>
+    api.get(`/api/users/${username}/external-tokens`),
+  addExternalToken: (username, url, token) =>
+    api.post(`/api/users/${username}/external-tokens`, { url, token }),
+  deleteExternalToken: (username, url) =>
+    api.delete(
+      `/api/users/${username}/external-tokens/${encodeURIComponent(url)}`,
+    ),
+  bulkUpdateExternalTokens: (username, tokens) =>
+    api.put(`/api/users/${username}/external-tokens/bulk`, { tokens }),
 };
 
 /**

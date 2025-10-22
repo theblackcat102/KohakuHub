@@ -7,6 +7,7 @@ export const useAuthStore = defineStore("auth", {
     user: null,
     userOrganizations: [],
     token: localStorage.getItem("hf_token") || null,
+    externalTokens: [], // Array of {url, token} for external fallback sources
     loading: false,
     initialized: false,
   }),
@@ -110,6 +111,26 @@ export const useAuthStore = defineStore("auth", {
     },
 
     /**
+     * Load user's external tokens from database
+     */
+    async loadExternalTokens() {
+      if (!this.user) {
+        this.externalTokens = [];
+        return;
+      }
+
+      try {
+        const { data } = await authAPI.listExternalTokens(this.user.username);
+        // Store decrypted tokens (API returns masked preview, need to fetch full tokens)
+        // For now, we'll load them when user edits settings
+        this.externalTokens = data || [];
+      } catch (err) {
+        console.error("Failed to load external tokens:", err);
+        this.externalTokens = [];
+      }
+    },
+
+    /**
      * Initialize auth state (restore session on app load)
      */
     async init() {
@@ -120,11 +141,13 @@ export const useAuthStore = defineStore("auth", {
       // Try to restore user from session cookie or token
       try {
         await this.fetchUserInfo();
+        await this.loadExternalTokens();
       } catch (err) {
         // Session expired or invalid, clear state
         this.user = null;
         this.userOrganizations = [];
         this.token = null;
+        this.externalTokens = [];
         localStorage.removeItem("hf_token");
       }
     },
