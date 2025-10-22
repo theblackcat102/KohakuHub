@@ -69,6 +69,7 @@ class FallbackConfig(BaseModel):
     cache_ttl_seconds: int = 300  # Cache TTL for repo→source mappings (5 minutes)
     timeout_seconds: int = 10  # HTTP request timeout for external sources
     max_concurrent_requests: int = 5  # Max concurrent requests to external sources
+    require_auth: bool = False  # Require authenticated user for fallback access
     # Global fallback sources (JSON list)
     # Format: [{"url": "https://huggingface.co", "token": "", "priority": 1, "name": "HF", "source_type": "huggingface"}]
     sources: list[dict] = []
@@ -79,6 +80,9 @@ class AppConfig(BaseModel):
     api_base: str = "/api"
     db_backend: str = "sqlite"
     database_url: str = "sqlite:///./hub.db"
+    database_key: str = (
+        ""  # Encryption key for external tokens (generate with: openssl rand -hex 32)
+    )
     # Lower threshold to 5MB to account for base64 encoding overhead (~33%)
     # 5MB file -> ~6.7MB base64, leaving room for multiple files in one commit
     lfs_threshold_bytes: int = 5 * 1000 * 1000
@@ -368,6 +372,10 @@ def load_config(path: str = None) -> Config:
         fallback_env["max_concurrent_requests"] = int(
             os.environ["KOHAKU_HUB_FALLBACK_MAX_CONCURRENT"]
         )
+    if "KOHAKU_HUB_FALLBACK_REQUIRE_AUTH" in os.environ:
+        fallback_env["require_auth"] = (
+            os.environ["KOHAKU_HUB_FALLBACK_REQUIRE_AUTH"].lower() == "true"
+        )
     if "KOHAKU_HUB_FALLBACK_SOURCES" in os.environ:
         fallback_env["sources"] = _parse_fallback_sources(
             os.environ.get("KOHAKU_HUB_FALLBACK_SOURCES")
@@ -385,6 +393,8 @@ def load_config(path: str = None) -> Config:
         app_env["db_backend"] = os.environ["KOHAKU_HUB_DB_BACKEND"]
     if "KOHAKU_HUB_DATABASE_URL" in os.environ:
         app_env["database_url"] = os.environ["KOHAKU_HUB_DATABASE_URL"]
+    if "KOHAKU_HUB_DATABASE_KEY" in os.environ:
+        app_env["database_key"] = os.environ["KOHAKU_HUB_DATABASE_KEY"]
     if "KOHAKU_HUB_LFS_THRESHOLD_BYTES" in os.environ:
         app_env["lfs_threshold_bytes"] = int(
             os.environ["KOHAKU_HUB_LFS_THRESHOLD_BYTES"]

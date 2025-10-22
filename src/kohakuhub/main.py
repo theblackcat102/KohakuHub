@@ -18,6 +18,7 @@ from kohakuhub.api import (
 )
 from kohakuhub.api.invitation import router as invitation
 from kohakuhub.auth import router as auth_router
+from kohakuhub.api.auth import external_tokens
 from kohakuhub.config import cfg
 from kohakuhub.db import Repository, User
 from kohakuhub.db_operations import get_repository
@@ -76,6 +77,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix=cfg.app.api_base)
+app.include_router(external_tokens.router, prefix=cfg.app.api_base, tags=["auth"])
 app.include_router(repo_crud.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(repo_info.router, prefix=cfg.app.api_base, tags=["repositories"])
 app.include_router(repo_tree.router, prefix=cfg.app.api_base, tags=["repositories"])

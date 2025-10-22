@@ -273,6 +273,7 @@ def generate_hub_api_service(config: dict) -> str:
       ## ===== CRITICAL: Security Configuration (MUST CHANGE) =====
       - KOHAKU_HUB_SESSION_SECRET={config['session_secret']}
       - KOHAKU_HUB_ADMIN_SECRET_TOKEN={config['admin_secret']}
+      - KOHAKU_HUB_DATABASE_KEY={config['database_key']}
 
       ## ===== Performance Configuration =====
       - KOHAKU_HUB_WORKERS=4 # Number of worker processes (1-8, recommend: CPU cores)
@@ -454,9 +455,13 @@ def load_config_file(config_path: Path) -> dict:
         config["admin_secret"] = sec.get(
             "admin_secret", fallback=generate_secret(48)
         )  # 64 chars
+        config["database_key"] = sec.get(
+            "database_key", fallback=generate_secret(32)
+        )  # 43 chars
     else:
         config["session_secret"] = generate_secret(48)  # 64 chars
         config["admin_secret"] = generate_secret(48)  # 64 chars
+        config["database_key"] = generate_secret(32)  # 43 chars for encryption
 
     # Network section
     if parser.has_section("network"):
@@ -519,6 +524,7 @@ builtin = true
 # Session and admin secrets (auto-generated if not specified)
 # session_secret = your-session-secret-here
 # admin_secret = your-admin-secret-here
+# database_key = your-database-encryption-key-here  # For encrypting external fallback tokens
 
 [network]
 # External bridge network (optional)
@@ -708,6 +714,17 @@ def interactive_config() -> dict:
         else:
             config["admin_secret"] = ask_string("Admin secret token")
 
+    # Database encryption key (for external tokens)
+    print()
+    default_database_key = generate_secret(32)  # 43 chars for Fernet encryption
+    print(f"Generated database encryption key: {default_database_key}")
+    use_generated_db = ask_yes_no("Use generated database key?", default=True)
+
+    if use_generated_db:
+        config["database_key"] = default_database_key
+    else:
+        config["database_key"] = ask_string("Database encryption key")
+
     # LakeFS encryption key
     config["lakefs_encrypt_key"] = generate_secret(32)  # 43 chars
 
@@ -795,6 +812,9 @@ token_expire_days = 365
 [admin]
 enabled = true
 secret_token = "{config['admin_secret']}"
+
+[app]
+database_key = "{config['database_key']}"  # For encrypting external fallback tokens
 
 [quota]
 default_user_private_quota_bytes = 10_000_000      # 10MB

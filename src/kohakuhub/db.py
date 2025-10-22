@@ -131,6 +131,26 @@ class Token(BaseModel):
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
 
+class UserExternalToken(BaseModel):
+    """User-specific external fallback source tokens.
+
+    Allows users to provide their own tokens for external sources (HuggingFace, etc.).
+    User tokens override admin-configured tokens for matching URLs.
+    """
+
+    id = AutoField()
+    user = ForeignKeyField(
+        User, backref="external_tokens", on_delete="CASCADE", index=True
+    )
+    url = CharField()  # Base URL (e.g., "https://huggingface.co")
+    encrypted_token = TextField()  # Encrypted token (using crypto.py)
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+    updated_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        indexes = ((("user", "url"), True),)  # Unique per user+url
+
+
 class Repository(BaseModel):
     id = AutoField()
     repo_type = CharField(index=True)
@@ -454,6 +474,7 @@ def init_db():
             EmailVerification,
             Session,
             Token,
+            UserExternalToken,
             Repository,
             File,
             StagingUpload,

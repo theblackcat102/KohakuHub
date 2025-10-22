@@ -10,17 +10,19 @@ from fastapi.responses import Response
 
 from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
+from kohakuhub.db_operations import get_merged_external_tokens
+from kohakuhub.api.fallback.config import get_enabled_sources
 from kohakuhub.api.fallback.operations import (
     fetch_external_list,
     try_fallback_info,
     try_fallback_org_avatar,
+    try_fallback_paths_info,
     try_fallback_resolve,
     try_fallback_tree,
     try_fallback_user_avatar,
     try_fallback_user_profile,
     try_fallback_user_repos,
 )
-from kohakuhub.api.fallback.config import get_enabled_sources
 
 logger = get_logger("FALLBACK_DEC")
 
@@ -77,6 +79,10 @@ def with_repo_fallback(operation: OperationType):
             # Extract repo info from kwargs
             # Handle both "repo_type" (API endpoints) and "type" (public endpoints)
             repo_type = kwargs.get("repo_type") or kwargs.get("type")
+
+            # Convert enum to string if needed
+            if repo_type and hasattr(repo_type, "value"):
+                repo_type = repo_type.value
 
             # If repo_type not in kwargs, try to parse from request path
             if not repo_type and "request" in kwargs:
@@ -144,29 +150,63 @@ def with_repo_fallback(operation: OperationType):
 
             # If we got here, we have a 404 - try fallback
             if is_404:
+                # Get user and external tokens for fallback
+                user = kwargs.get("user")  # May be None for anonymous access
+                request = kwargs.get("request")
+                header_tokens = (
+                    getattr(request.state, "external_tokens", {}) if request else {}
+                )
+
+                # Merge DB tokens + header tokens
+                user_tokens = get_merged_external_tokens(user, header_tokens)
 
                 # Try fallback based on operation type
                 match operation:
                     case "resolve":
                         revision = kwargs.get("revision", "main")
                         path = kwargs.get("path", "")
+                        # Detect HTTP method from request
+                        request = kwargs.get("request")
+                        method = request.method if request else "GET"
                         result = await try_fallback_resolve(
-                            repo_type, namespace, name, revision, path
+                            repo_type,
+                            namespace,
+                            name,
+                            revision,
+                            path,
+                            user_tokens=user_tokens,
+                            method=method,
                         )
 
                     case "tree":
                         revision = kwargs.get("revision", "main")
                         path = kwargs.get("path", "")
                         result = await try_fallback_tree(
-                            repo_type, namespace, name, revision, path
+                            repo_type,
+                            namespace,
+                            name,
+                            revision,
+                            path,
+                            user_tokens=user_tokens,
                         )
 
                     case "info" | "revision":
-                        result = await try_fallback_info(repo_type, namespace, name)
+                        result = await try_fallback_info(
+                            repo_type, namespace, name, user_tokens=user_tokens
+                        )
 
                     case "paths_info":
-                        # For paths-info, try to get info first
-                        result = await try_fallback_info(repo_type, namespace, name)
+                        # For paths-info, extract paths and revision from kwargs
+                        revision = kwargs.get("revision", "main")
+                        paths = kwargs.get("paths", [])
+                        result = await try_fallback_paths_info(
+                            repo_type,
+                            namespace,
+                            name,
+                            revision,
+                            paths,
+                            user_tokens=user_tokens,
+                        )
 
                     case _:
                         logger.warning(f"Unknown fallback operation: {operation}")
@@ -266,7 +306,21 @@ def with_list_aggregation(repo_type: str):
                 "sort": kwargs.get("sort", args[2] if len(args) > 2 else "recent"),
             }
 
-            sources = get_enabled_sources(namespace=author or "")
+            # Get user and external tokens for fallback
+            user = kwargs.get("user") or (
+                args[3] if len(args) > 3 else None
+            )  # 4th arg is user
+            request = kwargs.get("request")
+            header_tokens = (
+                getattr(request.state, "external_tokens", {}) if request else {}
+            )
+
+            # Merge DB tokens + header tokens
+            user_tokens = get_merged_external_tokens(user, header_tokens)
+
+            sources = get_enabled_sources(
+                namespace=author or "", user_tokens=user_tokens
+            )
 
             if not sources:
                 logger.debug("No fallback sources for list aggregation")
@@ -417,20 +471,38 @@ def with_user_fallback(operation: UserOperationType):
 
             # If we got here, we have a 404 - try fallback
             if is_404:
+                # Get user and external tokens for fallback
+                user = kwargs.get("user")  # May be None for anonymous access
+                request = kwargs.get("request")
+                header_tokens = (
+                    getattr(request.state, "external_tokens", {}) if request else {}
+                )
+
+                # Merge DB tokens + header tokens
+                user_tokens = get_merged_external_tokens(user, header_tokens)
+
                 match operation:
                     case "profile":
-                        result = await try_fallback_user_profile(username)
+                        result = await try_fallback_user_profile(
+                            username, user_tokens=user_tokens
+                        )
 
                     case "repos":
-                        result = await try_fallback_user_repos(username)
+                        result = await try_fallback_user_repos(
+                            username, user_tokens=user_tokens
+                        )
 
                     case "avatar":
                         # Check if it's org or user based on parameter name
                         org_name = kwargs.get("org_name")
                         if org_name:
-                            result = await try_fallback_org_avatar(org_name)
+                            result = await try_fallback_org_avatar(
+                                org_name, user_tokens=user_tokens
+                            )
                         else:
-                            result = await try_fallback_user_avatar(username)
+                            result = await try_fallback_user_avatar(
+                                username, user_tokens=user_tokens
+                            )
 
                     case _:
                         logger.warning(f"Unknown user fallback operation: {operation}")

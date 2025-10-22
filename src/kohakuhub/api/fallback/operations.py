@@ -27,6 +27,8 @@ async def try_fallback_resolve(
     name: str,
     revision: str,
     path: str,
+    user_tokens: dict[str, str] | None = None,
+    method: str = "GET",
 ) -> Optional[Response]:
     """Try to resolve file from fallback sources.
 
@@ -36,12 +38,14 @@ async def try_fallback_resolve(
         name: Repository name
         revision: Branch or commit
         path: File path in repository
+        user_tokens: User-provided external tokens (overrides admin tokens)
+        method: HTTP method ("GET" or "HEAD")
 
     Returns:
-        RedirectResponse to external URL or None if not found
+        Response (redirect for GET, response with headers for HEAD) or None if not found
     """
     cache = get_cache()
-    sources = get_enabled_sources(namespace)
+    sources = get_enabled_sources(namespace, user_tokens=user_tokens)
 
     if not sources:
         logger.debug(f"No fallback sources configured for {namespace}")
@@ -81,9 +85,6 @@ async def try_fallback_resolve(
             # Accept 2xx (success) or 3xx (redirect) as "file exists"
             # HuggingFace often returns 307 redirects to CDN
             if 200 <= response.status_code < 400:
-                # File exists! Generate redirect URL
-                external_url = client.map_url(kohaku_path, repo_type)
-
                 logger.debug(
                     f"HEAD returned {response.status_code}, file exists at {source['name']}"
                 )
@@ -103,16 +104,44 @@ async def try_fallback_resolve(
                     f"Fallback SUCCESS: {repo_type}/{namespace}/{name} found in {source['name']}"
                 )
 
-                # Return redirect to external URL
-                redirect_response = RedirectResponse(url=external_url, status_code=302)
+                if method == "HEAD":
+                    # For HEAD: Return response with original headers
+                    resp_headers = dict(response.headers)
+                    resp_headers.update(
+                        add_source_headers(response, source["name"], source["url"])
+                    )
+                    final_resp = Response(
+                        status_code=response.status_code,
+                        content=response.content,
+                        headers=resp_headers,
+                    )
+                    return final_resp
+                else:
+                    # For GET: Make actual GET request to fetch content (proxy)
+                    get_response = await client.get(
+                        kohaku_path, repo_type, follow_redirects=True
+                    )
 
-                # Add source attribution headers
-                for key, value in add_source_headers(
-                    response, source["name"], source["url"]
-                ).items():
-                    redirect_response.headers[key] = value
-
-                return redirect_response
+                    if get_response.status_code == 200:
+                        # Proxy the content with original headers
+                        resp_headers = dict(get_response.headers)
+                        resp_headers.update(
+                            add_source_headers(
+                                get_response, source["name"], source["url"]
+                            )
+                        )
+                        final_resp = Response(
+                            status_code=get_response.status_code,
+                            content=get_response.content,
+                            headers=resp_headers,
+                        )
+                        return final_resp
+                    else:
+                        # GET failed, try next source
+                        logger.warning(
+                            f"GET request failed for {source['name']}: {get_response.status_code}"
+                        )
+                        continue
 
             elif not should_retry_source(response):
                 # Don't try more sources on auth/permission errors
@@ -140,6 +169,7 @@ async def try_fallback_info(
     repo_type: str,
     namespace: str,
     name: str,
+    user_tokens: dict[str, str] | None = None,
 ) -> Optional[dict]:
     """Try to get repository info from fallback sources.
 
@@ -147,12 +177,13 @@ async def try_fallback_info(
         repo_type: "model", "dataset", or "space"
         namespace: Repository namespace
         name: Repository name
+        user_tokens: User-provided external tokens (overrides admin tokens)
 
     Returns:
         Repository info dict or None if not found
     """
     cache = get_cache()
-    sources = get_enabled_sources(namespace)
+    sources = get_enabled_sources(namespace, user_tokens=user_tokens)
 
     if not sources:
         return None
@@ -218,6 +249,7 @@ async def try_fallback_tree(
     name: str,
     revision: str,
     path: str = "",
+    user_tokens: dict[str, str] | None = None,
 ) -> Optional[list]:
     """Try to get repository tree from fallback sources.
 
@@ -227,17 +259,18 @@ async def try_fallback_tree(
         name: Repository name
         revision: Branch or commit
         path: Path within repository
+        user_tokens: User-provided external tokens (overrides admin tokens)
 
     Returns:
         List of file/folder objects or None if not found
     """
-    sources = get_enabled_sources(namespace)
+    sources = get_enabled_sources(namespace, user_tokens=user_tokens)
 
     if not sources:
         return None
 
     # Construct API path
-    kohaku_path = f"/api/{repo_type}s/{namespace}/{name}/tree/{revision}{path}"
+    kohaku_path = f"/api/{repo_type}s/{namespace}/{name}/tree/{revision}/{path}"
 
     # Try each source
     for source in sources:
@@ -263,6 +296,67 @@ async def try_fallback_tree(
 
         except Exception as e:
             logger.warning(f"Fallback tree failed for {source['name']}: {e}")
+            continue
+
+    return None
+
+
+async def try_fallback_paths_info(
+    repo_type: str,
+    namespace: str,
+    name: str,
+    revision: str,
+    paths: list[str],
+    user_tokens: dict[str, str] | None = None,
+) -> Optional[list]:
+    """Try to get paths info from fallback sources.
+
+    Args:
+        repo_type: "model", "dataset", or "space"
+        namespace: Repository namespace
+        name: Repository name
+        revision: Branch or commit
+        paths: List of paths to query
+        user_tokens: User-provided external tokens (overrides admin tokens)
+
+    Returns:
+        List of path info objects or None if not found
+    """
+    sources = get_enabled_sources(namespace, user_tokens=user_tokens)
+
+    if not sources:
+        return None
+
+    # Construct API path
+    kohaku_path = f"/api/{repo_type}s/{namespace}/{name}/paths-info/{revision}"
+
+    # Try each source
+    for source in sources:
+        try:
+            client = FallbackClient(
+                source_url=source["url"],
+                source_type=source["source_type"],
+                token=source.get("token"),
+            )
+
+            # POST request with form data
+            response = await client.post(
+                kohaku_path, repo_type, data={"paths": paths, "expand": False}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+
+                logger.info(
+                    f"Fallback paths-info SUCCESS: {repo_type}/{namespace}/{name} from {source['name']}"
+                )
+                return data
+
+            elif not should_retry_source(response):
+                return None
+
+        except Exception as e:
+            logger.warning(f"Fallback paths-info failed for {source['name']}: {e}")
             continue
 
     return None
@@ -333,7 +427,9 @@ async def fetch_external_list(
         return []
 
 
-async def try_fallback_user_profile(username: str) -> Optional[dict]:
+async def try_fallback_user_profile(
+    username: str, user_tokens: dict[str, str] | None = None
+) -> Optional[dict]:
     """Try to get user profile from fallback sources.
 
     HuggingFace workflow:
@@ -344,11 +440,14 @@ async def try_fallback_user_profile(username: str) -> Optional[dict]:
 
     Args:
         username: Username or org name to lookup
+        user_tokens: User-provided external tokens (overrides admin tokens)
 
     Returns:
         User/org profile dict or None if not found
     """
-    sources = get_enabled_sources(namespace="")  # Global sources only
+    sources = get_enabled_sources(
+        namespace="", user_tokens=user_tokens
+    )  # Global sources only
 
     if not sources:
         return None
@@ -452,7 +551,9 @@ async def try_fallback_user_profile(username: str) -> Optional[dict]:
     return None
 
 
-async def try_fallback_user_avatar(username: str) -> Optional[bytes]:
+async def try_fallback_user_avatar(
+    username: str, user_tokens: dict[str, str] | None = None
+) -> Optional[bytes]:
     """Try to get user avatar from fallback sources.
 
     For HuggingFace: Get avatar URL from overview, then download it
@@ -460,11 +561,14 @@ async def try_fallback_user_avatar(username: str) -> Optional[bytes]:
 
     Args:
         username: Username to lookup
+        user_tokens: User-provided external tokens (overrides admin tokens)
 
     Returns:
         Avatar image bytes (JPEG) or None if not found
     """
-    sources = get_enabled_sources(namespace="")  # Global sources only
+    sources = get_enabled_sources(
+        namespace="", user_tokens=user_tokens
+    )  # Global sources only
 
     if not sources:
         return None
@@ -526,7 +630,9 @@ async def try_fallback_user_avatar(username: str) -> Optional[bytes]:
     return None
 
 
-async def try_fallback_org_avatar(org_name: str) -> Optional[bytes]:
+async def try_fallback_org_avatar(
+    org_name: str, user_tokens: dict[str, str] | None = None
+) -> Optional[bytes]:
     """Try to get organization avatar from fallback sources.
 
     For KohakuHub: Call /api/organizations/{org_name}/avatar directly
@@ -534,11 +640,14 @@ async def try_fallback_org_avatar(org_name: str) -> Optional[bytes]:
 
     Args:
         org_name: Organization name to lookup
+        user_tokens: User-provided external tokens (overrides admin tokens)
 
     Returns:
         Avatar image bytes (JPEG) or None if not found
     """
-    sources = get_enabled_sources(namespace="")  # Global sources only
+    sources = get_enabled_sources(
+        namespace="", user_tokens=user_tokens
+    )  # Global sources only
 
     if not sources:
         return None
@@ -580,16 +689,19 @@ async def try_fallback_org_avatar(org_name: str) -> Optional[bytes]:
     return None
 
 
-async def try_fallback_user_repos(username: str) -> Optional[dict]:
+async def try_fallback_user_repos(
+    username: str, user_tokens: dict[str, str] | None = None
+) -> Optional[dict]:
     """Try to get user repositories from fallback sources.
 
     Args:
         username: Username to lookup
+        user_tokens: User-provided external tokens (overrides admin tokens)
 
     Returns:
         Repos dict with models/datasets/spaces or None if not found
     """
-    sources = get_enabled_sources(namespace="")
+    sources = get_enabled_sources(namespace="", user_tokens=user_tokens)
 
     if not sources:
         return None

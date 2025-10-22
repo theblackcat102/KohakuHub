@@ -9,17 +9,21 @@ from kohakuhub.logger import get_logger
 logger = get_logger("FALLBACK_CONFIG")
 
 
-def get_enabled_sources(namespace: str = "") -> list[dict]:
+def get_enabled_sources(
+    namespace: str = "", user_tokens: dict[str, str] | None = None
+) -> list[dict]:
     """Get all enabled fallback sources for a namespace.
 
     Combines global sources (from config) and namespace-specific sources (from database).
+    User tokens override admin tokens for matching URLs.
     Sources are ordered by priority (lower = higher priority).
 
     Args:
         namespace: User/org namespace, or "" for global only
+        user_tokens: Dict of {url: token} from user (overrides admin tokens)
 
     Returns:
-        List of source dicts with keys: url, token, priority, name, source_type
+        List of source dicts with keys: url, token, priority, name, source_type, token_source
     """
     if not cfg.fallback.enabled:
         return []
@@ -35,6 +39,7 @@ def get_enabled_sources(namespace: str = "") -> list[dict]:
                 "priority": source_dict.get("priority", 100),
                 "name": source_dict.get("name", "Unknown"),
                 "source_type": source_dict.get("source_type", "huggingface"),
+                "token_source": "admin",  # Track token source for debugging
             }
         )
 
@@ -54,6 +59,7 @@ def get_enabled_sources(namespace: str = "") -> list[dict]:
                     "priority": source.priority,
                     "name": source.name,
                     "source_type": source.source_type,
+                    "token_source": "admin",
                 }
             )
     except Exception as e:
@@ -79,6 +85,7 @@ def get_enabled_sources(namespace: str = "") -> list[dict]:
                         "priority": source.priority,
                         "name": source.name,
                         "source_type": source.source_type,
+                        "token_source": "admin",
                     }
                 )
         except Exception as e:
@@ -96,6 +103,14 @@ def get_enabled_sources(namespace: str = "") -> list[dict]:
 
     # Sort by priority (lower = higher priority)
     unique_sources.sort(key=lambda s: s["priority"])
+
+    # 4. Override admin tokens with user tokens for matching URLs
+    if user_tokens:
+        for source in unique_sources:
+            if source["url"] in user_tokens:
+                source["token"] = user_tokens[source["url"]]
+                source["token_source"] = "user"  # Mark as user-provided token
+                logger.debug(f"Using user token for {source['name']} ({source['url']})")
 
     logger.debug(
         f"Loaded {len(unique_sources)} fallback sources for namespace='{namespace}'"

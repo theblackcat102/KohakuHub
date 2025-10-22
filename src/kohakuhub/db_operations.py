@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 
 from kohakuhub.config import cfg
+from kohakuhub.logger import get_logger
 from kohakuhub.db import (
     Commit,
     DailyRepoStats,
@@ -26,6 +27,7 @@ from kohakuhub.db import (
     StagingUpload,
     Token,
     User,
+    UserExternalToken,
     UserOrganization,
     db,
 )
@@ -286,6 +288,114 @@ def update_token_last_used(token: Token, last_used) -> None:
     """Update token last used timestamp."""
     token.last_used = last_used
     token.save()
+
+
+# ===== UserExternalToken operations =====
+
+
+def get_user_external_tokens(user: User) -> list[dict]:
+    """Get all external tokens for a user (decrypted).
+
+    Returns:
+        List of dicts with keys: url, token, created_at, updated_at
+    """
+    from kohakuhub.crypto import decrypt_token
+
+    tokens = []
+    for ext_token in user.external_tokens:  # Use backref from User
+        tokens.append(
+            {
+                "url": ext_token.url,
+                "token": decrypt_token(ext_token.encrypted_token),
+                "created_at": ext_token.created_at,
+                "updated_at": ext_token.updated_at,
+            }
+        )
+    return tokens
+
+
+def set_user_external_token(user: User, url: str, token: str) -> UserExternalToken:
+    """Add or update external token for a user.
+
+    Args:
+        user: User object
+        url: Base URL of external source (e.g., "https://huggingface.co")
+        token: Plain text token (will be encrypted)
+
+    Returns:
+        UserExternalToken object
+    """
+    from kohakuhub.crypto import encrypt_token
+
+    encrypted = encrypt_token(token)
+
+    # Try to find existing token for this user+url
+    existing = UserExternalToken.get_or_none(
+        (UserExternalToken.user == user) & (UserExternalToken.url == url)
+    )
+
+    if existing:
+        # Update existing
+        existing.encrypted_token = encrypted
+        existing.updated_at = datetime.now(timezone.utc)
+        existing.save()
+        return existing
+    else:
+        # Create new
+        return UserExternalToken.create(user=user, url=url, encrypted_token=encrypted)
+
+
+def delete_user_external_token(user: User, url: str) -> bool:
+    """Delete external token for a user.
+
+    Args:
+        user: User object
+        url: Base URL of external source
+
+    Returns:
+        True if deleted, False if not found
+    """
+    deleted = (
+        UserExternalToken.delete()
+        .where((UserExternalToken.user == user) & (UserExternalToken.url == url))
+        .execute()
+    )
+    return deleted > 0
+
+
+def get_merged_external_tokens(
+    user: User | None, header_tokens: dict[str, str]
+) -> dict[str, str]:
+    """Merge database tokens and header tokens for a user.
+
+    Header tokens take priority over database tokens for matching URLs.
+
+    Args:
+        user: User object (or None for anonymous)
+        header_tokens: Tokens from Authorization header
+
+    Returns:
+        Dict mapping URL -> token (merged)
+    """
+    logger = get_logger("EXTERNAL_TOKENS")
+
+    merged = {}
+
+    # Start with database tokens (if user is authenticated)
+    if user:
+        db_tokens = get_user_external_tokens(user)
+        for token_info in db_tokens:
+            merged[token_info["url"]] = token_info["token"]
+        logger.debug(f"Loaded {len(db_tokens)} tokens from DB for user {user.username}")
+
+    # Override with header tokens (header takes priority)
+    if header_tokens:
+        merged.update(header_tokens)
+        logger.debug(f"Merged {len(header_tokens)} tokens from header")
+
+    logger.debug(f"Total merged tokens: {len(merged)} sources")
+
+    return merged
 
 
 # ===== UserOrganization operations =====
