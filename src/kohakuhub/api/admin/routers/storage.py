@@ -500,8 +500,58 @@ async def delete_s3_prefix(
 
     logger.info(f"Deleting: bucket={actual_bucket}, prefix={actual_prefix}")
 
-    # Delete objects using ACTUAL prefix and bucket
-    deleted_count = await delete_objects_with_prefix(actual_bucket, actual_prefix)
+    # Delete objects - handle R2 path-in-endpoint
+    parsed = urlparse(cfg.s3.endpoint)
+    endpoint_path = parsed.path.strip("/")
+
+    def _delete_with_r2_support():
+        # Create appropriate S3 client based on endpoint type
+        if endpoint_path:
+            # R2 with path - use root endpoint
+            root_endpoint = f"{parsed.scheme}://{parsed.netloc}"
+            s3_config = {}
+            if cfg.s3.force_path_style:
+                s3_config["addressing_style"] = "path"
+            boto_config = BotoConfig(signature_version="s3v4", s3=s3_config)
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=root_endpoint,
+                aws_access_key_id=cfg.s3.access_key,
+                aws_secret_access_key=cfg.s3.secret_key,
+                region_name=cfg.s3.region,
+                config=boto_config,
+            )
+        else:
+            # Standard S3/MinIO
+            s3 = get_s3_client()
+
+        # Delete objects
+        paginator = s3.get_paginator("list_objects_v2")
+        deleted_count = 0
+
+        # List and delete in batches
+        for page in paginator.paginate(Bucket=actual_bucket, Prefix=actual_prefix):
+            if "Contents" not in page or not page["Contents"]:
+                continue
+
+            # Delete batch (max 1000 objects)
+            delete_keys = [{"Key": obj["Key"]} for obj in page["Contents"]]
+            response = s3.delete_objects(
+                Bucket=actual_bucket,
+                Delete={"Objects": delete_keys, "Quiet": True},
+            )
+
+            deleted_count += len(response.get("Deleted", []))
+
+            if "Errors" in response:
+                for error in response["Errors"]:
+                    logger.warning(
+                        f"Failed to delete {error['Key']}: {error['Message']}"
+                    )
+
+        return deleted_count
+
+    deleted_count = await run_in_s3_executor(_delete_with_r2_support)
 
     logger.warning(f"Admin deleted S3 prefix: {prefix} ({deleted_count} objects)")
 
