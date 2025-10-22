@@ -75,7 +75,11 @@ def read_existing_docker_compose(filepath: Path) -> dict:
                 in_environment = True
             elif in_hub_api and in_environment:
                 # Check if we've left the environment section
-                if stripped and not stripped.startswith("-") and not stripped.startswith("#"):
+                if (
+                    stripped
+                    and not stripped.startswith("-")
+                    and not stripped.startswith("#")
+                ):
                     # New section started
                     in_environment = False
                     in_hub_api = False
@@ -319,7 +323,9 @@ def write_docker_compose(filepath: Path, env_vars: dict, base_content: str = Non
                     # Keep comment from original line
                     comment_match = re.search(r"(#.+)$", line)
                     comment = comment_match.group(1) if comment_match else ""
-                    output_lines.append(f"{indent}- {key}={env_vars[key]} {comment}".rstrip())
+                    output_lines.append(
+                        f"{indent}- {key}={env_vars[key]} {comment}".rstrip()
+                    )
                     continue
 
         output_lines.append(line)
@@ -346,7 +352,9 @@ def write_config_toml(filepath: Path, config: dict):
         for key, value in data.items():
             if isinstance(value, dict):
                 # Nested section
-                write_section(f"{section_name}.{key}" if section_name else key, value, indent)
+                write_section(
+                    f"{section_name}.{key}" if section_name else key, value, indent
+                )
             elif isinstance(value, bool):
                 lines.append(f"{prefix}{key} = {str(value).lower()}")
             elif isinstance(value, (int, float)):
@@ -355,7 +363,10 @@ def write_config_toml(filepath: Path, config: dict):
                 lines.append(f'{prefix}{key} = "{value}"')
             elif isinstance(value, list):
                 # Simple list formatting
-                items = ", ".join(f'"{item}"' if isinstance(item, str) else str(item) for item in value)
+                items = ", ".join(
+                    f'"{item}"' if isinstance(item, str) else str(item)
+                    for item in value
+                )
                 lines.append(f"{prefix}{key} = [{items}]")
             else:
                 lines.append(f'{prefix}{key} = "{value}"')
@@ -364,7 +375,16 @@ def write_config_toml(filepath: Path, config: dict):
             lines.append("")  # Blank line after section
 
     # Write sections in order
-    for section in ["s3", "lakefs", "smtp", "auth", "admin", "app", "quota", "fallback"]:
+    for section in [
+        "s3",
+        "lakefs",
+        "smtp",
+        "auth",
+        "admin",
+        "app",
+        "quota",
+        "fallback",
+    ]:
         if section in config:
             write_section(section, config[section])
 
@@ -465,7 +485,9 @@ def main():
     print("\n💡 Next steps:")
     print("  1. Review the updated configuration files")
     print("  2. Restart services: docker-compose down && docker-compose up -d")
-    print("  3. Run migrations: docker-compose exec hub-api python scripts/run_migrations.py")
+    print(
+        "  3. Run migrations: docker-compose exec hub-api python scripts/run_migrations.py"
+    )
     print()
 
 

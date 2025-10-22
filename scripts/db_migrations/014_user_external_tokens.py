@@ -104,7 +104,7 @@ def run():
     db.connect(reuse_if_open=True)
 
     # Check if should skip
-    if should_skip_due_to_future_migrations(db, cfg, MIGRATION_NUMBER):
+    if should_skip_due_to_future_migrations(MIGRATION_NUMBER, db, cfg):
         print(
             f"\n⚠️  Skipping migration {MIGRATION_NUMBER} - already applied or superseded by future migrations\n"
         )
