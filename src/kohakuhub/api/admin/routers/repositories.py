@@ -50,6 +50,9 @@ async def list_repositories_admin(
     if namespace:
         query = query.where(Repository.namespace == namespace)
 
+    # Get total count before limiting
+    total_count = query.count()
+
     query = query.order_by(Repository.created_at.desc()).limit(limit).offset(offset)
 
     repos = []
@@ -81,6 +84,7 @@ async def list_repositories_admin(
 
     return {
         "repositories": repos,
+        "total": total_count,
         "limit": limit,
         "offset": offset,
         "search": search,

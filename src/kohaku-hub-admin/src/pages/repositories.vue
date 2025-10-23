@@ -21,6 +21,7 @@ import dayjs from "dayjs";
 const router = useRouter();
 const adminStore = useAdminStore();
 const repositories = ref([]);
+const totalCount = ref(0);
 const loading = ref(false);
 const recalculating = ref(false);
 const selectedRepo = ref(null);
@@ -112,6 +113,7 @@ async function loadRepositories() {
       offset: (currentPage.value - 1) * pageSize.value,
     });
     repositories.value = response.repositories;
+    totalCount.value = response.total || 0;
   } catch (error) {
     console.error("Failed to load repositories:", error);
     if (error.response?.status === 401 || error.response?.status === 403) {
@@ -574,8 +576,8 @@ onMounted(() => {
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
             :page-sizes="[10, 20, 50, 100]"
-            layout="sizes, prev, pager, next"
-            :total="repositories.length"
+            layout="total, sizes, prev, pager, next"
+            :total="totalCount"
             @current-change="loadRepositories"
             @size-change="loadRepositories"
           />
