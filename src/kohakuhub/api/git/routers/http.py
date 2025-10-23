@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from kohakuhub.db import Repository, Token, User
+from kohakuhub.constants import ERROR_REPO_NOT_FOUND
 from kohakuhub.db_operations import get_repository
 from kohakuhub.logger import get_logger
 from kohakuhub.auth.dependencies import get_optional_user
@@ -96,7 +97,7 @@ async def git_info_refs(
         if repo:
             break
     if not repo:
-        raise HTTPException(404, detail="Repository not found")
+        raise HTTPException(404, detail=ERROR_REPO_NOT_FOUND)
 
     # Authenticate user
     user = get_user_from_git_auth(authorization)
@@ -164,7 +165,7 @@ async def git_upload_pack(
         if repo:
             break
     if not repo:
-        raise HTTPException(404, detail="Repository not found")
+        raise HTTPException(404, detail=ERROR_REPO_NOT_FOUND)
 
     # Authenticate and check read permission
     user = get_user_from_git_auth(authorization)
@@ -217,7 +218,7 @@ async def git_receive_pack(
         if repo:
             break
     if not repo:
-        raise HTTPException(404, detail="Repository not found")
+        raise HTTPException(404, detail=ERROR_REPO_NOT_FOUND)
 
     # Authenticate and check write permission
     user = get_user_from_git_auth(authorization)
@@ -267,7 +268,7 @@ async def git_head(
         if repo:
             break
     if not repo:
-        raise HTTPException(404, detail="Repository not found")
+        raise HTTPException(404, detail=ERROR_REPO_NOT_FOUND)
 
     # Authenticate and check read permission
     user = get_user_from_git_auth(authorization)

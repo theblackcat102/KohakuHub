@@ -6,6 +6,7 @@ Organizations are now User objects with is_org=True.
 
 from fastapi import HTTPException
 
+from kohakuhub.constants import ERROR_ORG_NOT_FOUND
 from kohakuhub.db_operations import (
     create_organization as create_org_op,
     create_user_organization as create_user_org_op,
@@ -67,7 +68,7 @@ def add_member_to_organization(org_id: int, username: str, role: str):
 
     org = get_user_by_id(org_id)
     if not org or not org.is_org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     if get_user_organization(user, org):
         raise HTTPException(400, detail="User is already a member of the organization")
@@ -93,7 +94,7 @@ def remove_member_from_organization(org_id: int, username: str):
 
     org = get_user_by_id(org_id)
     if not org or not org.is_org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     user_org = get_user_organization(user, org)
     if not user_org:
@@ -135,7 +136,7 @@ def update_member_role(org_id: int, username: str, role: str):
 
     org = get_user_by_id(org_id)
     if not org or not org.is_org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     user_org = get_user_organization(user, org)
     if not user_org:

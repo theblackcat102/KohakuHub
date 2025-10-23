@@ -7,6 +7,7 @@ All relationships now use proper ForeignKey constraints for data integrity.
 from datetime import datetime, timezone
 from functools import partial
 
+from kohakuhub.constants import DB_ON_DELETE_SET_NULL
 from peewee import (
     AutoField,
     BigIntegerField,
@@ -222,7 +223,7 @@ class StagingUpload(BaseModel):
     storage_key = CharField()
     lfs = BooleanField(default=False)
     uploader = ForeignKeyField(
-        User, backref="uploads", on_delete="SET NULL", null=True, index=True
+        User, backref="uploads", on_delete=DB_ON_DELETE_SET_NULL, null=True, index=True
     )
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
@@ -295,10 +296,14 @@ class LFSObjectHistory(BaseModel):
     size = BigIntegerField()  # Changed from IntegerField to support files >2GB
     commit_id = CharField(index=True)  # LakeFS commit ID
     # Optional link to File record for faster lookups
-    # IMPORTANT: on_delete="SET NULL" prevents CASCADE deletion when File is deleted
+    # IMPORTANT: on_delete=DB_ON_DELETE_SET_NULL prevents CASCADE deletion when File is deleted
     # LFSObjectHistory must persist for quota tracking even after file deletion
     file = ForeignKeyField(
-        File, backref="lfs_versions", on_delete="SET NULL", null=True, index=True
+        File,
+        backref="lfs_versions",
+        on_delete=DB_ON_DELETE_SET_NULL,
+        null=True,
+        index=True,
     )
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
@@ -347,7 +352,11 @@ class Invitation(BaseModel):
     # Legacy fields (kept for single-use compatibility)
     used_at = DateTimeField(null=True)  # First use timestamp
     used_by = ForeignKeyField(
-        User, backref="used_invitations", on_delete="SET NULL", null=True, index=True
+        User,
+        backref="used_invitations",
+        on_delete=DB_ON_DELETE_SET_NULL,
+        null=True,
+        index=True,
     )
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
@@ -388,7 +397,7 @@ class DownloadSession(BaseModel):
     user = ForeignKeyField(
         User,
         backref="downloads",
-        on_delete="SET NULL",
+        on_delete=DB_ON_DELETE_SET_NULL,
         null=True,
         index=True,
     )  # NULL if anonymous

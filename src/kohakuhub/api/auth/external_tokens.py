@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from kohakuhub.config import cfg
+from kohakuhub.constants import ERROR_NOT_AUTHORIZED_MANAGE_TOKENS
 from kohakuhub.crypto import mask_token
 from kohakuhub.db import FallbackSource, User
 from kohakuhub.db_operations import (
@@ -137,7 +138,7 @@ async def add_external_token(
     """
     # Check user can only manage their own tokens
     if user.username != username:
-        raise HTTPException(403, detail="Not authorized to manage these tokens")
+        raise HTTPException(403, detail=ERROR_NOT_AUTHORIZED_MANAGE_TOKENS)
 
     # Validate URL
     if not data.url or not data.url.startswith("http"):
@@ -158,7 +159,7 @@ async def delete_external_token(
     """Delete external token for a URL."""
     # Check user can only manage their own tokens
     if user.username != username:
-        raise HTTPException(403, detail="Not authorized to manage these tokens")
+        raise HTTPException(403, detail=ERROR_NOT_AUTHORIZED_MANAGE_TOKENS)
 
     # Delete token
     deleted = delete_user_external_token(user, url)
@@ -183,7 +184,7 @@ async def bulk_update_external_tokens(
     """
     # Check user can only manage their own tokens
     if user.username != username:
-        raise HTTPException(403, detail="Not authorized to manage these tokens")
+        raise HTTPException(403, detail=ERROR_NOT_AUTHORIZED_MANAGE_TOKENS)
 
     # Get existing tokens
     existing_tokens = get_user_external_tokens(user)

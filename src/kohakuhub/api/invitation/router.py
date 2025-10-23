@@ -10,6 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
 from kohakuhub.config import cfg
+from kohakuhub.constants import (
+    ERROR_INVALID_INVITATION_DATA,
+    ERROR_INVITATION_NOT_FOUND,
+    ERROR_ORG_NOT_FOUND,
+)
 from kohakuhub.db import Invitation, User, UserOrganization, db
 from kohakuhub.db_operations import (
     check_invitation_available,
@@ -79,7 +84,7 @@ async def create_org_invitation(
     # Get organization
     org = get_organization(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     # Check if user is admin of the organization
     user_org = get_user_organization(user, org)
@@ -172,7 +177,7 @@ async def get_invitation_details(token: str):
     invitation = get_invitation(token)
 
     if not invitation:
-        raise HTTPException(404, detail="Invitation not found")
+        raise HTTPException(404, detail=ERROR_INVITATION_NOT_FOUND)
 
     # Check availability
     is_available, error_msg = check_invitation_available(invitation)
@@ -182,7 +187,7 @@ async def get_invitation_details(token: str):
     try:
         params = json.loads(invitation.parameters)
     except json.JSONDecodeError:
-        raise HTTPException(500, detail="Invalid invitation data")
+        raise HTTPException(500, detail=ERROR_INVALID_INVITATION_DATA)
 
     # Get inviter username (created_by is now a ForeignKey to User)
     inviter_username = (
@@ -227,7 +232,7 @@ def _handle_join_org_action(invitation: Invitation, user: User, params: dict) ->
     # Get organization object
     org = get_user_by_id(org_id)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     # Check if user is already a member
     existing_membership = get_user_organization(user, org)
@@ -305,7 +310,7 @@ async def accept_invitation(token: str, user: User = Depends(get_current_user)):
     invitation = get_invitation(token)
 
     if not invitation:
-        raise HTTPException(404, detail="Invitation not found")
+        raise HTTPException(404, detail=ERROR_INVITATION_NOT_FOUND)
 
     # Check if invitation is available
     is_available, error_msg = check_invitation_available(invitation)
@@ -316,7 +321,7 @@ async def accept_invitation(token: str, user: User = Depends(get_current_user)):
     try:
         params = json.loads(invitation.parameters)
     except json.JSONDecodeError:
-        raise HTTPException(500, detail="Invalid invitation data")
+        raise HTTPException(500, detail=ERROR_INVALID_INVITATION_DATA)
 
     # Execute action based on type using match-case
     match invitation.action:
@@ -346,7 +351,7 @@ async def list_organization_invitations(
     # Get organization
     org = get_organization(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     # Check if user is admin of the organization
     user_org = get_user_organization(user, org)
@@ -406,20 +411,20 @@ async def delete_invitation_endpoint(
     invitation = get_invitation(token)
 
     if not invitation:
-        raise HTTPException(404, detail="Invitation not found")
+        raise HTTPException(404, detail=ERROR_INVITATION_NOT_FOUND)
 
     # Parse parameters to get org_id
     try:
         params = json.loads(invitation.parameters)
     except json.JSONDecodeError:
-        raise HTTPException(500, detail="Invalid invitation data")
+        raise HTTPException(500, detail=ERROR_INVALID_INVITATION_DATA)
 
     # Check authorization based on action type
     if invitation.action == "join_org":
         org_id = params.get("org_id")
         org = get_user_by_id(org_id)
         if not org:
-            raise HTTPException(404, detail="Organization not found")
+            raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
         user_org = get_user_organization(user, org)
 

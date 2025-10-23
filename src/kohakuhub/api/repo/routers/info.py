@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from kohakuhub.config import cfg
+from kohakuhub.constants import DATETIME_FORMAT_ISO
 from kohakuhub.db import Repository, User, UserOrganization
 from kohakuhub.db_operations import (
     get_file,
@@ -121,7 +122,7 @@ async def get_repo_info(
                 if commit_info and commit_info.get("creation_date"):
                     last_modified = datetime.fromtimestamp(
                         commit_info["creation_date"]
-                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    ).strftime(DATETIME_FORMAT_ISO)
             except Exception as ex:
                 logger.debug(f"Could not get commit info: {str(ex)}")
 
@@ -368,7 +369,7 @@ async def _list_repos_internal(
                 if commit_info and commit_info.get("creation_date"):
                     last_modified = datetime.fromtimestamp(
                         commit_info["creation_date"]
-                    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    ).strftime(DATETIME_FORMAT_ISO)
         except Exception as e:
             logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
 
@@ -379,7 +380,7 @@ async def _list_repos_internal(
                 "private": r.private,
                 "sha": sha,
                 "lastModified": last_modified,
-                "createdAt": safe_strftime(r.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
+                "createdAt": safe_strftime(r.created_at, DATETIME_FORMAT_ISO),
                 "downloads": r.downloads,
                 "likes": r.likes_count,
                 "gated": False,
@@ -538,7 +539,7 @@ async def list_user_repos(
                     if commit_info and commit_info.get("creation_date"):
                         last_modified = datetime.fromtimestamp(
                             commit_info["creation_date"]
-                        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                        ).strftime(DATETIME_FORMAT_ISO)
             except Exception as e:
                 logger.debug(f"Could not get lastModified for {r.full_id}: {str(e)}")
 
@@ -549,7 +550,7 @@ async def list_user_repos(
                     "private": r.private,
                     "sha": sha,
                     "lastModified": last_modified,
-                    "createdAt": safe_strftime(r.created_at, "%Y-%m-%dT%H:%M:%S.%fZ"),
+                    "createdAt": safe_strftime(r.created_at, DATETIME_FORMAT_ISO),
                     "downloads": r.downloads,
                     "likes": r.likes_count,
                     "gated": False,

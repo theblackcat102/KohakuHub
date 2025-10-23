@@ -6,6 +6,11 @@ import fnmatch
 import hashlib
 
 from kohakuhub.config import cfg
+from kohakuhub.constants import (
+    DEFAULT_COMMIT_MESSAGE,
+    DEFAULT_EMAIL,
+    GIT_ATTRIBUTES_FILE,
+)
 from kohakuhub.db import File
 from kohakuhub.db_operations import get_repository, should_use_lfs
 from kohakuhub.logger import get_logger
@@ -129,7 +134,7 @@ class GitLakeFSBridge:
             )
 
             author_name = commit_info.get("committer", "KohakuHub")
-            message = commit_info.get("message", "Initial commit")
+            message = commit_info.get("message", DEFAULT_COMMIT_MESSAGE)
             timestamp = commit_info.get("creation_date", 0)
 
             # Parse timestamp
@@ -145,9 +150,9 @@ class GitLakeFSBridge:
                 tree_sha1=root_tree_sha1,
                 parent_sha1s=[],  # No parents for now
                 author_name=author_name,
-                author_email="noreply@kohakuhub.local",
+                author_email=DEFAULT_EMAIL,
                 committer_name=author_name,
-                committer_email="noreply@kohakuhub.local",
+                committer_email=DEFAULT_EMAIL,
                 author_timestamp=timestamp,
                 committer_timestamp=timestamp,
                 timezone="+0000",
@@ -189,7 +194,7 @@ class GitLakeFSBridge:
         gitattributes_content = None
 
         for obj in file_objects:
-            if obj["path"] == ".gitattributes":
+            if obj["path"] == GIT_ATTRIBUTES_FILE:
                 gitattributes_obj = obj
                 try:
                     gitattributes_content = await self.lakefs_client.get_object(
@@ -210,7 +215,7 @@ class GitLakeFSBridge:
         large_files = []
 
         for obj in file_objects:
-            if obj["path"] == ".gitattributes":
+            if obj["path"] == GIT_ATTRIBUTES_FILE:
                 continue
 
             path = obj["path"]
@@ -437,7 +442,7 @@ class GitLakeFSBridge:
                 )
 
                 author_name = commit_info.get("committer", "KohakuHub")
-                message = commit_info.get("message", "Initial commit")
+                message = commit_info.get("message", DEFAULT_COMMIT_MESSAGE)
                 timestamp = commit_info.get("creation_date", 0)
 
                 if isinstance(timestamp, str):
@@ -451,9 +456,9 @@ class GitLakeFSBridge:
                 tree_sha1=root_tree_sha1,
                 parent_sha1s=[],
                 author_name=author_name,
-                author_email="noreply@kohakuhub.local",
+                author_email=DEFAULT_EMAIL,
                 committer_name=author_name,
-                committer_email="noreply@kohakuhub.local",
+                committer_email=DEFAULT_EMAIL,
                 author_timestamp=timestamp,
                 committer_timestamp=timestamp,
                 timezone="+0000",

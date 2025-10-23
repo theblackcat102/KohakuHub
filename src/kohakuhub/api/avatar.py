@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
+from kohakuhub.constants import ERROR_ORG_NOT_FOUND, ERROR_USER_NOT_FOUND
 from kohakuhub.db import User
 from kohakuhub.db_operations import (
     get_organization,
@@ -146,7 +147,7 @@ async def upload_user_avatar(
     # Check authorization (user themselves or admin can upload)
     target_user = get_user_by_username(username)
     if not target_user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     # Only user themselves can upload (we'll add admin check later if needed)
     if user.id != target_user.id:
@@ -218,7 +219,7 @@ async def get_user_avatar(
     """
     user = get_user_by_username(username)
     if not user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     if not user.avatar:
         raise HTTPException(404, detail="No avatar set")
@@ -254,7 +255,7 @@ async def delete_user_avatar(
     """
     target_user = get_user_by_username(username)
     if not target_user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     if user.id != target_user.id:
         raise HTTPException(403, detail="Not authorized to delete this user's avatar")
@@ -293,7 +294,7 @@ async def upload_org_avatar(
     """
     org = get_organization(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     # Check if user is admin of the organization
     user_org = get_user_organization(user, org)
@@ -366,7 +367,7 @@ async def get_org_avatar(
     """
     org = get_organization(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     if not org.avatar:
         raise HTTPException(404, detail="No avatar set")
@@ -402,7 +403,7 @@ async def delete_org_avatar(
     """
     org = get_organization(org_name)
     if not org:
-        raise HTTPException(404, detail="Organization not found")
+        raise HTTPException(404, detail=ERROR_ORG_NOT_FOUND)
 
     user_org = get_user_organization(user, org)
     if not user_org or user_org.role not in ["admin", "super-admin"]:

@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from kohakuhub.db import Repository, User
+from kohakuhub.constants import ERROR_USER_AUTH_REQUIRED
 from kohakuhub.db_operations import get_organization, get_user_organization
 
 
@@ -33,7 +34,7 @@ def check_namespace_permission(
         return True
 
     if not user:
-        raise HTTPException(403, detail="User authentication required")
+        raise HTTPException(403, detail=ERROR_USER_AUTH_REQUIRED)
 
     # User's own namespace
     if namespace == user.username:
@@ -138,7 +139,7 @@ def check_repo_write_permission(
         return True
 
     if not user:
-        raise HTTPException(403, detail="User authentication required")
+        raise HTTPException(403, detail=ERROR_USER_AUTH_REQUIRED)
 
     # Check if user owns the repo (namespace matches username)
     if repo.namespace == user.username:
@@ -183,7 +184,7 @@ def check_repo_delete_permission(
         return True
 
     if not user:
-        raise HTTPException(403, detail="User authentication required")
+        raise HTTPException(403, detail=ERROR_USER_AUTH_REQUIRED)
 
     # Check if user owns the repo (namespace matches username)
     if repo.namespace == user.username:

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from kohakuhub.db import User, UserOrganization, db
+from kohakuhub.constants import ERROR_USER_NOT_FOUND
 from kohakuhub.db_operations import (
     create_organization,
     create_user_organization,
@@ -113,7 +114,7 @@ async def add_member(
     # Get the user to add
     user_to_add = get_user_by_username(payload.username)
     if not user_to_add:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     # Check if already a member
     existing = get_user_organization(user_to_add, org)
@@ -144,7 +145,7 @@ async def remove_member_endpoint(
     # Get the user to remove
     user_to_remove = get_user_by_username(username)
     if not user_to_remove:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     # Get the membership
     membership = get_user_organization(user_to_remove, org)
@@ -161,7 +162,7 @@ async def list_user_organizations_endpoint(username: str):
     """List organizations a user belongs to."""
     user = get_user_by_username(username)
     if not user:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     # Use backref to get user's org memberships
     orgs = list_user_organizations(user)
@@ -201,7 +202,7 @@ async def update_member_role_endpoint(
     # Get the user to update
     user_to_update = get_user_by_username(username)
     if not user_to_update:
-        raise HTTPException(404, detail="User not found")
+        raise HTTPException(404, detail=ERROR_USER_NOT_FOUND)
 
     # Get the membership
     membership = get_user_organization(user_to_update, org)

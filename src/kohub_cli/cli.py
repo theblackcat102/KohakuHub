@@ -8,6 +8,7 @@ from rich.table import Table
 
 from .client import KohubClient
 from .config import Config
+from .constants import STYLE_HIGHLIGHT
 from .errors import (
     KohubError,
     AuthenticationError,
@@ -337,7 +338,7 @@ def info(ctx, repo_id, repo_type, revision):
             info_text = Text()
 
             # Repository header
-            info_text.append(f"{result.get('id')}\n", style="bold cyan")
+            info_text.append(f"{result.get('id')}\n", style=STYLE_HIGHLIGHT)
             info_text.append("─" * 60 + "\n", style="dim")
 
             # Basic info

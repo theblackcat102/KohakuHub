@@ -11,6 +11,23 @@ from rich.text import Text
 
 from .client import KohubClient
 from .config import Config
+from .constants import (
+    ICON_PRIVATE,
+    ICON_PUBLIC,
+    LABEL_CREATED,
+    PROMPT_ORG_NAME,
+    PROMPT_REPO_ID,
+    PROMPT_REPO_TYPE,
+    SECTION_SUGGESTIONS,
+    STYLE_ERROR,
+    STYLE_HIGHLIGHT,
+    STYLE_WARNING,
+    UI_BACK,
+    UI_CANCEL,
+    UI_CANCELLED,
+    UI_PRESS_ENTER,
+    VALIDATION_REPO_ID_FORMAT,
+)
 from .errors import (
     AlreadyExistsError,
     AuthenticationError,
@@ -153,8 +170,8 @@ class InteractiveState:
             user_text.append("👤 ", style=_STYLE_SUCCESS)
             user_text.append(self.username, style=_STYLE_SUCCESS)
         else:
-            user_text.append("👤 ", style="bold red")
-            user_text.append("Not logged in", style="bold red")
+            user_text.append("👤 ", style=STYLE_ERROR)
+            user_text.append("Not logged in", style=STYLE_ERROR)
 
         # Combine in panel
         from rich.columns import Columns
@@ -186,17 +203,17 @@ class InteractiveState:
         # Add suggestions based on error type
         match e:
             case AuthenticationError():
-                error_text.append("\n💡 Suggestions:\n", style="bold yellow")
+                error_text.append(SECTION_SUGGESTIONS, style=STYLE_WARNING)
                 error_text.append("  • Login: Select 'Login' from User Management\n")
                 error_text.append("  • Or create an API token and add to config\n")
 
             case NotFoundError():
-                error_text.append("\n💡 Suggestions:\n", style="bold yellow")
+                error_text.append(SECTION_SUGGESTIONS, style=STYLE_WARNING)
                 error_text.append("  • Check the resource name spelling\n")
                 error_text.append("  • Verify the resource exists\n")
 
             case NetworkError():
-                error_text.append("\n💡 Suggestions:\n", style="bold yellow")
+                error_text.append(SECTION_SUGGESTIONS, style=STYLE_WARNING)
                 error_text.append(f"  • Check endpoint: {self.client.endpoint}\n")
                 error_text.append("  • Verify server is running\n")
                 error_text.append("  • Check your network connection\n")
@@ -205,7 +222,7 @@ class InteractiveState:
             error_text, title="[bold red]Error[/bold red]", border_style="red"
         )
         self.console.print(panel)
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
 
 
 def main_menu(state: InteractiveState):
@@ -279,7 +296,7 @@ def auth_menu(state: InteractiveState):
                         questionary.Choice("👥 My Organizations", value="my_orgs"),
                         questionary.Separator(),
                         questionary.Choice("🚪 Logout", value="logout"),
-                        questionary.Choice("⬅️  Back", value="back"),
+                        questionary.Choice(UI_BACK, value="back"),
                     ],
                 )
             )
@@ -327,7 +344,7 @@ def login(state: InteractiveState):
         )
     except UserCancelled:
         state.console.print("\n[yellow]Login cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Login with progress
@@ -401,7 +418,7 @@ def register(state: InteractiveState):
 
     if password != password_confirm:
         state.console.print("\n✗ Passwords don't match", style="bold red")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Register with progress
@@ -464,7 +481,7 @@ def whoami(state: InteractiveState):
     # Display in panel
     user_text = Text()
     user_text.append("👤 ", style="bold")
-    user_text.append(f"{info.get('username')}\n\n", style="bold cyan")
+    user_text.append(f"{info.get('username')}\n\n", style=STYLE_HIGHLIGHT)
     user_text.append("Email: ", style="bold")
     user_text.append(f"{info.get('email')}\n")
     user_text.append("Email Verified: ", style="bold")
@@ -545,7 +562,7 @@ def list_tokens(state: InteractiveState):
 
     if not tokens:
         state.console.print("[yellow]No tokens found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display in table
@@ -580,7 +597,7 @@ def delete_token(state: InteractiveState):
 
     if not tokens:
         state.console.print("[yellow]No tokens to delete[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Show tokens and let user select
@@ -588,7 +605,7 @@ def delete_token(state: InteractiveState):
     for t in tokens:
         label = f"{t['name']} (ID: {t['id']}, Created: {t.get('created_at', 'N/A')})"
         choices.append(questionary.Choice(label, value=t["id"]))
-    choices.append(questionary.Choice("⬅️  Cancel", value=None))
+    choices.append(questionary.Choice(UI_CANCEL, value=None))
 
     token_id = questionary.select("Select token to delete:", choices=choices).ask()
 
@@ -599,8 +616,8 @@ def delete_token(state: InteractiveState):
     if not questionary.confirm(
         f"Delete token ID {token_id}? This cannot be undone.", default=False
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     # Delete with progress
@@ -624,7 +641,7 @@ def my_orgs(state: InteractiveState):
             state.username = info.get("username")
         except Exception:
             state.console.print("[bold red]Please login first[/bold red]")
-            input("\nPress Enter to continue...")
+            input(UI_PRESS_ENTER)
             return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Fetching organizations..."):
@@ -636,7 +653,7 @@ def my_orgs(state: InteractiveState):
 
     if not orgs:
         state.console.print("[yellow]You are not in any organizations[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display in table
@@ -662,7 +679,7 @@ def logout(state: InteractiveState):
     """Logout from KohakuHub."""
     if not state.username:
         state.console.print("[yellow]Not logged in[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     if not questionary.confirm(f"Logout from {state.username}?", default=True).ask():
@@ -715,7 +732,7 @@ def org_menu(state: InteractiveState):
                             "🔄 Update Member Role", value="update_role"
                         ),
                         questionary.Separator(),
-                        questionary.Choice("⬅️  Back", value="back"),
+                        questionary.Choice(UI_BACK, value="back"),
                     ],
                 )
             )
@@ -746,7 +763,7 @@ def create_organization(state: InteractiveState):
     state.console.print("[bold]Create Organization[/bold]\n")
 
     name = questionary.text(
-        "Organization name:",
+        PROMPT_ORG_NAME,
         validate=lambda x: (
             len(x) >= 3 and len(x) <= 50 or "Name must be 3-50 characters"
         ),
@@ -761,8 +778,8 @@ def create_organization(state: InteractiveState):
         state.console.print(f"  Description: {description}")
 
     if not questionary.confirm("Proceed?", default=True).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     # Create with progress
@@ -773,7 +790,7 @@ def create_organization(state: InteractiveState):
             state.console.print(
                 f"\n✗ Organization '{name}' already exists", style="bold red"
             )
-            input("\nPress Enter to continue...")
+            input(UI_PRESS_ENTER)
             return
         except Exception as e:
             state.handle_error(e, "Organization creation")
@@ -802,7 +819,7 @@ def organization_info(state: InteractiveState):
     info_text.append(f"{info.get('name')}\n\n", style="bold cyan")
     info_text.append("Description: ", style="bold")
     info_text.append(f"{info.get('description', 'N/A')}\n")
-    info_text.append("Created: ", style="bold")
+    info_text.append(LABEL_CREATED, style="bold")
     info_text.append(f"{info.get('created_at', 'N/A')}\n")
 
     panel = Panel(
@@ -829,7 +846,7 @@ def list_org_members(state: InteractiveState):
 
     if not members:
         state.console.print("[yellow]No members found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display in table
@@ -858,8 +875,8 @@ def add_member(state: InteractiveState):
     if not questionary.confirm(
         f"Add {username} to {org_name} as {role}?", default=True
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Adding member..."):
@@ -901,8 +918,8 @@ def remove_member(state: InteractiveState):
     if not questionary.confirm(
         f"⚠️  Remove {username} from {org_name}?", default=False
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Removing member..."):
@@ -928,8 +945,8 @@ def update_member_role(state: InteractiveState):
     if not questionary.confirm(
         f"Update {username}'s role in {org_name} to {role}?", default=True
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Updating role..."):
@@ -969,7 +986,7 @@ def repo_menu(state: InteractiveState):
                         questionary.Choice("🔄 Move/Rename", value="move"),
                         questionary.Choice("🗑️  Delete Repository", value="delete"),
                         questionary.Separator(),
-                        questionary.Choice("⬅️  Back", value="back"),
+                        questionary.Choice(UI_BACK, value="back"),
                     ],
                 )
             )
@@ -998,7 +1015,7 @@ def browse_and_select_repo(state: InteractiveState):
     try:
         repo_type = safe_ask(
             questionary.select(
-                "Repository type:",
+                PROMPT_REPO_TYPE,
                 choices=["model", "dataset", "space"],
                 default="model",
             )
@@ -1024,7 +1041,7 @@ def browse_and_select_repo(state: InteractiveState):
 
     if not repos:
         state.console.print("[yellow]No repositories found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Let user select a repository
@@ -1034,7 +1051,7 @@ def browse_and_select_repo(state: InteractiveState):
         label = f"{visibility} {r.get('id')} [dim]({r.get('author')})[/dim]"
         choices.append(questionary.Choice(label, value=r.get("id")))
 
-    choices.append(questionary.Choice("⬅️  Cancel", value=None))
+    choices.append(questionary.Choice(UI_CANCEL, value=None))
 
     try:
         selected = safe_ask(
@@ -1067,7 +1084,7 @@ def repo_context_menu(state: InteractiveState):
         # Show quick repo info if available
         if state.current_repo.get("info"):
             info = state.current_repo["info"]
-            visibility = "🔒 Private" if info.get("private") else "🌐 Public"
+            visibility = ICON_PRIVATE if info.get("private") else ICON_PUBLIC
             state.console.print(
                 f"[dim]{visibility} | Last modified: {info.get('lastModified', 'N/A')}[/dim]\n"
             )
@@ -1161,7 +1178,7 @@ def repo_info_context(state: InteractiveState):
     visibility = "🔒 Private" if info.get("private") else "🌐 Public"
     info_text.append(f"{visibility}\n")
 
-    info_text.append("Created: ", style="bold")
+    info_text.append(LABEL_CREATED, style="bold")
     info_text.append(f"{info.get('createdAt', 'N/A')}\n")
 
     if info.get("lastModified"):
@@ -1212,7 +1229,7 @@ def repo_tree_context(state: InteractiveState):
 
     if not files:
         state.console.print("[yellow]No files found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display as tree
@@ -1285,7 +1302,7 @@ def list_commits_context(state: InteractiveState):
     commits = result.get("commits", [])
     if not commits:
         state.console.print("[yellow]No commits found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display in table
@@ -1412,7 +1429,7 @@ def view_commit_diff(state: InteractiveState):
     files = diff_result.get("files", [])
     if not files:
         state.console.print("[yellow]No files changed[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Summary table
@@ -1474,8 +1491,8 @@ def repo_settings_context(state: InteractiveState):
     ).ask()
 
     if not questionary.confirm("Update settings?", default=True).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Updating settings..."):
@@ -1503,12 +1520,12 @@ def move_repo_context(state: InteractiveState):
 
     to_repo = questionary.text(
         "New repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     if not questionary.confirm(f"\nMove {repo_id} to {to_repo}?", default=False).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Moving repository..."):
@@ -1544,8 +1561,8 @@ def squash_repo_context(state: InteractiveState):
     if not questionary.confirm(
         "Are you sure you want to squash this repository?", default=False
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(
@@ -1575,8 +1592,8 @@ def delete_repo_context(state: InteractiveState) -> bool:
     if not questionary.confirm(
         f"⚠️  Delete {repo_id}? This CANNOT be undone!", default=False
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return False
 
     # Type repo name to confirm
@@ -1590,7 +1607,7 @@ def delete_repo_context(state: InteractiveState) -> bool:
             "\n✗ Repository name doesn't match. Deletion cancelled.",
             style="bold red",
         )
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return False
 
     # Delete with progress
@@ -1622,7 +1639,7 @@ def branch_management_menu(state: InteractiveState):
                     choices=[
                         questionary.Choice("➕ Create Branch", value="create"),
                         questionary.Choice("🗑️  Delete Branch", value="delete"),
-                        questionary.Choice("⬅️  Back", value="back"),
+                        questionary.Choice(UI_BACK, value="back"),
                     ],
                 )
             )
@@ -1655,7 +1672,7 @@ def branch_management_menu(state: InteractiveState):
                 state.console.print(
                     f"\n✓ Branch '{branch_name}' created", style=_STYLE_SUCCESS
                 )
-                input("\nPress Enter to continue...")
+                input(UI_PRESS_ENTER)
 
             case "delete":
                 branch_name = questionary.text(
@@ -1682,7 +1699,7 @@ def branch_management_menu(state: InteractiveState):
                 state.console.print(
                     f"\n✓ Branch '{branch_name}' deleted", style=_STYLE_SUCCESS
                 )
-                input("\nPress Enter to continue...")
+                input(UI_PRESS_ENTER)
 
             case "back":
                 break
@@ -1704,7 +1721,7 @@ def tag_management_menu(state: InteractiveState):
                     choices=[
                         questionary.Choice("➕ Create Tag", value="create"),
                         questionary.Choice("🗑️  Delete Tag", value="delete"),
-                        questionary.Choice("⬅️  Back", value="back"),
+                        questionary.Choice(UI_BACK, value="back"),
                     ],
                 )
             )
@@ -1740,7 +1757,7 @@ def tag_management_menu(state: InteractiveState):
                 state.console.print(
                     f"\n✓ Tag '{tag_name}' created", style=_STYLE_SUCCESS
                 )
-                input("\nPress Enter to continue...")
+                input(UI_PRESS_ENTER)
 
             case "delete":
                 tag_name = questionary.text(
@@ -1765,7 +1782,7 @@ def tag_management_menu(state: InteractiveState):
                 state.console.print(
                     f"\n✓ Tag '{tag_name}' deleted", style=_STYLE_SUCCESS
                 )
-                input("\nPress Enter to continue...")
+                input(UI_PRESS_ENTER)
 
             case "back":
                 break
@@ -1802,8 +1819,8 @@ def create_repo(state: InteractiveState):
     state.console.print(f"  Visibility: {'🔒 Private' if private else '🌐 Public'}")
 
     if not questionary.confirm("\nProceed?", default=True).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     # Create with progress
@@ -1816,7 +1833,7 @@ def create_repo(state: InteractiveState):
             state.console.print(
                 f"\n✗ Repository {repo_id} already exists", style="bold red"
             )
-            input("\nPress Enter to continue...")
+            input(UI_PRESS_ENTER)
             return
         except Exception as e:
             state.handle_error(e, "Repository creation")
@@ -1847,7 +1864,7 @@ def list_repos(state: InteractiveState):
 
     if not repos:
         state.console.print("[yellow]No repositories found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display in table
@@ -1880,8 +1897,8 @@ def repo_info(state: InteractiveState):
     ).ask()
 
     repo_id = questionary.text(
-        "Repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        PROMPT_REPO_ID,
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Fetching repository info..."):
@@ -1906,7 +1923,7 @@ def repo_info(state: InteractiveState):
     visibility = "🔒 Private" if info.get("private") else "🌐 Public"
     info_text.append(f"{visibility}\n")
 
-    info_text.append("Created: ", style="bold")
+    info_text.append(LABEL_CREATED, style="bold")
     info_text.append(f"{info.get('createdAt', 'N/A')}\n")
 
     if info.get("lastModified"):
@@ -1935,8 +1952,8 @@ def repo_tree(state: InteractiveState):
     ).ask()
 
     repo_id = questionary.text(
-        "Repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        PROMPT_REPO_ID,
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     revision = questionary.text("Revision/branch:", default="main").ask()
@@ -1960,7 +1977,7 @@ def repo_tree(state: InteractiveState):
 
     if not files:
         state.console.print("[yellow]No files found[/yellow]")
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Display as tree
@@ -2012,8 +2029,8 @@ def repo_settings(state: InteractiveState):
     ).ask()
 
     repo_id = questionary.text(
-        "Repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        PROMPT_REPO_ID,
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     # Get current settings
@@ -2038,8 +2055,8 @@ def repo_settings(state: InteractiveState):
 
     # Confirm
     if not questionary.confirm("Update settings?", default=True).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Updating settings..."):
@@ -2065,12 +2082,12 @@ def move_repo(state: InteractiveState):
 
     from_repo = questionary.text(
         "Current repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     to_repo = questionary.text(
         "New repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     # Confirm
@@ -2079,8 +2096,8 @@ def move_repo(state: InteractiveState):
     state.console.print(f"  To: {to_repo}")
 
     if not questionary.confirm("\n⚠️  Proceed?", default=False).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     with state.console.status(f"[{_STYLE_SUCCESS}]Moving repository..."):
@@ -2108,8 +2125,8 @@ def delete_repo(state: InteractiveState):
     ).ask()
 
     repo_id = questionary.text(
-        "Repository ID (namespace/name):",
-        validate=lambda x: "/" in x or "Format: namespace/name",
+        PROMPT_REPO_ID,
+        validate=lambda x: "/" in x or VALIDATION_REPO_ID_FORMAT,
     ).ask()
 
     # Try to show repo info first
@@ -2131,8 +2148,8 @@ def delete_repo(state: InteractiveState):
     if not questionary.confirm(
         f"⚠️  Delete {repo_id}? This CANNOT be undone!", default=False
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     # Type repo name to confirm
@@ -2146,7 +2163,7 @@ def delete_repo(state: InteractiveState):
             "\n✗ Repository name doesn't match. Deletion cancelled.",
             style="bold red",
         )
-        input("\nPress Enter to continue...")
+        input(UI_PRESS_ENTER)
         return
 
     # Delete with progress
@@ -2182,7 +2199,7 @@ def settings_menu(state: InteractiveState):
                         questionary.Choice("📋 Show All Config", value="show"),
                         questionary.Choice("🗑️  Clear Config", value="clear"),
                         questionary.Separator(),
-                        questionary.Choice("⬅️  Back", value="back"),
+                        questionary.Choice(UI_BACK, value="back"),
                     ],
                 )
             )
@@ -2241,7 +2258,7 @@ def set_token(state: InteractiveState):
             state.username = user_info.get("username")
         except Exception as e:
             state.console.print(f"\n✗ Invalid token: {e}", style="bold red")
-            input("\nPress Enter to continue...")
+            input(UI_PRESS_ENTER)
             return
 
     state.console.print(
@@ -2278,8 +2295,8 @@ def clear_config(state: InteractiveState):
         "⚠️  Clear all configuration? This will logout and remove saved token.",
         default=False,
     ).ask():
-        state.console.print("[yellow]Cancelled[/yellow]")
-        input("\nPress Enter to continue...")
+        state.console.print(UI_CANCELLED)
+        input(UI_PRESS_ENTER)
         return
 
     state.client.config.clear()

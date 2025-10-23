@@ -7,6 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Form, Request
 
 from kohakuhub.config import cfg
+from kohakuhub.constants import DATETIME_FORMAT_ISO
 from kohakuhub.db import File, Repository, User
 from kohakuhub.db_operations import get_file, get_repository, should_use_lfs
 from kohakuhub.logger import get_logger
@@ -163,7 +164,7 @@ async def convert_file_object(obj, repository: Repository, prefix_len: int) -> d
     # Add last modified info if available
     if obj.get("mtime"):
         file_obj["lastModified"] = datetime.fromtimestamp(obj["mtime"]).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
+            DATETIME_FORMAT_ISO
         )
 
     # Add LFS metadata if it's an LFS file
@@ -209,11 +210,11 @@ async def convert_directory_object(
     # Add last modified info
     if folder_latest_mtime:
         dir_obj["lastModified"] = datetime.fromtimestamp(folder_latest_mtime).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
+            DATETIME_FORMAT_ISO
         )
     elif obj.get("mtime"):
         dir_obj["lastModified"] = datetime.fromtimestamp(obj["mtime"]).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
+            DATETIME_FORMAT_ISO
         )
 
     return dir_obj
