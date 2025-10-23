@@ -146,12 +146,33 @@ async def process_upload_object(
             # Calculate number of parts needed
             part_count = (size + multipart_chunk_size - 1) // multipart_chunk_size
 
-            # Generate multipart upload URLs
+            # S3 has a hard limit of 10,000 parts per upload
+            MAX_PARTS = 10000
+            if part_count > MAX_PARTS:
+                # Increase chunk size to stay within limit
+                adjusted_chunk_size = (size + MAX_PARTS - 1) // MAX_PARTS
+                # Round up to nearest MB for cleaner chunks
+                adjusted_chunk_size = (
+                    (adjusted_chunk_size + 1048575) // 1048576
+                ) * 1048576
+                part_count = (size + adjusted_chunk_size - 1) // adjusted_chunk_size
+
+                logger.warning(
+                    f"File size {size:,} bytes would require {part_count} parts with {multipart_chunk_size:,} byte chunks. "
+                    f"Increased chunk size to {adjusted_chunk_size:,} bytes to stay under {MAX_PARTS} part limit. "
+                    f"New part count: {part_count}"
+                )
+                multipart_chunk_size = adjusted_chunk_size
+
+            # Generate multipart upload URLs with longer expiration for large files
+            # Large files take longer to upload, so give more time
+            expires_in = 7200 if part_count > 100 else 3600  # 2 hours for >100 parts
+
             multipart_info = await generate_multipart_upload_urls(
                 bucket=cfg.s3.bucket,
                 key=lfs_key,
                 part_count=part_count,
-                expires_in=3600,  # 1 hour
+                expires_in=expires_in,
             )
 
             logger.info(
@@ -509,6 +530,13 @@ async def lfs_complete_multipart(
             f"Completing multipart upload for {oid[:8]}: "
             f"{len(parts)} parts, upload_id={upload_id}"
         )
+
+        # Debug: Log first and last few parts
+        if len(normalized_parts) > 0:
+            logger.debug(
+                f"Parts sample for {oid[:8]}: "
+                f"first={normalized_parts[0]}, last={normalized_parts[-1]}, total={len(normalized_parts)}"
+            )
 
         result = await complete_multipart_upload(
             bucket=cfg.s3.bucket,

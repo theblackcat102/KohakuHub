@@ -36,6 +36,7 @@ from kohakuhub.api.git.routers import lfs, ssh_keys
 from kohakuhub.api.repo.routers import crud as repo_crud
 from kohakuhub.api.repo.routers import info as repo_info
 from kohakuhub.api.repo.routers import tree as repo_tree
+from kohakuhub.datasetviewer import router as dataset_viewer
 
 logger = get_logger("MAIN")
 
@@ -98,6 +99,7 @@ app.include_router(org, prefix="/org", tags=["organizations"])
 app.include_router(git_http.router, tags=["git"])
 app.include_router(ssh_keys.router, tags=["ssh-keys"])
 app.include_router(validation.router, tags=["validation"])
+app.include_router(dataset_viewer.router, prefix=cfg.app.api_base)
 
 
 @app.head("/{namespace}/{name}/resolve/{revision}/{path:path}")
