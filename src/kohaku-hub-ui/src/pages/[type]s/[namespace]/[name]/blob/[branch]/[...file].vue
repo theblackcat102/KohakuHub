@@ -509,20 +509,47 @@ async function loadFileInfo() {
   error.value = null;
 
   try {
-    // First, get file metadata with HEAD request
-    const response = await fetch(fileUrl.value, { method: "HEAD" });
+    // Note: Presigned URLs are signed for GET method only
+    // HEAD requests will fail with 403/signature mismatch
+    // For text/markdown files, we fetch content directly (GET)
+    // For media files, size is not critical - browser will handle it
 
-    if (!response.ok) {
-      throw new Error("File not found");
-    }
-
-    fileSize.value = parseInt(response.headers.get("content-length") || "0");
-    fileHeaders.value = Object.fromEntries(response.headers.entries());
-
-    // Load content if it's previewable
+    // Load content if it's previewable text
     if (canPreviewText.value || isMarkdown.value) {
-      const contentResponse = await fetch(fileUrl.value);
-      fileContent.value = await contentResponse.text();
+      let retries = 0;
+      const maxRetries = 10;
+
+      while (retries < maxRetries) {
+        const response = await fetch(fileUrl.value);
+
+        if (response.ok) {
+          fileSize.value = parseInt(
+            response.headers.get("content-length") || "0",
+          );
+          fileHeaders.value = Object.fromEntries(response.headers.entries());
+          fileContent.value = await response.text();
+          break;
+        }
+
+        // If 404, might be commit still processing - retry
+        if (response.status === 404 && retries < maxRetries - 1) {
+          console.log(
+            `File not ready yet (attempt ${retries + 1}/${maxRetries}), retrying...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500)); // Wait 500ms
+          retries++;
+          continue;
+        }
+
+        // Other errors or max retries reached
+        throw new Error("File not found");
+      }
+    } else {
+      // For media/binary files, we don't need size upfront
+      // Just set a flag that file exists (img/video tags will handle loading)
+      // If they fail to load, browser will show broken image/video
+      fileSize.value = 0; // Unknown, will be loaded by browser
+      fileHeaders.value = {};
     }
   } catch (err) {
     error.value = err.message || "Failed to load file";
