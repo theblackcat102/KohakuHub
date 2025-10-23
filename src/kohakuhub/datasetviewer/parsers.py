@@ -5,14 +5,11 @@ All parsers accept URLs (including S3 presigned URLs) and stream data efficientl
 """
 
 import asyncio
-import csv
-import io
-import json
 import tarfile
-from typing import Any, AsyncIterator, Optional
+from typing import Any, Optional
 
+import duckdb
 import httpx
-import pyarrow.parquet as pq
 from fsspec.implementations.http import HTTPFileSystem
 
 
@@ -69,14 +66,49 @@ class CSVParser:
     """Parse CSV files using DuckDB (non-blocking, efficient)."""
 
     @staticmethod
+    def _parse_sync(url: str, max_rows: int, delimiter: str) -> dict[str, Any]:
+        """Synchronous CSV parsing with DuckDB (runs in thread pool)."""
+        conn = duckdb.connect(":memory:")
+        conn.execute("INSTALL httpfs")
+        conn.execute("LOAD httpfs")
+
+        # Read CSV with DuckDB
+        query = f"""
+        SELECT * FROM read_csv(
+            '{url}',
+            delim='{delimiter}',
+            header=true,
+            auto_detect=true
+        )
+        LIMIT {max_rows}
+        """
+
+        result = conn.execute(query).fetchall()
+        columns = [desc[0] for desc in conn.description]
+
+        # Get total row count
+        try:
+            count_query = f"SELECT COUNT(*) FROM read_csv('{url}', delim='{delimiter}', header=true)"
+            total_rows = conn.execute(count_query).fetchone()[0]
+        except Exception:
+            total_rows = len(result)
+
+        conn.close()
+
+        return {
+            "columns": columns,
+            "rows": [list(row) for row in result],
+            "total_rows": total_rows,
+            "truncated": len(result) >= max_rows,
+            "file_size": None,
+        }
+
+    @staticmethod
     async def parse(
         url: str, max_rows: int = 1000, delimiter: str = ","
     ) -> dict[str, Any]:
         """
         Parse CSV file from URL using DuckDB.
-
-        DuckDB supports CSV with automatic type detection and HTTP range requests.
-        Much faster and more robust than manual parsing.
 
         Args:
             url: File URL (presigned S3 URL)
@@ -84,64 +116,14 @@ class CSVParser:
             delimiter: CSV delimiter
 
         Returns:
-            {
-                "columns": ["col1", "col2", ...],
-                "rows": [[val1, val2, ...], ...],
-                "total_rows": N,
-                "truncated": bool,
-                "file_size": N
-            }
+            Dict with columns, rows, total_rows, truncated, file_size
         """
         # Resolve redirects first
         resolved_url = await resolve_url_redirects(url)
 
-        def _parse_csv_sync(url: str, max_rows: int, delimiter: str) -> dict[str, Any]:
-            """Synchronous CSV parsing with DuckDB (runs in thread pool)."""
-            import duckdb
-
-            conn = duckdb.connect(":memory:")
-            conn.execute("INSTALL httpfs")
-            conn.execute("LOAD httpfs")
-
-            try:
-                # Read CSV with DuckDB
-                query = f"""
-                SELECT * FROM read_csv(
-                    '{url}',
-                    delim='{delimiter}',
-                    header=true,
-                    auto_detect=true
-                )
-                LIMIT {max_rows}
-                """
-
-                result = conn.execute(query).fetchall()
-                columns = [desc[0] for desc in conn.description]
-
-                # Get total row count
-                try:
-                    count_query = f"SELECT COUNT(*) FROM read_csv('{url}', delim='{delimiter}', header=true)"
-                    total_rows = conn.execute(count_query).fetchone()[0]
-                except Exception:
-                    total_rows = len(result)
-
-                conn.close()
-
-                return {
-                    "columns": columns,
-                    "rows": [list(row) for row in result],
-                    "total_rows": total_rows,
-                    "truncated": len(result) >= max_rows,
-                    "file_size": None,
-                }
-
-            except Exception as e:
-                conn.close()
-                raise ParserError(f"Failed to parse CSV with DuckDB: {e}")
-
         # Run in thread pool to avoid blocking event loop
         return await asyncio.to_thread(
-            _parse_csv_sync, resolved_url, max_rows, delimiter
+            CSVParser._parse_sync, resolved_url, max_rows, delimiter
         )
 
 
@@ -149,254 +131,247 @@ class JSONLParser:
     """Parse JSONL files using DuckDB (non-blocking, efficient)."""
 
     @staticmethod
+    def _parse_sync(url: str, max_rows: int) -> dict[str, Any]:
+        """Synchronous JSONL parsing with DuckDB (runs in thread pool)."""
+        conn = duckdb.connect(":memory:")
+        conn.execute("INSTALL httpfs")
+        conn.execute("LOAD httpfs")
+        conn.execute("INSTALL json")
+        conn.execute("LOAD json")
+
+        # Read JSONL with DuckDB (newline-delimited JSON)
+        query = f"SELECT * FROM read_ndjson('{url}') LIMIT {max_rows}"
+
+        result = conn.execute(query).fetchall()
+        columns = [desc[0] for desc in conn.description]
+
+        # Get total row count
+        try:
+            count_query = f"SELECT COUNT(*) FROM read_ndjson('{url}')"
+            total_rows = conn.execute(count_query).fetchone()[0]
+        except Exception:
+            total_rows = len(result)
+
+        conn.close()
+
+        return {
+            "columns": columns,
+            "rows": [list(row) for row in result],
+            "total_rows": total_rows,
+            "truncated": len(result) >= max_rows,
+            "file_size": None,
+        }
+
+    @staticmethod
     async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
         """
         Parse JSONL file from URL using DuckDB.
-
-        DuckDB's read_ndjson supports newline-delimited JSON with HTTP URLs.
 
         Args:
             url: File URL
             max_rows: Maximum rows to return
 
         Returns:
-            {
-                "columns": ["col1", "col2", ...],
-                "rows": [[val1, val2, ...], ...],
-                "total_rows": N,
-                "truncated": bool,
-                "file_size": N
-            }
+            Dict with columns, rows, total_rows, truncated, file_size
         """
         # Resolve redirects first
         resolved_url = await resolve_url_redirects(url)
 
-        def _parse_jsonl_sync(url: str, max_rows: int) -> dict[str, Any]:
-            """Synchronous JSONL parsing with DuckDB (runs in thread pool)."""
-            import duckdb
-
-            conn = duckdb.connect(":memory:")
-            conn.execute("INSTALL httpfs")
-            conn.execute("LOAD httpfs")
-            conn.execute("INSTALL json")
-            conn.execute("LOAD json")
-
-            try:
-                # Read JSONL with DuckDB (newline-delimited JSON)
-                query = f"""
-                SELECT * FROM read_ndjson('{url}')
-                LIMIT {max_rows}
-                """
-
-                result = conn.execute(query).fetchall()
-                columns = [desc[0] for desc in conn.description]
-
-                # Get total row count
-                try:
-                    count_query = f"SELECT COUNT(*) FROM read_ndjson('{url}')"
-                    total_rows = conn.execute(count_query).fetchone()[0]
-                except Exception:
-                    total_rows = len(result)
-
-                conn.close()
-
-                return {
-                    "columns": columns,
-                    "rows": [list(row) for row in result],
-                    "total_rows": total_rows,
-                    "truncated": len(result) >= max_rows,
-                    "file_size": None,
-                }
-
-            except Exception as e:
-                conn.close()
-                raise ParserError(f"Failed to parse JSONL with DuckDB: {e}")
-
         # Run in thread pool to avoid blocking event loop
-        return await asyncio.to_thread(_parse_jsonl_sync, resolved_url, max_rows)
+        return await asyncio.to_thread(JSONLParser._parse_sync, resolved_url, max_rows)
 
 
 class JSONParser:
     """Parse JSON array files using DuckDB (non-blocking)."""
 
     @staticmethod
+    def _parse_sync(url: str, max_rows: int) -> dict[str, Any]:
+        """Synchronous JSON parsing with DuckDB (runs in thread pool)."""
+        conn = duckdb.connect(":memory:")
+        conn.execute("INSTALL httpfs")
+        conn.execute("LOAD httpfs")
+        conn.execute("INSTALL json")
+        conn.execute("LOAD json")
+
+        # Read JSON array with DuckDB
+        query = f"SELECT * FROM read_json('{url}', format='array') LIMIT {max_rows}"
+
+        result = conn.execute(query).fetchall()
+        columns = [desc[0] for desc in conn.description]
+
+        # Get total row count
+        try:
+            count_query = f"SELECT COUNT(*) FROM read_json('{url}', format='array')"
+            total_rows = conn.execute(count_query).fetchone()[0]
+        except Exception:
+            total_rows = len(result)
+
+        conn.close()
+
+        return {
+            "columns": columns,
+            "rows": [list(row) for row in result],
+            "total_rows": total_rows,
+            "truncated": len(result) >= max_rows,
+            "file_size": None,
+        }
+
+    @staticmethod
     async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
         """
         Parse JSON array file from URL using DuckDB.
-
-        DuckDB's read_json supports JSON arrays with automatic schema detection.
 
         Args:
             url: File URL
             max_rows: Maximum rows to return
 
         Returns:
-            Same format as JSONLParser
+            Dict with columns, rows, total_rows, truncated, file_size
         """
         # Resolve redirects first
         resolved_url = await resolve_url_redirects(url)
 
-        def _parse_json_sync(url: str, max_rows: int) -> dict[str, Any]:
-            """Synchronous JSON parsing with DuckDB (runs in thread pool)."""
-            import duckdb
-
-            conn = duckdb.connect(":memory:")
-            conn.execute("INSTALL httpfs")
-            conn.execute("LOAD httpfs")
-            conn.execute("INSTALL json")
-            conn.execute("LOAD json")
-
-            try:
-                # Read JSON array with DuckDB
-                query = f"""
-                SELECT * FROM read_json('{url}', format='array')
-                LIMIT {max_rows}
-                """
-
-                result = conn.execute(query).fetchall()
-                columns = [desc[0] for desc in conn.description]
-
-                # Get total row count
-                try:
-                    count_query = (
-                        f"SELECT COUNT(*) FROM read_json('{url}', format='array')"
-                    )
-                    total_rows = conn.execute(count_query).fetchone()[0]
-                except Exception:
-                    total_rows = len(result)
-
-                conn.close()
-
-                return {
-                    "columns": columns,
-                    "rows": [list(row) for row in result],
-                    "total_rows": total_rows,
-                    "truncated": len(result) >= max_rows,
-                    "file_size": None,
-                }
-
-            except Exception as e:
-                conn.close()
-                raise ParserError(f"Failed to parse JSON with DuckDB: {e}")
-
         # Run in thread pool to avoid blocking event loop
-        return await asyncio.to_thread(_parse_json_sync, resolved_url, max_rows)
+        return await asyncio.to_thread(JSONParser._parse_sync, resolved_url, max_rows)
 
 
 class ParquetParser:
     """Parse Parquet files using DuckDB (non-blocking, most efficient)."""
 
     @staticmethod
+    def _parse_sync(url: str, max_rows: int) -> dict[str, Any]:
+        """Synchronous Parquet parsing with DuckDB (runs in thread pool)."""
+        conn = duckdb.connect(":memory:")
+        conn.execute("INSTALL httpfs")
+        conn.execute("LOAD httpfs")
+
+        # Read Parquet with DuckDB (uses HTTP range requests automatically!)
+        query = f"SELECT * FROM read_parquet('{url}') LIMIT {max_rows}"
+
+        result = conn.execute(query).fetchall()
+        columns = [desc[0] for desc in conn.description]
+
+        # Get total row count (efficient - reads only metadata)
+        try:
+            count_query = f"SELECT COUNT(*) FROM read_parquet('{url}')"
+            total_rows = conn.execute(count_query).fetchone()[0]
+        except Exception:
+            total_rows = len(result)
+
+        conn.close()
+
+        return {
+            "columns": columns,
+            "rows": [list(row) for row in result],
+            "total_rows": total_rows,
+            "truncated": len(result) >= max_rows or total_rows > max_rows,
+            "file_size": None,
+        }
+
+    @staticmethod
     async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
         """
         Parse Parquet file from URL using DuckDB.
-
-        DuckDB is the most efficient way to read Parquet with HTTP range requests.
-        It only reads the necessary row groups and columns, not the entire file.
 
         Args:
             url: File URL (HTTP/HTTPS, including S3 presigned URLs)
             max_rows: Maximum rows to return
 
         Returns:
-            Same format as other parsers
+            Dict with columns, rows, total_rows, truncated, file_size
         """
         # Resolve redirects first (302 from resolve endpoint -> S3 presigned URL)
         # This prevents DuckDB from repeatedly hitting our backend
         resolved_url = await resolve_url_redirects(url)
 
-        def _parse_parquet_sync(url: str, max_rows: int) -> dict[str, Any]:
-            """Synchronous Parquet parsing with DuckDB (runs in thread pool)."""
-            import duckdb
-
-            conn = duckdb.connect(":memory:")
-            conn.execute("INSTALL httpfs")
-            conn.execute("LOAD httpfs")
-
-            try:
-                # Read Parquet with DuckDB (uses HTTP range requests automatically!)
-                query = f"SELECT * FROM read_parquet('{url}') LIMIT {max_rows}"
-
-                result = conn.execute(query).fetchall()
-                columns = [desc[0] for desc in conn.description]
-
-                # Get total row count (efficient - reads only metadata)
-                try:
-                    count_query = f"SELECT COUNT(*) FROM read_parquet('{url}')"
-                    total_rows = conn.execute(count_query).fetchone()[0]
-                except Exception:
-                    total_rows = len(result)
-
-                conn.close()
-
-                return {
-                    "columns": columns,
-                    "rows": [list(row) for row in result],
-                    "total_rows": total_rows,
-                    "truncated": len(result) >= max_rows or total_rows > max_rows,
-                    "file_size": None,
-                }
-
-            except Exception as e:
-                conn.close()
-                raise ParserError(f"Failed to parse Parquet with DuckDB: {e}")
-
-        try:
-            # Run in thread pool to avoid blocking event loop
-            result = await asyncio.to_thread(
-                _parse_parquet_sync, resolved_url, max_rows
-            )
-            return result
-
-        except Exception as e:
-            raise ParserError(f"Failed to parse Parquet: {e}")
+        # Run in thread pool to avoid blocking event loop
+        return await asyncio.to_thread(
+            ParquetParser._parse_sync, resolved_url, max_rows
+        )
 
 
 class TARParser:
-    """Parse TAR archives from URL."""
+    """Parse TAR archives from URL using fsspec (streaming, memory efficient)."""
 
     @staticmethod
-    async def list_files(url: str) -> dict[str, Any]:
-        """
-        List files in TAR archive.
+    def _list_files_sync(url: str, max_files: int = 10000) -> dict[str, Any]:
+        """Synchronous TAR listing using fsspec (runs in thread pool)."""
+        fs = HTTPFileSystem()
 
-        Args:
-            url: TAR file URL
-
-        Returns:
-            {
-                "files": [
-                    {"name": "...", "size": N, "offset": N},
-                    ...
-                ]
-            }
-        """
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-
-            # Load TAR into memory (for simplicity)
-            # For very large TARs, we'd need streaming TAR parser
-            tar_bytes = io.BytesIO(response.content)
-
+        # Open TAR file with fsspec (streaming, no full download)
+        with fs.open(url, mode="rb") as f:
             files = []
-            with tarfile.open(fileobj=tar_bytes, mode="r:*") as tar:
-                for member in tar.getmembers():
+            total_size = 0
+
+            with tarfile.open(fileobj=f, mode="r|*") as tar:
+                for member in tar:
                     if member.isfile():
                         files.append(
                             {
                                 "name": member.name,
                                 "size": member.size,
-                                "offset": member.offset_data,
+                                "type": "file",
                             }
                         )
+                        total_size += member.size
 
-            return {"files": files, "total_size": len(response.content)}
+                        # Limit number of files listed
+                        if len(files) >= max_files:
+                            break
+
+            return {
+                "files": files,
+                "total_files": len(files),
+                "total_size": total_size,
+                "truncated": len(files) >= max_files,
+            }
+
+    @staticmethod
+    async def list_files(url: str, max_files: int = 10000) -> dict[str, Any]:
+        """
+        List files in TAR archive using streaming (no full download).
+
+        Args:
+            url: TAR file URL
+            max_files: Maximum number of files to list
+
+        Returns:
+            {
+                "files": [{"name": "...", "size": N, "type": "file"}, ...],
+                "total_files": N,
+                "total_size": N,
+                "truncated": bool
+            }
+        """
+        # Resolve redirects first
+        resolved_url = await resolve_url_redirects(url)
+
+        # Run in thread pool to avoid blocking
+        return await asyncio.to_thread(
+            TARParser._list_files_sync, resolved_url, max_files
+        )
+
+    @staticmethod
+    def _extract_file_sync(url: str, file_name: str) -> bytes:
+        """Synchronous TAR file extraction using fsspec (runs in thread pool)."""
+        fs = HTTPFileSystem()
+
+        with fs.open(url, mode="rb") as f:
+            with tarfile.open(fileobj=f, mode="r|*") as tar:
+                for member in tar:
+                    if member.isfile() and member.name == file_name:
+                        file_obj = tar.extractfile(member)
+                        if file_obj is None:
+                            raise ParserError(f"Cannot extract {file_name}")
+                        return file_obj.read()
+
+                # File not found
+                raise ParserError(f"File not found in archive: {file_name}")
 
     @staticmethod
     async def extract_file(url: str, file_name: str) -> bytes:
         """
-        Extract single file from TAR archive.
+        Extract single file from TAR archive using streaming.
 
         Args:
             url: TAR file URL
@@ -405,21 +380,46 @@ class TARParser:
         Returns:
             File content as bytes
         """
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(url)
-            response.raise_for_status()
+        # Resolve redirects first
+        resolved_url = await resolve_url_redirects(url)
 
-            tar_bytes = io.BytesIO(response.content)
+        # Run in thread pool to avoid blocking
+        return await asyncio.to_thread(
+            TARParser._extract_file_sync, resolved_url, file_name
+        )
 
-            with tarfile.open(fileobj=tar_bytes, mode="r:*") as tar:
-                try:
-                    member = tar.getmember(file_name)
-                    file_obj = tar.extractfile(member)
-                    if file_obj is None:
-                        raise ParserError(f"Cannot extract {file_name}")
-                    return file_obj.read()
-                except KeyError:
-                    raise ParserError(f"File not found in archive: {file_name}")
+    @staticmethod
+    async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
+        """
+        Parse TAR archive as a table (list of files).
+
+        For dataset viewer compatibility - shows TAR contents as rows.
+        Each row represents a file in the archive.
+
+        Args:
+            url: TAR file URL
+            max_rows: Maximum number of files to show
+
+        Returns:
+            {
+                "columns": ["name", "size", "type"],
+                "rows": [["file1.txt", 1234, "file"], ...],
+                "total_rows": N,
+                "truncated": bool
+            }
+        """
+        result = await TARParser.list_files(url, max_files=max_rows)
+
+        # Convert to table format for dataset viewer
+        rows = [[f["name"], f["size"], f["type"]] for f in result["files"]]
+
+        return {
+            "columns": ["name", "size", "type"],
+            "rows": rows,
+            "total_rows": result["total_files"],
+            "truncated": result["truncated"],
+            "file_size": result["total_size"],
+        }
 
 
 def detect_format(filename: str) -> Optional[str]:
