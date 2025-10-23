@@ -30,6 +30,7 @@ dependencies = [
     "pyarrow",
     "pydantic[email]",
     "python-multipart",
+    "pytz",
     "pyyaml",
     "questionary",
     "requests",

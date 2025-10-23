@@ -84,27 +84,66 @@ def generate_value(col_type: str, row_id: int):
 
 
 def generate_column_schema(num_cols: int) -> list[dict]:
-    """Generate random column schema."""
-    columns = [{"name": "id", "type": "id"}]
+    """Generate column schema with meaningful names."""
+    # Predefined meaningful column names with types
+    predefined_columns = [
+        {"name": "id", "type": "id"},
+        {"name": "user_id", "type": "int"},
+        {"name": "age", "type": "int"},
+        {"name": "score", "type": "float"},
+        {"name": "rating", "type": "float"},
+        {"name": "is_active", "type": "bool"},
+        {"name": "is_verified", "type": "bool"},
+        {"name": "created_at", "type": "datetime"},
+        {"name": "updated_at", "type": "datetime"},
+        {"name": "birth_date", "type": "date"},
+        {"name": "username", "type": "short_text"},
+        {"name": "email", "type": "short_text"},
+        {"name": "name", "type": "short_text"},
+        {"name": "title", "type": "text"},
+        {"name": "description", "type": "text"},
+        {"name": "category", "type": "short_text"},
+        {"name": "status", "type": "short_text"},
+        {"name": "comment", "type": "long_text"},
+        {"name": "review", "type": "long_text"},
+        {"name": "content", "type": "very_long_text"},
+        {"name": "price", "type": "float"},
+        {"name": "quantity", "type": "int"},
+        {"name": "views", "type": "int"},
+        {"name": "likes", "type": "int"},
+        {"name": "tags", "type": "text"},
+        {"name": "metadata", "type": "text"},
+        {"name": "notes", "type": "long_text"},
+        {"name": "address", "type": "text"},
+        {"name": "city", "type": "short_text"},
+        {"name": "country", "type": "short_text"},
+    ]
 
-    # Mix of different column types
-    type_distribution = {
-        "int": 0.2,
-        "float": 0.15,
-        "bool": 0.1,
-        "date": 0.1,
-        "short_text": 0.15,
-        "text": 0.15,
-        "long_text": 0.1,
-        "very_long_text": 0.05,
-    }
+    columns = []
 
-    types = list(type_distribution.keys())
-    weights = list(type_distribution.values())
+    # Use predefined columns first
+    for i in range(min(num_cols, len(predefined_columns))):
+        columns.append(predefined_columns[i])
 
-    for i in range(1, num_cols):
-        col_type = random.choices(types, weights=weights)[0]
-        columns.append({"name": f"col_{i}_{col_type}", "type": col_type})
+    # If we need more columns, generate with numbered suffix
+    if num_cols > len(predefined_columns):
+        type_distribution = {
+            "int": 0.2,
+            "float": 0.15,
+            "bool": 0.1,
+            "date": 0.1,
+            "short_text": 0.15,
+            "text": 0.15,
+            "long_text": 0.1,
+            "very_long_text": 0.05,
+        }
+
+        types = list(type_distribution.keys())
+        weights = list(type_distribution.values())
+
+        for i in range(len(predefined_columns), num_cols):
+            col_type = random.choices(types, weights=weights)[0]
+            columns.append({"name": f"field_{i}_{col_type}", "type": col_type})
 
     return columns
 
@@ -123,7 +162,8 @@ def generate_csv(output_path: Path, num_rows: int, num_cols: int):
         batch_size = 10000
         for batch_start in range(0, num_rows, batch_size):
             batch_end = min(batch_start + batch_size, num_rows)
-            if batch_start % 50000 == 0:
+            # Print progress every 5 batches (every 50k rows)
+            if batch_start % (batch_size * 5) == 0:
                 print(f"  Writing rows {batch_start:,} to {batch_end:,}...")
 
             for row_id in range(batch_start, batch_end):
@@ -146,7 +186,8 @@ def generate_jsonl(output_path: Path, num_rows: int, num_cols: int):
         batch_size = 10000
         for batch_start in range(0, num_rows, batch_size):
             batch_end = min(batch_start + batch_size, num_rows)
-            if batch_start % 50000 == 0:
+            # Print progress every 5 batches (every 50k rows)
+            if batch_start % (batch_size * 5) == 0:
                 print(f"  Writing rows {batch_start:,} to {batch_end:,}...")
 
             for row_id in range(batch_start, batch_end):
@@ -172,8 +213,10 @@ def generate_parquet(output_path: Path, num_rows: int, num_cols: int):
 
     for batch_start in range(0, num_rows, batch_size):
         batch_end = min(batch_start + batch_size, num_rows)
+        # Print progress every 100k rows (every 2 batches of 50k)
         if batch_start % 100000 == 0:
-            print(f"  Processing rows {batch_start:,} to {batch_end:,}...")
+            progress_end = min(batch_start + 100000, num_rows)
+            print(f"  Processing rows {batch_start:,} to {progress_end:,}...")
 
         # Generate batch data
         data = []

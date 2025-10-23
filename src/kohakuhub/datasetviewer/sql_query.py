@@ -17,6 +17,8 @@ from typing import Any
 
 import duckdb
 
+from kohakuhub.datasetviewer.parsers import resolve_url_redirects
+
 
 class SQLQueryError(Exception):
     """SQL query execution error."""
@@ -131,10 +133,15 @@ async def execute_sql_query(
             conn.close()
             raise SQLQueryError(f"Query execution failed: {e}")
 
+    # Resolve redirects first (302 from resolve endpoint -> S3 presigned URL)
+    # This prevents DuckDB from repeatedly hitting our backend for range requests
+    resolved_url = await resolve_url_redirects(url)
+
     try:
         # Run in thread pool (DuckDB is synchronous)
+        # Use resolved_url (not original url) to avoid repeated backend hits
         result = await asyncio.to_thread(
-            _execute_query_sync, url, query, file_format, max_rows
+            _execute_query_sync, resolved_url, query, file_format, max_rows
         )
         return result
 
