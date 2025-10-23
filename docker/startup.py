@@ -89,15 +89,16 @@ def init_garage():
     if "garage" not in s3_endpoint.lower():
         return
 
-    print("[startup] ============================================")
+    separator = "[startup] ============================================"
+    print(separator)
     print("[startup] Detected Garage S3 storage backend")
-    print("[startup] ============================================")
+    print(separator)
     print("[startup] ")
     print("[startup] Garage requires manual initialization from the HOST machine.")
     print(
         "[startup] Documentation: https://garagehq.deuxfleurs.fr/documentation/quick-start/"
     )
-    print("[startup] ============================================")
+    print(separator)
     print("[startup] ")
 
 

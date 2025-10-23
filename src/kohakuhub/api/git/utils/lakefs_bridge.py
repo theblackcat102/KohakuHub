@@ -137,7 +137,7 @@ class GitLakeFSBridge:
                 try:
                     dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                     timestamp = int(dt.timestamp())
-                except:
+                except (ValueError, AttributeError, TypeError):
                     timestamp = 0
 
             # Create commit object
@@ -444,7 +444,7 @@ class GitLakeFSBridge:
                     try:
                         dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                         timestamp = int(dt.timestamp())
-                    except:
+                    except (ValueError, AttributeError, TypeError):
                         timestamp = 0
 
             commit_sha1, commit_with_header = create_commit_object(

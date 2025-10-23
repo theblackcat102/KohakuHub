@@ -965,7 +965,7 @@ def update_config_toml_inplace(filepath: Path, new_fields: dict):
     try:
         with open(filepath, "rb") as f:
             existing = tomllib.load(f)
-    except:
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
         existing = {}
 
     # Add new fields

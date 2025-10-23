@@ -176,7 +176,7 @@ async def get_trending_repositories(
         # Check read permission (skip private repos user can't access)
         try:
             check_repo_read_permission(repo, user)
-        except:
+        except HTTPException:
             continue
 
         trending.append(

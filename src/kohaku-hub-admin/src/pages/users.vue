@@ -36,7 +36,7 @@ const quotaInputPublic = ref("");
 function parseHumanSize(input) {
   if (!input || input === "null" || input === "unlimited") return null;
 
-  const match = input.trim().match(/^(\d+(?:\.\d+)?)\s*([KMGT]?B?)?$/i);
+  const match = input.trim().match(/^(\d+(?:\.\d+)?)\s*([KMGTB]+)?$/i);
   if (!match) return null;
 
   const value = parseFloat(match[1]);
