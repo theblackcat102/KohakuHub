@@ -123,7 +123,7 @@ class LakeFSRestClient:
                 params={"path": path},
                 headers=headers,
                 auth=self.auth,
-                timeout=30.0,
+                timeout=None,
             )
             self._check_response(response)
             return response.content
@@ -149,7 +149,7 @@ class LakeFSRestClient:
                 url,
                 params={"path": path, "user_metadata": user_metadata},
                 auth=self.auth,
-                timeout=30.0,
+                timeout=None,
             )
             self._check_response(response)
             return response.json()
@@ -183,7 +183,7 @@ class LakeFSRestClient:
                 content=content,
                 headers={"Content-Type": "application/octet-stream"},
                 auth=self.auth,
-                timeout=60.0,
+                timeout=None,
             )
             self._check_response(response)
             return response.json()
@@ -220,7 +220,7 @@ class LakeFSRestClient:
                 params={"path": path},
                 json=metadata_dict,
                 auth=self.auth,
-                timeout=30.0,
+                timeout=None,
             )
             self._check_response(response)
             return response.json()
@@ -251,7 +251,10 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url, json=commit_data, auth=self.auth, timeout=30.0
+                url,
+                json=commit_data,
+                auth=self.auth,
+                timeout=None,  # No timeout for internal service
             )
             self._check_response(response)
             return response.json()
@@ -269,7 +272,7 @@ class LakeFSRestClient:
         url = f"{self.base_url}/repositories/{repository}/commits/{commit_id}"
 
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, auth=self.auth, timeout=30.0)
+            response = await client.get(url, auth=self.auth, timeout=None)
             self._check_response(response)
             return response.json()
 
@@ -300,7 +303,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                url, params=params, auth=self.auth, timeout=30.0
+                url, params=params, auth=self.auth, timeout=None
             )
             self._check_response(response)
             return response.json()
@@ -334,7 +337,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                url, params=params, auth=self.auth, timeout=30.0
+                url, params=params, auth=self.auth, timeout=None
             )
             self._check_response(response)
             return response.json()
@@ -376,7 +379,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                url, params=params, auth=self.auth, timeout=30.0
+                url, params=params, auth=self.auth, timeout=None
             )
             self._check_response(response)
             return response.json()
@@ -396,7 +399,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                url, params={"path": path, "force": force}, auth=self.auth, timeout=30.0
+                url, params={"path": path, "force": force}, auth=self.auth, timeout=None
             )
             self._check_response(response)
 
@@ -423,7 +426,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url, json=repo_data, auth=self.auth, timeout=30.0
+                url, json=repo_data, auth=self.auth, timeout=None
             )
             self._check_response(response)
             return response.json()
@@ -439,7 +442,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                url, params={"force": force}, auth=self.auth, timeout=30.0
+                url, params={"force": force}, auth=self.auth, timeout=None
             )
             self._check_response(response)
 
@@ -458,7 +461,7 @@ class LakeFSRestClient:
         url = f"{self.base_url}/repositories/{repository}"
 
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, auth=self.auth, timeout=30.0)
+            response = await client.get(url, auth=self.auth, timeout=None)
             self._check_response(response)
             return response.json()
 
@@ -490,7 +493,7 @@ class LakeFSRestClient:
         url = f"{self.base_url}/repositories/{repository}/branches/{branch}"
 
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, auth=self.auth, timeout=30.0)
+            response = await client.get(url, auth=self.auth, timeout=None)
             self._check_response(response)
             return response.json()
 
@@ -511,7 +514,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url, json=branch_data, auth=self.auth, timeout=30.0
+                url, json=branch_data, auth=self.auth, timeout=None
             )
             self._check_response(response)
             # LakeFS returns 201 with text/html (plain string ref), not JSON
@@ -531,7 +534,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                url, params={"force": force}, auth=self.auth, timeout=30.0
+                url, params={"force": force}, auth=self.auth, timeout=None
             )
             self._check_response(response)
 
@@ -555,7 +558,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url, json=tag_data, auth=self.auth, timeout=30.0
+                url, json=tag_data, auth=self.auth, timeout=None
             )
             self._check_response(response)
             return response.json()
@@ -572,7 +575,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                url, params={"force": force}, auth=self.auth, timeout=30.0
+                url, params={"force": force}, auth=self.auth, timeout=None
             )
             self._check_response(response)
 
@@ -618,7 +621,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url, json=revert_data, auth=self.auth, timeout=60.0
+                url, json=revert_data, auth=self.auth, timeout=None
             )
             self._check_response(response)
 
@@ -667,7 +670,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url, json=merge_data, auth=self.auth, timeout=120.0
+                url, json=merge_data, auth=self.auth, timeout=None
             )
             self._check_response(response)
             return response.json()
@@ -703,7 +706,7 @@ class LakeFSRestClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.put(
-                url, params=params, auth=self.auth, timeout=60.0
+                url, params=params, auth=self.auth, timeout=None
             )
             self._check_response(response)
 

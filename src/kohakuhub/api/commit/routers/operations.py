@@ -848,6 +848,29 @@ async def commit(
     except Exception as e:
         raise HTTPException(500, detail={"error": f"Commit failed: {str(e)}"})
 
+    # Poll to verify commit is accessible (LakeFS needs time to process large commits)
+    commit_id = commit_result["id"]
+    logger.info(f"Verifying commit {commit_id[:8]} is accessible...")
+    max_attempts = 120
+    for attempt in range(max_attempts):
+        try:
+            await client.get_commit(repository=lakefs_repo, commit_id=commit_id)
+            logger.debug(
+                f"Commit {commit_id[:8]} verified after {attempt + 1} attempts"
+            )
+            break
+        except Exception as e:
+            if attempt < max_attempts - 1:
+                logger.debug(
+                    f"Commit not ready yet (attempt {attempt + 1}/{max_attempts}), waiting..."
+                )
+                await asyncio.sleep(0.5)  # Wait 500ms before retry
+            else:
+                logger.warning(
+                    f"Commit {commit_id[:8]} not accessible after {max_attempts} attempts, but continuing..."
+                )
+                break
+
     # Record commit in our database (track the actual user)
     try:
         create_commit(
