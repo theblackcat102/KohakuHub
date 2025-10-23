@@ -31,34 +31,100 @@ const selectedFile = ref(null);
 const fileUrl = ref(null);
 const loadingUrl = ref(false);
 
-// Query parameters
-const maxRows = ref(100);
+// Query parameters (SQL by default)
 const sqlQuery = ref("SELECT * FROM dataset LIMIT 100");
-const useSQL = ref(false);
 const sqlWarning = ref("");
 
 // Trigger key to force reload
 const reloadKey = ref(0);
 
-// Check if SQL is supported for current file
-const sqlSupported = computed(() => {
-  if (!selectedFile.value) return false;
-  const format = detectFormat(selectedFile.value.path);
-  return format === "csv" || format === "parquet";
-});
+// Row detail state
+const selectedRowIndex = ref(null);
+const currentPreviewData = ref(null);
+
+// Media modal state
+const showMediaModal = ref(false);
+const modalMediaUrl = ref("");
+const modalMediaType = ref("image");
+
+// Handle row selection
+function handleRowSelected(index) {
+  selectedRowIndex.value = index;
+}
+
+// Handle data loaded
+function handleDataLoaded(data) {
+  currentPreviewData.value = data;
+}
+
+// Open media modal
+function openMediaModal(url, type) {
+  modalMediaUrl.value = String(url);
+  modalMediaType.value = type;
+  showMediaModal.value = true;
+}
+
+// Close media modal
+function closeMediaModal() {
+  showMediaModal.value = false;
+  modalMediaUrl.value = "";
+}
+
+// Format cell value
+function formatValue(value) {
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+// Check if value is an image URL
+function isImageUrl(value) {
+  if (!value) return false;
+  const str = String(value);
+  if (str.startsWith("data:image/")) return true;
+  if (str.startsWith("http://") || str.startsWith("https://")) {
+    const lowerStr = str.toLowerCase();
+    const imageExtensions = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".webp",
+      ".bmp",
+      ".svg",
+      ".ico",
+    ];
+    return imageExtensions.some((ext) => lowerStr.includes(ext));
+  }
+  return false;
+}
+
+// Check if value is a video URL
+function isVideoUrl(value) {
+  if (!value) return false;
+  const str = String(value);
+  if (str.startsWith("http://") || str.startsWith("https://")) {
+    const lowerStr = str.toLowerCase();
+    const videoExtensions = [".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"];
+    return videoExtensions.some((ext) => lowerStr.includes(ext));
+  }
+  return false;
+}
 
 // Validate and apply query
 function applyQuery() {
   sqlWarning.value = "";
 
-  // If using SQL, check for LIMIT clause
-  if (useSQL.value && sqlQuery.value.trim()) {
-    const queryUpper = sqlQuery.value.toUpperCase();
-    if (!queryUpper.includes("LIMIT")) {
-      sqlWarning.value =
-        "No LIMIT found - automatically adding LIMIT 10000 for safety";
-      // Backend will add LIMIT automatically
-    }
+  // Clear selected row when starting new query
+  selectedRowIndex.value = null;
+  currentPreviewData.value = null;
+
+  // Check for LIMIT clause
+  const queryUpper = sqlQuery.value.toUpperCase();
+  if (!queryUpper.includes("LIMIT")) {
+    sqlWarning.value =
+      "No LIMIT found - automatically adding LIMIT 10000 for safety";
+    // Backend will add LIMIT automatically
   }
 
   reloadKey.value++;
@@ -158,29 +224,32 @@ watch(
 <template>
   <div class="dataset-viewer-tab">
     <!-- Full width layout: File list on left, Viewer on right -->
-    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-      <!-- File List Sidebar -->
-      <div class="file-sidebar">
-        <div class="card p-0 h-fit">
+    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
+      <!-- File List Sidebar (no max height - can grow) -->
+      <div class="file-sidebar flex flex-col gap-3">
+        <!-- File List Card -->
+        <div class="card" style="padding: 0">
           <!-- Header -->
-          <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-base font-semibold">Previewable Files</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <div
+            class="px-2 py-1.5 border-b border-gray-200 dark:border-gray-700"
+          >
+            <h3 class="text-sm font-semibold">Previewable Files</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ previewableFiles.length }} file{{
                 previewableFiles.length !== 1 ? "s" : ""
               }}
             </p>
           </div>
 
-          <!-- File List (Scrollable) -->
+          <!-- File List (Scrollable with min height) -->
           <div
             class="file-list-scroll overflow-y-auto"
-            style="max-height: 300px"
+            style="min-height: 200px; max-height: 400px"
           >
             <!-- No files -->
             <div
               v-if="previewableFiles.length === 0"
-              class="text-center py-8 px-4 text-gray-600 dark:text-gray-400"
+              class="text-center py-8 px-3 text-gray-600 dark:text-gray-400"
             >
               <div class="i-carbon-document-blank text-4xl mb-2 inline-block" />
               <p class="text-sm">No previewable files</p>
@@ -188,7 +257,7 @@ watch(
             </div>
 
             <!-- File groups -->
-            <div v-else class="py-2">
+            <div v-else class="py-1">
               <div
                 v-for="(files, dir) in groupedFiles"
                 :key="dir"
@@ -234,107 +303,45 @@ watch(
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Query Parameters -->
-          <div
-            class="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3"
-          >
-            <!-- SQL Mode Toggle (only for CSV/Parquet) -->
-            <div v-if="sqlSupported">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  v-model="useSQL"
-                  type="checkbox"
-                  class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span
-                  class="text-xs font-semibold text-gray-700 dark:text-gray-300"
-                >
-                  Use SQL Query
-                </span>
-              </label>
-            </div>
-
+        <!-- Query Card (SQL always enabled) -->
+        <div class="card flex-shrink-0" style="padding: 0.75rem">
+          <div class="space-y-2">
             <!-- SQL Query Input -->
-            <div v-if="useSQL && sqlSupported">
+            <div>
               <label
-                class="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1"
+                class="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1"
               >
                 SQL Query
               </label>
               <textarea
                 v-model="sqlQuery"
                 placeholder="SELECT * FROM dataset LIMIT 100"
-                rows="4"
-                class="w-full px-2 py-1.5 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-black dark:text-white resize-none"
+                rows="8"
+                class="w-full px-2 py-1.5 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-black dark:text-white resize-vertical"
               />
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 Use 'dataset' as table name
               </div>
 
               <!-- SQL Warning -->
               <div
                 v-if="sqlWarning"
-                class="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded text-xs text-yellow-800 dark:text-yellow-200"
+                class="mt-1 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded text-xs text-yellow-800 dark:text-yellow-200"
               >
                 ⚠️ {{ sqlWarning }}
               </div>
             </div>
 
-            <!-- Simple mode (no SQL) - Show max rows selector -->
-            <div v-if="!useSQL || !sqlSupported">
-              <label
-                class="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1"
-              >
-                Max Rows
-              </label>
-              <select
-                v-model.number="maxRows"
-                class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-black dark:text-white"
-              >
-                <option :value="100">100 rows</option>
-                <option :value="500">500 rows</option>
-                <option :value="1000">1,000 rows</option>
-                <option :value="5000">5,000 rows</option>
-                <option :value="10000">10,000 rows</option>
-              </select>
-            </div>
-
-            <!-- Apply Button -->
+            <!-- Run Query Button -->
             <button
               @click="applyQuery"
-              class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-sm transition-colors"
-              :disabled="useSQL && !sqlQuery.trim()"
+              class="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-sm transition-colors"
+              :disabled="!sqlQuery.trim()"
             >
-              {{ useSQL ? "Run Query" : "Reload (First 100 Rows)" }}
+              Run Query
             </button>
-
-            <!-- Quick query examples (SQL mode) -->
-            <div v-if="useSQL && sqlSupported" class="text-xs space-y-1">
-              <div class="font-semibold text-gray-600 dark:text-gray-400">
-                Quick queries:
-              </div>
-              <button
-                @click="sqlQuery = 'SELECT * FROM dataset LIMIT 100'"
-                class="block w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
-              >
-                First 100 rows
-              </button>
-              <button
-                @click="
-                  sqlQuery = 'SELECT * FROM dataset ORDER BY RANDOM() LIMIT 100'
-                "
-                class="block w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
-              >
-                Random 100 rows
-              </button>
-              <button
-                @click="sqlQuery = 'SELECT COUNT(*) as total FROM dataset'"
-                class="block w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
-              >
-                Count all rows
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -366,14 +373,144 @@ watch(
           :key="reloadKey"
           :file-url="fileUrl"
           :file-name="selectedFile.path"
-          :max-rows="maxRows"
+          :max-rows="10000"
           :sql-query="sqlQuery"
-          :use-s-q-l="useSQL"
+          :use-s-q-l="true"
           @error="handleViewerError"
           @warning="(msg) => (sqlWarning = msg)"
+          @row-selected="handleRowSelected"
+          @data-loaded="handleDataLoaded"
         />
       </div>
     </div>
+
+    <!-- Detail viewer card (full width, below query + table) -->
+    <div
+      v-if="selectedRowIndex !== null && currentPreviewData"
+      class="mt-4 card"
+      style="padding: 1rem"
+    >
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-300">
+          Row {{ selectedRowIndex + 1 }} Details
+        </h3>
+        <el-button size="small" @click="selectedRowIndex = null">
+          <div class="i-carbon-close inline-block mr-1" />
+          Close
+        </el-button>
+      </div>
+
+      <!-- Responsive grid layout: adaptive columns based on viewport -->
+      <div
+        class="detail-grid grid gap-2 max-h-96 overflow-y-auto"
+        style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr))"
+      >
+        <div
+          v-for="(value, colIndex) in currentPreviewData.rows[selectedRowIndex]"
+          :key="colIndex"
+          class="detail-field p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+        >
+          <div
+            class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 truncate"
+            :title="currentPreviewData.columns[colIndex]"
+          >
+            {{ currentPreviewData.columns[colIndex] }}
+          </div>
+
+          <!-- Image preview in detail -->
+          <div v-if="isImageUrl(value)">
+            <img
+              :src="String(value)"
+              alt="Preview"
+              class="max-w-full h-auto max-h-48 rounded border border-gray-300 dark:border-gray-600 cursor-pointer hover:opacity-80"
+              @click="openMediaModal(value, 'image')"
+            />
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+              {{ formatValue(value) }}
+            </div>
+          </div>
+
+          <!-- Video preview in detail -->
+          <div v-else-if="isVideoUrl(value)">
+            <video
+              :src="String(value)"
+              class="max-w-full h-auto max-h-48 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+              @click="openMediaModal(value, 'video')"
+            >
+              Your browser does not support the video tag.
+            </video>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+              {{ formatValue(value) }}
+            </div>
+          </div>
+
+          <!-- Regular text value -->
+          <div
+            v-else
+            class="text-sm text-gray-900 dark:text-gray-100 break-words font-mono whitespace-pre-wrap"
+          >
+            {{ formatValue(value) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Media Modal -->
+    <el-dialog
+      v-model="showMediaModal"
+      width="90%"
+      top="5vh"
+      @close="closeMediaModal"
+    >
+      <template #header>
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-semibold">
+            {{ modalMediaType === "image" ? "Image Preview" : "Video Preview" }}
+          </span>
+        </div>
+      </template>
+
+      <!-- Media container with max height -->
+      <div class="media-container" style="max-height: 70vh; overflow: auto">
+        <!-- Image -->
+        <div v-if="modalMediaType === 'image'" class="text-center">
+          <img
+            :src="modalMediaUrl"
+            alt="Full size preview"
+            class="max-w-full h-auto object-contain mx-auto"
+            style="max-height: 65vh"
+          />
+        </div>
+
+        <!-- Video -->
+        <div v-else-if="modalMediaType === 'video'" class="text-center">
+          <video
+            :src="modalMediaUrl"
+            controls
+            class="max-w-full h-auto mx-auto"
+            style="max-height: 65vh"
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+
+      <!-- URL info -->
+      <div
+        class="mt-3 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+      >
+        <div
+          class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1"
+        >
+          URL:
+        </div>
+        <div
+          class="text-xs font-mono text-gray-900 dark:text-gray-100 break-all"
+        >
+          {{ modalMediaUrl }}
+        </div>
+      </div>
+    </el-dialog>
 
     <!-- Attribution Notice (Kohaku License requirement) -->
     <div

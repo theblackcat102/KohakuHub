@@ -34,7 +34,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["error", "warning"]);
+const emit = defineEmits(["error", "warning", "row-selected", "data-loaded"]);
 
 const loading = ref(false);
 const error = ref(null);
@@ -45,6 +45,11 @@ const fileFormat = ref(null);
 const isTAR = ref(false);
 const tarFiles = ref([]);
 const selectedTARFile = ref(null);
+
+// Handle row selection from DataGrid - emit to parent
+function handleRowSelected(index) {
+  emit("row-selected", index);
+}
 
 // Load preview
 async function loadPreview() {
@@ -141,6 +146,11 @@ async function loadFilePreview(url, format) {
     });
     previewData.value = result;
   }
+
+  // Emit data loaded event to parent
+  if (previewData.value) {
+    emit("data-loaded", previewData.value);
+  }
 }
 
 // Watch for URL changes
@@ -231,6 +241,7 @@ const stats = computed(() => {
         :columns="previewData.columns"
         :rows="previewData.rows"
         :truncated="previewData.truncated"
+        @row-selected="handleRowSelected"
       />
     </div>
 

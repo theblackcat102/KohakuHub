@@ -147,25 +147,58 @@ export const repoAPI = {
    * @param {string} name - Repository name
    * @param {string} revision - Branch name
    * @param {Object} data - { files: Array<{path, file}>, message: string, description?: string }
-   * @param {Function} onProgress - Progress callback
+   * @param {Object} progressCallbacks - { onHashProgress: (fileName, progress), onUploadProgress: (fileName, progress) }
    * @returns {Promise} - Commit result
    */
-  uploadFiles: async (type, namespace, name, revision, data, onProgress) => {
+  uploadFiles: async (
+    type,
+    namespace,
+    name,
+    revision,
+    data,
+    progressCallbacks,
+  ) => {
     const { uploadLFSFile, calculateSHA256 } = await import("./lfs.js");
 
     const repoId = `${namespace}/${name}`;
     const totalFiles = data.files.length;
     let processedFiles = 0;
 
+    // Extract progress callbacks (support both old and new format)
+    const onHashProgress = progressCallbacks?.onHashProgress || null;
+    const onUploadProgress = progressCallbacks?.onUploadProgress || null;
+    // Legacy: single callback for upload progress
+    const legacyOnProgress =
+      typeof progressCallbacks === "function" ? progressCallbacks : null;
+
     // Step 1: Calculate SHA256 for all files and call preupload API
     const fileMetadata = [];
-    for (const fileItem of data.files) {
-      const sha256 = await calculateSHA256(fileItem.file);
+    for (let i = 0; i < data.files.length; i++) {
+      const fileItem = data.files[i];
+      const fileName = fileItem.file.name;
+
+      // Report hashing progress
+      if (onHashProgress) {
+        onHashProgress(fileName, 0);
+      }
+
+      const sha256 = await calculateSHA256(fileItem.file, (progress) => {
+        // Report incremental hashing progress for this file
+        if (onHashProgress) {
+          onHashProgress(fileName, progress);
+        }
+      });
+
       fileMetadata.push({
         path: fileItem.path,
         size: fileItem.file.size,
         sha256: sha256,
       });
+
+      // Mark hashing complete for this file
+      if (onHashProgress) {
+        onHashProgress(fileName, 1.0);
+      }
     }
 
     // Call preupload API to determine upload mode for each file
@@ -210,7 +243,7 @@ export const repoAPI = {
       if (preuploadResult.shouldIgnore) {
         console.log(`Skipping unchanged file: ${path}`);
         processedFiles++;
-        if (onProgress) onProgress(processedFiles / totalFiles);
+        if (legacyOnProgress) legacyOnProgress(processedFiles / totalFiles);
         continue;
       }
 
@@ -227,8 +260,15 @@ export const repoAPI = {
             file,
             metadata.sha256,
             (progress) => {
-              const fileProgress = (processedFiles + progress) / totalFiles;
-              if (onProgress) onProgress(fileProgress);
+              // Report upload progress with filename
+              if (onUploadProgress) {
+                onUploadProgress(file.name, progress);
+              }
+              // Legacy callback (overall progress across all files)
+              if (legacyOnProgress) {
+                const fileProgress = (processedFiles + progress) / totalFiles;
+                legacyOnProgress(fileProgress);
+              }
             },
           );
 
@@ -274,7 +314,14 @@ export const repoAPI = {
         });
 
         processedFiles++;
-        if (onProgress) onProgress(processedFiles / totalFiles);
+
+        // Report progress for regular files
+        if (onUploadProgress) {
+          onUploadProgress(file.name, 1.0); // Regular files uploaded instantly (inline)
+        }
+        if (legacyOnProgress) {
+          legacyOnProgress(processedFiles / totalFiles);
+        }
       }
     }
 
@@ -288,6 +335,7 @@ export const repoAPI = {
         headers: {
           "Content-Type": "application/x-ndjson",
         },
+        timeout: 300000, // 5 minutes for commit operation (can take time for large files)
       },
     );
   },

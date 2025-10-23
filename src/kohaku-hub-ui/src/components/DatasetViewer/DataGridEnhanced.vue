@@ -16,12 +16,19 @@ const props = defineProps({
   },
 });
 
+const emit = defineEmits(["row-selected"]);
+
 // Sorting
 const sortColumn = ref(null);
 const sortDirection = ref("asc");
 
 // Row detail
 const selectedRowIndex = ref(null);
+
+// Media modal
+const showMediaModal = ref(false);
+const modalMediaUrl = ref("");
+const modalMediaType = ref("image"); // "image" or "video"
 
 // Max cell length before truncation
 const MAX_CELL_LENGTH = 100;
@@ -83,23 +90,57 @@ function truncateValue(value) {
   return formatted.substring(0, MAX_CELL_LENGTH) + "...";
 }
 
-// Check if value is an image (base64 or binary indicator)
+// Check if value is an image URL or base64
 function isImage(value) {
   if (!value) return false;
   const str = String(value);
+
   // Check for base64 image data URL
   if (str.startsWith("data:image/")) return true;
+
+  // Check for HTTP(S) image URLs
+  if (str.startsWith("http://") || str.startsWith("https://")) {
+    const lowerStr = str.toLowerCase();
+    const imageExtensions = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".webp",
+      ".bmp",
+      ".svg",
+      ".ico",
+    ];
+    return imageExtensions.some((ext) => lowerStr.includes(ext));
+  }
+
   // Check for <binary> indicator from backend
   if (str.startsWith("<binary:") || str.startsWith("<large file:"))
     return false;
-  // Check for very long strings that might be base64 (but not detect as image without data URL)
+
   return false;
 }
 
-// Get image data URL
-function getImageDataUrl(value) {
+// Check if value is a video URL
+function isVideo(value) {
+  if (!value) return false;
+  const str = String(value);
+
+  // Check for HTTP(S) video URLs
+  if (str.startsWith("http://") || str.startsWith("https://")) {
+    const lowerStr = str.toLowerCase();
+    const videoExtensions = [".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"];
+    return videoExtensions.some((ext) => lowerStr.includes(ext));
+  }
+
+  return false;
+}
+
+// Get image/video URL
+function getMediaUrl(value) {
   const str = String(value);
   if (str.startsWith("data:image/")) return str;
+  if (str.startsWith("http://") || str.startsWith("https://")) return str;
   // If it's base64 without prefix, add it
   if (str.length > 100 && !str.includes(" ")) {
     return `data:image/png;base64,${str}`;
@@ -111,9 +152,24 @@ function getImageDataUrl(value) {
 function toggleRowDetail(index) {
   if (selectedRowIndex.value === index) {
     selectedRowIndex.value = null;
+    emit("row-selected", null);
   } else {
     selectedRowIndex.value = index;
+    emit("row-selected", index);
   }
+}
+
+// Open media in modal
+function openMediaModal(value, type) {
+  modalMediaUrl.value = getMediaUrl(value);
+  modalMediaType.value = type;
+  showMediaModal.value = true;
+}
+
+// Close media modal
+function closeMediaModal() {
+  showMediaModal.value = false;
+  modalMediaUrl.value = "";
 }
 </script>
 
@@ -159,81 +215,66 @@ function toggleRowDetail(index) {
           </tr>
         </thead>
         <tbody>
-          <template v-for="(row, rowIndex) in sortedRows" :key="rowIndex">
-            <!-- Main row -->
-            <tr
-              class="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-              @click="toggleRowDetail(rowIndex)"
+          <tr
+            v-for="(row, rowIndex) in sortedRows"
+            :key="rowIndex"
+            class="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+            @click="toggleRowDetail(rowIndex)"
+            :class="{
+              'bg-blue-50 dark:bg-blue-900/20': selectedRowIndex === rowIndex,
+            }"
+          >
+            <td
+              class="cell px-2 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
+            >
+              {{ rowIndex + 1 }}
+            </td>
+            <td
+              v-for="(value, colIndex) in row"
+              :key="colIndex"
+              class="cell px-4 py-2 text-sm border-b border-gray-200 dark:border-gray-700"
               :class="{
-                'bg-blue-50 dark:bg-blue-900/20': selectedRowIndex === rowIndex,
+                'text-blue-600 dark:text-blue-400': isCellLong(value),
               }"
             >
-              <td
-                class="cell px-2 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
-              >
-                {{ rowIndex + 1 }}
-              </td>
-              <td
-                v-for="(value, colIndex) in row"
-                :key="colIndex"
-                class="cell px-4 py-2 text-sm border-b border-gray-200 dark:border-gray-700"
-                :class="{
-                  'text-blue-600 dark:text-blue-400': isCellLong(value),
-                }"
-              >
-                {{ truncateValue(value) }}
-              </td>
-            </tr>
+              <!-- Image thumbnail -->
+              <div v-if="isImage(value)" class="flex items-center gap-2">
+                <img
+                  :src="getMediaUrl(value)"
+                  alt="Thumbnail"
+                  class="w-16 h-16 object-cover rounded border border-gray-300 dark:border-gray-600 cursor-pointer hover:opacity-80"
+                  @click.stop="openMediaModal(value, 'image')"
+                />
+                <span
+                  class="text-xs text-gray-500 truncate max-w-[100px]"
+                  :title="String(value)"
+                >
+                  {{ String(value).split("/").pop() }}
+                </span>
+              </div>
 
-            <!-- Detail row (expanded) -->
-            <tr
-              v-if="selectedRowIndex === rowIndex"
-              class="detail-row bg-gray-100 dark:bg-gray-800"
-            >
-              <td
-                :colspan="columns.length + 1"
-                class="p-4 border-b border-gray-300 dark:border-gray-600"
-              >
-                <div class="detail-content">
+              <!-- Video thumbnail -->
+              <div v-else-if="isVideo(value)" class="flex items-center gap-2">
+                <div
+                  class="w-16 h-16 flex items-center justify-center bg-gray-200 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 cursor-pointer hover:opacity-80"
+                  @click.stop="openMediaModal(value, 'video')"
+                >
                   <div
-                    class="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300"
-                  >
-                    Row {{ rowIndex + 1 }} Details
-                  </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div
-                      v-for="(value, colIndex) in row"
-                      :key="colIndex"
-                      class="detail-field p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700"
-                    >
-                      <div
-                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1"
-                      >
-                        {{ columns[colIndex] }}
-                      </div>
-
-                      <!-- Image value -->
-                      <div v-if="isImage(value)" class="image-preview">
-                        <img
-                          :src="getImageDataUrl(value)"
-                          alt="Preview"
-                          class="max-w-full max-h-48 border border-gray-300 dark:border-gray-600 rounded"
-                        />
-                      </div>
-
-                      <!-- Text value -->
-                      <div
-                        v-else
-                        class="text-sm text-gray-900 dark:text-gray-100 break-words font-mono whitespace-pre-wrap"
-                      >
-                        {{ formatValue(value) }}
-                      </div>
-                    </div>
-                  </div>
+                    class="i-carbon-play-filled text-2xl text-gray-600 dark:text-gray-400"
+                  />
                 </div>
-              </td>
-            </tr>
-          </template>
+                <span
+                  class="text-xs text-gray-500 truncate max-w-[100px]"
+                  :title="String(value)"
+                >
+                  {{ String(value).split("/").pop() }}
+                </span>
+              </div>
+
+              <!-- Regular text value -->
+              <span v-else>{{ truncateValue(value) }}</span>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -245,6 +286,63 @@ function toggleRowDetail(index) {
     >
       No rows to display
     </div>
+
+    <!-- Media Modal -->
+    <el-dialog
+      v-model="showMediaModal"
+      width="90%"
+      top="5vh"
+      @close="closeMediaModal"
+    >
+      <template #header>
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-semibold">
+            {{ modalMediaType === "image" ? "Image Preview" : "Video Preview" }}
+          </span>
+        </div>
+      </template>
+
+      <!-- Media container with max height -->
+      <div class="media-container" style="max-height: 70vh; overflow: auto">
+        <!-- Image -->
+        <div v-if="modalMediaType === 'image'" class="text-center">
+          <img
+            :src="modalMediaUrl"
+            alt="Full size preview"
+            class="max-w-full h-auto object-contain mx-auto"
+            style="max-height: 65vh"
+          />
+        </div>
+
+        <!-- Video -->
+        <div v-else-if="modalMediaType === 'video'" class="text-center">
+          <video
+            :src="modalMediaUrl"
+            controls
+            class="max-w-full h-auto mx-auto"
+            style="max-height: 65vh"
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+
+      <!-- URL info -->
+      <div
+        class="mt-3 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+      >
+        <div
+          class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1"
+        >
+          URL:
+        </div>
+        <div
+          class="text-xs font-mono text-gray-900 dark:text-gray-100 break-all"
+        >
+          {{ modalMediaUrl }}
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -279,6 +377,8 @@ function toggleRowDetail(index) {
 .detail-content {
   max-height: 600px;
   overflow-y: auto;
+  /* Force detail content to fit viewport width, not table width */
+  max-width: calc(100vw - 200px);
 }
 
 .detail-field {
