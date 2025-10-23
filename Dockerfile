@@ -3,7 +3,7 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 安裝 uv 與 httpx
+# Install uv
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app

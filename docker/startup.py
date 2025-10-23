@@ -81,6 +81,26 @@ def load_credentials():
     print(f"[startup] Loaded credentials from {CRED_FILE}")
 
 
+def init_garage():
+    """Check if Garage is being used and provide setup instructions."""
+    s3_endpoint = os.getenv("KOHAKU_HUB_S3_ENDPOINT", "")
+
+    # Check if we're using Garage (not MinIO or external S3)
+    if "garage" not in s3_endpoint.lower():
+        return
+
+    print("[startup] ============================================")
+    print("[startup] Detected Garage S3 storage backend")
+    print("[startup] ============================================")
+    print("[startup] ")
+    print("[startup] Garage requires manual initialization from the HOST machine.")
+    print(
+        "[startup] Documentation: https://garagehq.deuxfleurs.fr/documentation/quick-start/"
+    )
+    print("[startup] ============================================")
+    print("[startup] ")
+
+
 def run_migrations():
     """Run database migrations before starting server."""
     migrations_script = Path(__file__).parent / "scripts" / "run_migrations.py"
@@ -133,6 +153,9 @@ def main():
                 print(f"[startup] Setup failed: {e}")
             os.environ["KOHAKU_HUB_LAKEFS_ACCESS_KEY"] = access_key
             os.environ["KOHAKU_HUB_LAKEFS_SECRET_KEY"] = secret_key
+
+    # Initialize Garage if needed
+    init_garage()
 
     # Run database migrations
     run_migrations()

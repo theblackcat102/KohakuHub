@@ -91,7 +91,7 @@ def generate_postgres_service(config: dict) -> str:
 
 def generate_minio_service(config: dict) -> str:
     """Generate MinIO service configuration."""
-    if config["s3_builtin"]:
+    if config["s3_builtin"] and config.get("s3_provider") == "minio":
         return f"""  minio:
     image: quay.io/minio/minio:latest
     container_name: minio
@@ -109,12 +109,45 @@ def generate_minio_service(config: dict) -> str:
     return ""
 
 
+def generate_garage_service(config: dict) -> str:
+    """Generate Garage S3 service configuration."""
+    if config["s3_builtin"] and config.get("s3_provider") == "garage":
+        # Generate Garage secrets
+        garage_rpc_secret = config.get("garage_rpc_secret", secrets.token_hex(32))
+        garage_admin_token = config.get("garage_admin_token", generate_secret(32))
+        garage_metrics_token = config.get("garage_metrics_token", generate_secret(32))
+
+        return f"""  garage:
+    image: dxflrs/garage:v2.1.0
+    container_name: garage
+    restart: unless-stopped
+    ports:
+      - "39000:39000"    # S3 API
+      - "39001:39001"    # RPC/Admin API
+      - "39002:39002"    # S3 Web
+      - "39003:39003"    # Admin API
+    environment:
+      - RUST_LOG=garage=info
+      - GARAGE_RPC_SECRET={garage_rpc_secret}
+      - GARAGE_ADMIN_TOKEN={garage_admin_token}
+      - GARAGE_METRICS_TOKEN={garage_metrics_token}
+    volumes:
+      - ./docker/garage/garage.toml:/etc/garage.toml
+      - ./hub-storage/garage-meta:/var/lib/garage/meta
+      - ./hub-storage/garage-data:/var/lib/garage/data
+"""
+    return ""
+
+
 def generate_lakefs_service(config: dict) -> str:
     """Generate LakeFS service configuration."""
     depends_on = []
 
     if config["s3_builtin"]:
-        depends_on.append("minio")
+        if config.get("s3_provider") == "minio":
+            depends_on.append("minio")
+        elif config.get("s3_provider") == "garage":
+            depends_on.append("garage")
 
     if config["postgres_builtin"] and config["lakefs_use_postgres"]:
         depends_on.append("postgres")
@@ -154,9 +187,14 @@ def generate_lakefs_service(config: dict) -> str:
 
     # S3 blockstore configuration
     if config["s3_builtin"]:
-        s3_endpoint = "http://minio:9000"
-        force_path_style = "true"
-        s3_region = "us-east-1"  # MinIO works with us-east-1
+        if config.get("s3_provider") == "garage":
+            s3_endpoint = "http://garage:39000"
+            force_path_style = "true"
+            s3_region = "garage"  # Garage uses custom region name
+        else:  # minio
+            s3_endpoint = "http://minio:9000"
+            force_path_style = "true"
+            s3_region = "us-east-1"  # MinIO works with us-east-1
     else:
         s3_endpoint = config["s3_endpoint"]
         # Use path-style for all non-AWS endpoints (MinIO, CloudFlare R2, custom S3)
@@ -173,8 +211,8 @@ def generate_lakefs_service(config: dict) -> str:
         entrypoint_config = """    entrypoint: ["/bin/sh", "/scripts/lakefs-entrypoint.sh"]
     command: ["run"]"""
         volumes_config += """
-      - ./scripts/lakefs-entrypoint.sh:/scripts/lakefs-entrypoint.sh:ro
-      - ./scripts/init-databases.sh:/scripts/init-databases.sh:ro"""
+      - ./docker/lakefs/lakefs-entrypoint.sh:/scripts/lakefs-entrypoint.sh:ro
+      - ./docker/lakefs/init-databases.sh:/scripts/init-databases.sh:ro"""
 
     # Add external network if needed (for external postgres or s3)
     lakefs_networks_str = ""
@@ -218,7 +256,10 @@ def generate_hub_api_service(config: dict) -> str:
         depends_on.insert(0, "postgres")
 
     if config["s3_builtin"]:
-        depends_on.append("minio")
+        if config.get("s3_provider") == "minio":
+            depends_on.append("minio")
+        elif config.get("s3_provider") == "garage":
+            depends_on.append("garage")
 
     depends_on_str = "    depends_on:\n"
     for dep in depends_on:
@@ -242,11 +283,20 @@ def generate_hub_api_service(config: dict) -> str:
 
     # S3 configuration
     if config["s3_builtin"]:
-        s3_endpoint_internal = "http://minio:9000"
-        s3_endpoint_public = "http://127.0.0.1:29001"
-        s3_region = "us-east-1"  # MinIO works with us-east-1
-        # MinIO: Don't set signature_version (uses default/s3v2-compatible)
-        s3_sig_version_line = "      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment for R2/AWS S3 (leave commented for MinIO)"
+        if config.get("s3_provider") == "garage":
+            s3_endpoint_internal = "http://garage:39000"
+            s3_endpoint_public = "http://127.0.0.1:39000"
+            s3_region = "garage"  # Garage uses custom region name
+            # Garage: MUST use s3v4 (only signature version supported)
+            s3_sig_version_line = (
+                "      - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Required for Garage"
+            )
+        else:  # minio
+            s3_endpoint_internal = "http://minio:9000"
+            s3_endpoint_public = "http://127.0.0.1:29001"
+            s3_region = "us-east-1"  # MinIO works with us-east-1
+            # MinIO: Don't set signature_version (uses default/s3v2-compatible)
+            s3_sig_version_line = "      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment for R2/AWS S3 (leave commented for MinIO)"
     else:
         s3_endpoint_internal = config["s3_endpoint"]
         s3_endpoint_public = config["s3_endpoint"]
@@ -261,6 +311,9 @@ def generate_hub_api_service(config: dict) -> str:
             s3_sig_version_line = (
                 "      # - KOHAKU_HUB_S3_SIGNATURE_VERSION=s3v4  # Uncomment if needed"
             )
+
+    # No Garage-specific config needed (manual setup)
+    garage_config_section = ""
 
     return f"""  hub-api:
     build: .
@@ -327,7 +380,7 @@ def generate_hub_api_service(config: dict) -> str:
       - KOHAKU_HUB_DEFAULT_USER_PRIVATE_QUOTA_BYTES=10_000_000
       - KOHAKU_HUB_DEFAULT_USER_PUBLIC_QUOTA_BYTES=100_000_000
       - KOHAKU_HUB_DEFAULT_ORG_PRIVATE_QUOTA_BYTES=10_000_000
-      - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=100_000_000
+      - KOHAKU_HUB_DEFAULT_ORG_PUBLIC_QUOTA_BYTES=100_000_000{garage_config_section}
     volumes:
       - ./hub-meta/hub-api:/hub-api-creds
 {networks_str}"""
@@ -359,7 +412,10 @@ def generate_docker_compose(config: dict) -> str:
     services.append(generate_hub_api_service(config))
 
     if config["s3_builtin"]:
-        services.append(generate_minio_service(config))
+        if config.get("s3_provider") == "garage":
+            services.append(generate_garage_service(config))
+        else:
+            services.append(generate_minio_service(config))
 
     services.append(generate_lakefs_service(config))
 
@@ -431,24 +487,39 @@ def load_config_file(config_path: Path) -> dict:
     if parser.has_section("s3"):
         s3 = parser["s3"]
         config["s3_builtin"] = s3.getboolean("builtin", fallback=True)
-        config["s3_endpoint"] = s3.get("endpoint", fallback="http://minio:9000")
+        config["s3_provider"] = s3.get(
+            "provider", fallback="minio"
+        )  # minio (default) or garage
+
+        # Set defaults based on provider
+        if config["s3_provider"] == "garage":
+            default_endpoint = "http://garage:3900"
+            default_region = "garage"
+            default_sig_version = "s3v4"  # Garage requires s3v4
+        else:  # minio
+            default_endpoint = "http://minio:9000"
+            default_region = "us-east-1"
+            default_sig_version = ""  # MinIO uses default
+
+        config["s3_endpoint"] = s3.get("endpoint", fallback=default_endpoint)
         config["s3_access_key"] = s3.get(
             "access_key", fallback=generate_secret(24)
         )  # 32 chars
         config["s3_secret_key"] = s3.get(
             "secret_key", fallback=generate_secret(48)
         )  # 64 chars
-        config["s3_region"] = s3.get("region", fallback="us-east-1")
+        config["s3_region"] = s3.get("region", fallback=default_region)
         config["s3_signature_version"] = s3.get(
-            "signature_version", fallback="" if config["s3_builtin"] else "s3v4"
-        )  # Empty for MinIO (default), s3v4 for R2/AWS S3
+            "signature_version", fallback=default_sig_version
+        )
     else:
         config["s3_builtin"] = True
-        config["s3_endpoint"] = "http://minio:9000"
+        config["s3_provider"] = "minio"  # Default to MinIO (works out of box)
+        config["s3_endpoint"] = "http://garage:3900"
         config["s3_access_key"] = generate_secret(24)  # 32 chars
         config["s3_secret_key"] = generate_secret(48)  # 64 chars
-        config["s3_region"] = "us-east-1"
-        config["s3_signature_version"] = ""  # Empty for MinIO (default)
+        config["s3_region"] = "garage"
+        config["s3_signature_version"] = "s3v4"  # Garage requires s3v4
 
     # Security section
     if parser.has_section("security"):
@@ -462,10 +533,23 @@ def load_config_file(config_path: Path) -> dict:
         config["database_key"] = sec.get(
             "database_key", fallback=generate_secret(32)
         )  # 43 chars
+        # Garage secrets (if using Garage)
+        config["garage_rpc_secret"] = sec.get(
+            "garage_rpc_secret", fallback=secrets.token_hex(32)
+        )  # 64 hex chars
+        config["garage_admin_token"] = sec.get(
+            "garage_admin_token", fallback=generate_secret(32)
+        )  # Admin API token
+        config["garage_metrics_token"] = sec.get(
+            "garage_metrics_token", fallback=generate_secret(32)
+        )  # Metrics API token
     else:
         config["session_secret"] = generate_secret(48)  # 64 chars
         config["admin_secret"] = generate_secret(48)  # 64 chars
         config["database_key"] = generate_secret(32)  # 43 chars for encryption
+        config["garage_rpc_secret"] = secrets.token_hex(32)  # 64 hex chars for Garage
+        config["garage_admin_token"] = generate_secret(32)
+        config["garage_metrics_token"] = generate_secret(32)
 
     # Network section
     if parser.has_section("network"):
@@ -507,22 +591,29 @@ database = lakefs
 # encrypt_key = your-secret-key-here
 
 [s3]
-# Use built-in MinIO container (true) or external S3 (false)
+# Use built-in S3 container (true) or external S3 (false)
 builtin = true
+
+# S3 Provider: minio (default, auto-setup) or garage (manual setup, no CVEs)
+provider = minio
 
 # If builtin = false, specify S3 endpoint and credentials:
 # endpoint = https://your-s3-endpoint.com
 # access_key = your-access-key
 # secret_key = your-secret-key
-# region = us-east-1  # us-east-1 (default), auto for R2, or specific AWS region
-# signature_version = s3v4  # s3v4 for R2/AWS S3, leave empty for MinIO
+# region = us-east-1  # us-east-1 (default), auto for R2, garage for Garage, or specific AWS region
+# signature_version = s3v4  # s3v4 for Garage/R2/AWS S3, leave empty for MinIO
 
-# If builtin = true, MinIO credentials are auto-generated (recommended)
+# If builtin = true, credentials are auto-generated (recommended)
 # You can override by uncommenting and setting custom values:
 # access_key = your-custom-access-key
 # secret_key = your-custom-secret-key
-# region = us-east-1
-# signature_version =  # Leave empty for MinIO (uses default)
+# For Garage:
+#   region = garage
+#   signature_version = s3v4  # Required for Garage
+# For MinIO:
+#   region = us-east-1
+#   signature_version =  # Leave empty for MinIO (uses default)
 
 [security]
 # Session and admin secrets (auto-generated if not specified)
@@ -656,22 +747,62 @@ def migrate_existing_config(docker_compose_path: Path, config_toml_path: Path) -
     # S3 Configuration
     print("\n--- S3 Configuration ---")
     s3_endpoint = get_existing("KOHAKU_HUB_S3_ENDPOINT", "s3.endpoint")
-    config["s3_builtin"] = s3_endpoint and "minio" in s3_endpoint
-    print(f"Using: {'Built-in MinIO' if config['s3_builtin'] else 'External S3'}")
 
-    config["s3_access_key"] = (
-        get_existing("KOHAKU_HUB_S3_ACCESS_KEY", "s3.access_key") or "minioadmin"
+    # Detect provider from endpoint
+    if s3_endpoint:
+        if "minio" in s3_endpoint:
+            config["s3_builtin"] = True
+            config["s3_provider"] = "minio"
+        elif "garage" in s3_endpoint or ":3900" in s3_endpoint:
+            config["s3_builtin"] = True
+            config["s3_provider"] = "garage"
+        else:
+            config["s3_builtin"] = False
+            config["s3_provider"] = "external"
+    else:
+        # Default to Garage (no CVE)
+        config["s3_builtin"] = True
+        config["s3_provider"] = "garage"
+
+    print(
+        f"Using: {'Built-in ' + config['s3_provider'].title() if config['s3_builtin'] else 'External S3'}"
     )
-    config["s3_secret_key"] = (
-        get_existing("KOHAKU_HUB_S3_SECRET_KEY", "s3.secret_key") or "minioadmin"
+
+    config["s3_access_key"] = get_existing(
+        "KOHAKU_HUB_S3_ACCESS_KEY", "s3.access_key"
+    ) or generate_secret(24)
+    config["s3_secret_key"] = get_existing(
+        "KOHAKU_HUB_S3_SECRET_KEY", "s3.secret_key"
+    ) or generate_secret(48)
+
+    # Set endpoint based on provider
+    if not s3_endpoint:
+        s3_endpoint = (
+            "http://garage:3900"
+            if config["s3_provider"] == "garage"
+            else "http://minio:9000"
+        )
+    config["s3_endpoint"] = s3_endpoint
+
+    # Set region based on provider
+    existing_region = get_existing("KOHAKU_HUB_S3_REGION", "s3.region")
+    if existing_region:
+        config["s3_region"] = existing_region
+    else:
+        config["s3_region"] = (
+            "garage" if config["s3_provider"] == "garage" else "us-east-1"
+        )
+
+    # Set signature version
+    existing_sig = get_existing(
+        "KOHAKU_HUB_S3_SIGNATURE_VERSION", "s3.signature_version"
     )
-    config["s3_endpoint"] = s3_endpoint or "http://minio:9000"
-    config["s3_region"] = (
-        get_existing("KOHAKU_HUB_S3_REGION", "s3.region") or "us-east-1"
-    )
-    config["s3_signature_version"] = (
-        get_existing("KOHAKU_HUB_S3_SIGNATURE_VERSION", "s3.signature_version") or ""
-    )
+    if existing_sig:
+        config["s3_signature_version"] = existing_sig
+    else:
+        config["s3_signature_version"] = (
+            "s3v4" if config["s3_provider"] == "garage" else ""
+        )
 
     # Security Configuration
     print("\n--- Security Configuration ---")
@@ -716,6 +847,22 @@ def migrate_existing_config(docker_compose_path: Path, config_toml_path: Path) -
         config["lakefs_encrypt_key"] = generate_secret(32)
     else:
         print(f"   LakeFS encrypt key: (exists - PRESERVED)")
+
+    # Garage secrets - MUST preserve existing values or generate only if missing
+    config["garage_rpc_secret"] = get_existing("GARAGE_RPC_SECRET")
+    if not config["garage_rpc_secret"]:
+        print("\n⚠ Garage RPC secret missing - generating new one")
+        config["garage_rpc_secret"] = secrets.token_hex(32)
+    else:
+        print(f"   Garage RPC secret: (exists - PRESERVED)")
+
+    config["garage_admin_token"] = get_existing("GARAGE_ADMIN_TOKEN")
+    if not config["garage_admin_token"]:
+        config["garage_admin_token"] = generate_secret(32)
+
+    config["garage_metrics_token"] = get_existing("GARAGE_METRICS_TOKEN")
+    if not config["garage_metrics_token"]:
+        config["garage_metrics_token"] = generate_secret(32)
 
     # Network
     config["external_network"] = ""
@@ -1017,28 +1164,53 @@ def interactive_config() -> dict:
 
     # S3 Configuration
     print("--- S3 Storage Configuration ---")
-    config["s3_builtin"] = ask_yes_no("Use built-in MinIO container?", default=True)
+    config["s3_builtin"] = ask_yes_no("Use built-in S3 container?", default=True)
 
     if config["s3_builtin"]:
-        # Generate secure random credentials for MinIO
+        print()
+        print("Available S3 providers:")
+        print("  1. MinIO (default, works out of box, has unresolved CVEs)")
+        print("  2. Garage (lightweight, no CVEs, requires manual setup)")
+        while True:
+            choice = input("Choose S3 provider [1]: ").strip()
+            if not choice or choice == "1":
+                config["s3_provider"] = "minio"
+                break
+            elif choice == "2":
+                config["s3_provider"] = "garage"
+                break
+            else:
+                print("Please choose 1 or 2")
+
+        # Generate secure random credentials
         default_access_key = generate_secret(24)  # 32 chars
         default_secret_key = generate_secret(48)  # 64 chars
 
-        print(f"Generated MinIO access key: {default_access_key}")
-        print(f"Generated MinIO secret key: {default_secret_key}")
-        use_generated = ask_yes_no("Use generated MinIO credentials?", default=True)
+        provider_name = config["s3_provider"].title()
+        print(f"\nGenerated {provider_name} access key: {default_access_key}")
+        print(f"Generated {provider_name} secret key: {default_secret_key}")
+        use_generated = ask_yes_no(
+            f"Use generated {provider_name} credentials?", default=True
+        )
 
         if use_generated:
             config["s3_access_key"] = default_access_key
             config["s3_secret_key"] = default_secret_key
         else:
-            config["s3_access_key"] = ask_string("MinIO access key")
-            config["s3_secret_key"] = ask_string("MinIO secret key")
+            config["s3_access_key"] = ask_string(f"{provider_name} access key")
+            config["s3_secret_key"] = ask_string(f"{provider_name} secret key")
 
-        config["s3_endpoint"] = "http://minio:9000"
-        config["s3_region"] = "us-east-1"
-        config["s3_signature_version"] = ""  # MinIO uses default (don't set)
+        # Set provider-specific defaults
+        if config["s3_provider"] == "garage":
+            config["s3_endpoint"] = "http://garage:3900"
+            config["s3_region"] = "garage"
+            config["s3_signature_version"] = "s3v4"  # Garage requires s3v4
+        else:  # minio
+            config["s3_endpoint"] = "http://minio:9000"
+            config["s3_region"] = "us-east-1"
+            config["s3_signature_version"] = ""  # MinIO uses default (don't set)
     else:
+        config["s3_provider"] = "external"
         config["s3_endpoint"] = ask_string("S3 endpoint URL")
         config["s3_access_key"] = ask_string("S3 access key")
         config["s3_secret_key"] = ask_string("S3 secret key")
@@ -1048,7 +1220,7 @@ def interactive_config() -> dict:
         print()
         print("Signature version:")
         print("  - (empty): Use default (for MinIO compatibility)")
-        print("  - s3v4: Cloudflare R2, AWS S3 (recommended for R2/AWS)")
+        print("  - s3v4: Cloudflare R2, AWS S3, Garage (recommended for R2/AWS/Garage)")
         sig_input = ask_string(
             "S3 signature version (s3v4 or leave empty)", default="s3v4"
         )
@@ -1098,6 +1270,11 @@ def interactive_config() -> dict:
     # LakeFS encryption key
     config["lakefs_encrypt_key"] = generate_secret(32)  # 43 chars
 
+    # Garage secrets (if using Garage)
+    config["garage_rpc_secret"] = secrets.token_hex(32)  # 64 hex chars
+    config["garage_admin_token"] = generate_secret(32)
+    config["garage_metrics_token"] = generate_secret(32)
+
     # Network configuration
     print()
     print("--- Network Configuration ---")
@@ -1131,9 +1308,14 @@ def generate_config_toml(config: dict) -> str:
 
     # S3 configuration for dev
     if config["s3_builtin"]:
-        s3_endpoint_internal = "http://localhost:29001"
-        s3_endpoint_public = "http://localhost:29001"
-        s3_region = "us-east-1"
+        if config.get("s3_provider") == "garage":
+            s3_endpoint_internal = "http://localhost:39000"
+            s3_endpoint_public = "http://localhost:39000"
+            s3_region = "garage"
+        else:  # minio
+            s3_endpoint_internal = "http://localhost:29001"
+            s3_endpoint_public = "http://localhost:29001"
+            s3_region = "us-east-1"
     else:
         s3_endpoint_internal = config["s3_endpoint"]
         s3_endpoint_public = config["s3_endpoint"]
@@ -1153,9 +1335,12 @@ region = "{s3_region}"
 force_path_style = true
 """
 
-    # Add signature_version only if set (for external S3)
+    # Add signature_version if set (required for Garage, R2, AWS S3)
     if config.get("s3_signature_version"):
         toml_content += f'signature_version = "{config["s3_signature_version"]}"\n'
+    else:
+        # Explicitly omit for MinIO (uses s3v2 by default)
+        toml_content += "# signature_version not set (MinIO uses s3v2 by default)\n"
 
     toml_content += f"""
 [lakefs]
@@ -1265,8 +1450,11 @@ def generate_and_write_files(config: dict):
     print(
         f"LakeFS Database Backend: {'PostgreSQL' if config['lakefs_use_postgres'] else 'SQLite'}"
     )
-    print(f"S3 Storage: {'Built-in MinIO' if config['s3_builtin'] else 'Custom S3'}")
-    if not config["s3_builtin"]:
+    if config["s3_builtin"]:
+        provider_name = config.get("s3_provider", "minio").title()
+        print(f"S3 Storage: Built-in {provider_name}")
+    else:
+        print(f"S3 Storage: Custom S3")
         print(f"  Endpoint: {config['s3_endpoint']}")
     if config.get("external_network"):
         print(f"External Network: {config['external_network']}")
