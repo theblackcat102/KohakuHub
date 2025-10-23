@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, HttpUrl
 
+from kohakuhub.datasetviewer.logger import get_logger
 from kohakuhub.datasetviewer.parsers import (
     CSVParser,
     JSONLParser,
@@ -27,6 +28,7 @@ from kohakuhub.datasetviewer.streaming_parsers import (
     WebDatasetTARParser,
 )
 
+logger = get_logger("Router")
 router = APIRouter(prefix="/dataset-viewer", tags=["Dataset Viewer"])
 
 
@@ -132,6 +134,10 @@ async def preview_file(
             detail="Cannot detect file format. Please specify 'format' parameter.",
         )
 
+    logger.info(
+        f"Previewing {file_format} file: {url_str[:80]}... (max_rows={req.max_rows})"
+    )
+
     # Parse file
     try:
         if file_format == "csv" or file_format == "tsv":
@@ -151,10 +157,15 @@ async def preview_file(
         bytes_processed = result.get("file_size") or 0
         limiter.finish_request(identifier, bytes_processed)
 
+        logger.success(
+            f"Preview complete: {result['total_rows']} rows, {len(result['columns'])} columns"
+        )
+
         return {**result, "format": file_format}
 
     except Exception as e:
         limiter.finish_request(identifier)
+        logger.error(f"Failed to parse {file_format} file: {str(e)}")
         raise HTTPException(500, detail=f"Failed to parse file: {str(e)}")
 
 

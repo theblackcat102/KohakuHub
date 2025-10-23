@@ -17,7 +17,10 @@ from typing import Any
 
 import duckdb
 
+from kohakuhub.datasetviewer.logger import get_logger
 from kohakuhub.datasetviewer.parsers import resolve_url_redirects
+
+logger = get_logger("SQLQuery")
 
 
 class SQLQueryError(Exception):
@@ -86,6 +89,7 @@ def _execute_query_sync(url: str, query: str, file_format: str, max_rows: int):
         actual_query = f"{actual_query} LIMIT {max_rows}"
 
     # Execute query (DuckDB uses range requests via fsspec!)
+    logger.debug(f"Executing SQL query on {file_format}: {actual_query[:100]}...")
     result = conn.execute(actual_query).fetchall()
 
     # Get column names
@@ -93,6 +97,8 @@ def _execute_query_sync(url: str, query: str, file_format: str, max_rows: int):
 
     # Get row count
     total_rows = len(result)
+
+    logger.info(f"Query returned {total_rows} rows, {len(columns)} columns")
 
     conn.close()
 

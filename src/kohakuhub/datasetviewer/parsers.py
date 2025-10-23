@@ -12,6 +12,10 @@ import duckdb
 import httpx
 from fsspec.implementations.http import HTTPFileSystem
 
+from kohakuhub.datasetviewer.logger import get_logger
+
+logger = get_logger("Parser")
+
 
 async def resolve_url_redirects(url: str) -> str:
     """
@@ -39,7 +43,9 @@ async def resolve_url_redirects(url: str) -> str:
                 if response.status_code in [301, 302, 303, 307, 308]:
                     location = response.headers.get("Location")
                     if location:
-                        print(f"Resolved redirect: {url[:50]}... -> {location[:50]}...")
+                        logger.debug(
+                            f"Resolved redirect: {url[:50]}... -> {location[:50]}..."
+                        )
                         # Close stream immediately without reading content
                         await response.aclose()
                         return location
@@ -52,7 +58,7 @@ async def resolve_url_redirects(url: str) -> str:
     except Exception as e:
         # If request fails, fall back to original URL
         # fsspec will handle the actual request
-        print(f"Warning: Could not resolve redirects for {url[:50]}...: {e}")
+        logger.warning(f"Could not resolve redirects for {url[:50]}...: {e}")
         return url
 
 
