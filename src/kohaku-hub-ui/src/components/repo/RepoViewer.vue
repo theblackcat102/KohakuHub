@@ -25,11 +25,18 @@
       <el-button @click="$router.back()">Go Back</el-button>
     </div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+    <div
+      v-else
+      :class="
+        activeTab === 'viewer'
+          ? ''
+          : 'grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6'
+      "
+    >
       <!-- Main Content -->
       <main class="min-w-0">
-        <!-- Repo Header -->
-        <div class="card mb-6">
+        <!-- Repo Header (hidden for viewer tab) -->
+        <div v-if="activeTab !== 'viewer'" class="card mb-6">
           <div
             class="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4"
           >
@@ -165,9 +172,9 @@
           </div>
         </div>
 
-        <!-- Metadata Header (Key badges) -->
+        <!-- Metadata Header (Key badges) (hidden for viewer tab) -->
         <MetadataHeader
-          v-if="hasMetadataHeader"
+          v-if="hasMetadataHeader && activeTab !== 'viewer'"
           :metadata="readmeMetadata"
           :repo-type="repoType"
           @navigate-to-metadata="navigateToTab('metadata')"
@@ -235,6 +242,19 @@
             >
               Metadata
             </button>
+            <button
+              v-if="repoType === 'dataset'"
+              :class="[
+                'px-4 py-2 font-medium transition-colors',
+                activeTab === 'viewer'
+                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200',
+              ]"
+              @click="navigateToTab('viewer')"
+            >
+              <div class="i-carbon-data-table inline-block mr-1" />
+              Viewer
+            </button>
           </div>
         </div>
 
@@ -293,6 +313,17 @@
               Add YAML frontmatter to README.md to display metadata
             </p>
           </div>
+        </div>
+
+        <!-- Viewer Tab (for datasets only) -->
+        <div v-if="activeTab === 'viewer' && repoType === 'dataset'">
+          <DatasetViewerTab
+            :repo-type="repoType"
+            :namespace="namespace"
+            :name="name"
+            :branch="currentBranch"
+            :files="fileTree"
+          />
         </div>
 
         <div v-if="activeTab === 'files'" class="card">
@@ -552,7 +583,10 @@
       </main>
 
       <!-- Sidebar (Compact) -->
-      <aside class="space-y-4 lg:sticky lg:top-20 lg:self-start">
+      <aside
+        v-if="activeTab !== 'viewer'"
+        class="space-y-4 lg:sticky lg:top-20 lg:self-start"
+      >
         <!-- Relationships (Author + Base Model + Datasets from YAML) -->
         <SidebarRelationshipsCard
           :namespace="namespace"
@@ -759,6 +793,7 @@ import MetadataHeader from "@/components/repo/metadata/MetadataHeader.vue";
 import DetailedMetadataPanel from "@/components/repo/metadata/DetailedMetadataPanel.vue";
 import ReferencedDatasetsCard from "@/components/repo/metadata/ReferencedDatasetsCard.vue";
 import SidebarRelationshipsCard from "@/components/repo/metadata/SidebarRelationshipsCard.vue";
+import DatasetViewerTab from "@/components/repo/DatasetViewerTab.vue";
 
 dayjs.extend(relativeTime);
 
@@ -973,6 +1008,12 @@ function navigateToTab(tab) {
       router.push({
         path: `/${props.repoType}s/${props.namespace}/${props.name}`,
         query: { tab: "metadata" },
+      });
+      break;
+    case "viewer":
+      router.push({
+        path: `/${props.repoType}s/${props.namespace}/${props.name}`,
+        query: { tab: "viewer" },
       });
       break;
     default:
@@ -1424,6 +1465,8 @@ onMounted(async () => {
   } else if (activeTab.value === "card") {
     await loadFileTree();
     await loadReadme();
+  } else if (activeTab.value === "viewer") {
+    await loadFileTree();
   } else if (activeTab.value === "commits") {
     await loadCommits();
   }
