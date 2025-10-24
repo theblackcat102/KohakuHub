@@ -348,11 +348,11 @@ async function uploadLFSFileMultipart(
     );
   }
 
-  // Upload parts in parallel (4 concurrent)
+  // Upload parts in parallel (16 concurrent for faster uploads)
   const completedParts = await uploadPartsInParallel(
     parts,
     partUrls,
-    4, // Concurrency limit
+    16, // Concurrency limit (increased from 4)
     onProgress,
   );
 
