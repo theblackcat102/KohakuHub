@@ -243,7 +243,7 @@
               Metadata
             </button>
             <button
-              v-if="repoType === 'dataset'"
+              v-if="__DATASET_VIEWER_ENABLED__ && repoType === 'dataset'"
               :class="[
                 'px-4 py-2 font-medium transition-colors',
                 activeTab === 'viewer'
@@ -316,15 +316,20 @@
         </div>
 
         <!-- Viewer Tab (for datasets only) -->
-        <div v-if="activeTab === 'viewer' && repoType === 'dataset'">
-          <DatasetViewerTab
-            :repo-type="repoType"
-            :namespace="namespace"
-            :name="name"
-            :branch="currentBranch"
-            :files="fileTree"
-          />
-        </div>
+        <component
+          v-if="
+            __DATASET_VIEWER_ENABLED__ &&
+            activeTab === 'viewer' &&
+            repoType === 'dataset' &&
+            DatasetViewerTab
+          "
+          :is="DatasetViewerTab"
+          :repo-type="repoType"
+          :namespace="namespace"
+          :name="name"
+          :branch="currentBranch"
+          :files="fileTree"
+        />
 
         <div v-if="activeTab === 'files'" class="card">
           <div
@@ -793,7 +798,13 @@ import MetadataHeader from "@/components/repo/metadata/MetadataHeader.vue";
 import DetailedMetadataPanel from "@/components/repo/metadata/DetailedMetadataPanel.vue";
 import ReferencedDatasetsCard from "@/components/repo/metadata/ReferencedDatasetsCard.vue";
 import SidebarRelationshipsCard from "@/components/repo/metadata/SidebarRelationshipsCard.vue";
-import DatasetViewerTab from "@/components/repo/DatasetViewerTab.vue";
+
+// Conditional import for Dataset Viewer
+let DatasetViewerTab = null;
+if (__DATASET_VIEWER_ENABLED__) {
+  DatasetViewerTab = (await import("@/components/repo/DatasetViewerTab.vue"))
+    .default;
+}
 
 dayjs.extend(relativeTime);
 

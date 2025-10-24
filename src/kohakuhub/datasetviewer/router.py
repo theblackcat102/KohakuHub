@@ -284,7 +284,7 @@ async def execute_sql(
 
     DuckDB reads files with range requests (doesn't download entire file!).
 
-    Supported formats: CSV, Parquet
+    Supported formats: CSV, TSV, Parquet, JSONL
 
     Example queries:
         SELECT * FROM dataset LIMIT 100
@@ -318,11 +318,11 @@ async def execute_sql(
             detail="Cannot detect file format. Please specify 'format' parameter.",
         )
 
-    # Only CSV and Parquet for now
-    if file_format not in ["csv", "tsv", "parquet"]:
+    # CSV, Parquet, and JSONL supported
+    if file_format not in ["csv", "tsv", "parquet", "jsonl"]:
         raise HTTPException(
             400,
-            detail=f"SQL queries not supported for {file_format}. Use CSV or Parquet.",
+            detail=f"SQL queries not supported for {file_format}. Use CSV, Parquet, or JSONL.",
         )
 
     try:

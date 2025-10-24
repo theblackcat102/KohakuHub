@@ -79,6 +79,8 @@ class AppConfig(BaseModel):
     base_url: str = "http://localhost:48888"
     api_base: str = "/api"
     db_backend: str = "sqlite"
+    # Optional features
+    disable_dataset_viewer: bool = False
     database_url: str = "sqlite:///./hub.db"
     database_key: str = (
         ""  # Encryption key for external tokens (generate with: openssl rand -hex 32)
@@ -389,6 +391,10 @@ def load_config(path: str = None) -> Config:
         app_env["base_url"] = os.environ["KOHAKU_HUB_BASE_URL"]
     if "KOHAKU_HUB_API_BASE" in os.environ:
         app_env["api_base"] = os.environ["KOHAKU_HUB_API_BASE"]
+    if "KOHAKU_HUB_DISABLE_DATASET_VIEWER" in os.environ:
+        app_env["disable_dataset_viewer"] = (
+            os.environ["KOHAKU_HUB_DISABLE_DATASET_VIEWER"].lower() == "true"
+        )
     if "KOHAKU_HUB_DB_BACKEND" in os.environ:
         app_env["db_backend"] = os.environ["KOHAKU_HUB_DB_BACKEND"]
     if "KOHAKU_HUB_DATABASE_URL" in os.environ:

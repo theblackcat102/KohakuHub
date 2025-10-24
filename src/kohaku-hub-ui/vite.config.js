@@ -9,6 +9,10 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import UnoCSS from 'unocss/vite'
 
 export default defineConfig({
+  define: {
+    // Optional features (tree-shaken if disabled)
+    __DATASET_VIEWER_ENABLED__: process.env.VITE_DISABLE_DATASET_VIEWER !== 'true'
+  },
   plugins: [
     // Must be before Vue plugin
     VueRouter({
