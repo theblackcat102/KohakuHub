@@ -165,14 +165,11 @@ async def process_upload_object(
                 multipart_chunk_size = adjusted_chunk_size
 
             # Generate multipart upload URLs with longer expiration for large files
-            # Large files take longer to upload, so give more time
-            expires_in = 7200 if part_count > 100 else 3600  # 2 hours for >100 parts
-
             multipart_info = await generate_multipart_upload_urls(
                 bucket=cfg.s3.bucket,
                 key=lfs_key,
                 part_count=part_count,
-                expires_in=expires_in,
+                expires_in=86400 * 7,
             )
 
             logger.info(
@@ -236,7 +233,7 @@ async def process_upload_object(
         upload_info = await generate_upload_presigned_url(
             bucket=cfg.s3.bucket,
             key=lfs_key,
-            expires_in=3600,  # 1 hour
+            expires_in=86400,
             content_type=content_type,
             checksum_sha256=checksum_sha256,
         )
@@ -300,7 +297,7 @@ async def process_download_object(oid: str, size: int) -> LFSObjectResponse:
         download_url = await generate_download_presigned_url(
             bucket=cfg.s3.bucket,
             key=lfs_key,
-            expires_in=3600,
+            expires_in=86400,
         )
 
         expires_at = (datetime.now(timezone.utc) + timedelta(seconds=3600)).strftime(

@@ -409,7 +409,7 @@ async def _get_file_metadata(
     presigned_url = await generate_download_presigned_url(
         bucket=bucket,
         key=key,
-        expires_in=3600,  # 1 hour
+        expires_in=86400,  # 1 day
         filename=path.split("/")[-1],  # Just the filename
     )
 

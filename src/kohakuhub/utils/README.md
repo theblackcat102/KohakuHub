@@ -250,7 +250,7 @@ from kohakuhub.utils.s3 import generate_download_presigned_url
 url = await generate_download_presigned_url(
     bucket="kohaku-storage",
     key="hf-model-org-repo/main/model.safetensors",
-    expires_in=3600,
+    expires_in=86400,
     filename="model.safetensors"
 )
 ```
