@@ -2,7 +2,9 @@
  * Dataset Viewer API Client
  *
  * Minimal API client for dataset preview backend.
- * No authentication required - relies on S3 presigned URLs.
+ * No authentication required - frontend resolves file URLs to S3 presigned URLs
+ * via HEAD request to /resolve endpoint, then passes presigned URL here.
+ * S3 presigned URLs contain auth signature, so backend can access them directly.
  */
 
 import axios from "axios";
@@ -68,15 +70,15 @@ export async function extractTARFile(url, fileName) {
 /**
  * Execute SQL query on dataset
  *
- * @param {string} url - Dataset file URL
+ * @param {string} url - S3 presigned URL (resolved from /resolve endpoint)
  * @param {string} query - SQL query to execute
  * @param {Object} options - Query options
  * @param {string} options.format - File format
- * @param {number} options.maxRows - Max rows to return
+ * @param {number} options.maxRows - Max rows to return (default: 10)
  * @returns {Promise<Object>} Query results
  */
 export async function executeSQLQuery(url, query, options = {}) {
-  const { format, maxRows = 10000 } = options;
+  const { format, maxRows = 10 } = options;
 
   const response = await axios.post(`${API_BASE}/sql`, {
     url,

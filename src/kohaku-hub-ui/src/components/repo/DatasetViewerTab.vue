@@ -31,8 +31,13 @@ const selectedFile = ref(null);
 const fileUrl = ref(null);
 const loadingUrl = ref(false);
 
-// Query parameters (SQL by default)
-const sqlQuery = ref("SELECT * FROM dataset LIMIT 100");
+// Folder navigation state
+const selectedFolder = ref(null);
+const folderFiles = ref([]);
+const loadingFolder = ref(false);
+
+// Query parameters (SQL by default, LIMIT 10 for wide tables)
+const sqlQuery = ref("SELECT * FROM dataset LIMIT 10");
 const sqlWarning = ref("");
 
 // Trigger key to force reload
@@ -123,14 +128,14 @@ function applyQuery() {
   const queryUpper = sqlQuery.value.toUpperCase();
   if (!queryUpper.includes("LIMIT")) {
     sqlWarning.value =
-      "No LIMIT found - automatically adding LIMIT 10000 for safety";
+      "No LIMIT found - automatically adding LIMIT 10 for safety";
     // Backend will add LIMIT automatically
   }
 
   reloadKey.value++;
 }
 
-// Filter previewable files
+// Filter previewable files (only direct files, not in folders)
 const previewableFiles = computed(() => {
   return props.files
     .filter((file) => file.type !== "directory")
@@ -141,11 +146,26 @@ const previewableFiles = computed(() => {
     .sort((a, b) => a.path.localeCompare(b.path));
 });
 
+// Get folders that might contain previewable files
+const previewableFolders = computed(() => {
+  return props.files
+    .filter((file) => file.type === "directory")
+    .sort((a, b) => a.path.localeCompare(b.path));
+});
+
+// Files to display (root files or folder files if folder selected)
+const displayFiles = computed(() => {
+  if (selectedFolder.value) {
+    return folderFiles.value;
+  }
+  return previewableFiles.value;
+});
+
 // Group files by directory
 const groupedFiles = computed(() => {
   const groups = {};
 
-  for (const file of previewableFiles.value) {
+  for (const file of displayFiles.value) {
     const parts = file.path.split("/");
     const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : "/";
 
@@ -162,6 +182,50 @@ const groupedFiles = computed(() => {
 
   return groups;
 });
+
+// Load files from a folder
+async function loadFolder(folder) {
+  selectedFolder.value = folder;
+  loadingFolder.value = true;
+  folderFiles.value = [];
+
+  try {
+    // Fetch files from folder with recursive=true
+    const response = await fetch(
+      `/api/${props.repoType}s/${props.namespace}/${props.name}/tree/${props.branch}/${folder.path}?recursive=true`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to load folder: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    // Filter for previewable files only
+    folderFiles.value = data
+      .filter((file) => file.type !== "directory")
+      .filter((file) => {
+        const format = detectFormat(file.path);
+        return format && format !== "tar";
+      });
+  } catch (err) {
+    ElMessage.error({
+      message: `Failed to load folder: ${err.message}`,
+      duration: 5000,
+    });
+    selectedFolder.value = null;
+  } finally {
+    loadingFolder.value = false;
+  }
+}
+
+// Go back to folder list
+function backToFolders() {
+  selectedFolder.value = null;
+  folderFiles.value = [];
+  selectedFile.value = null;
+  fileUrl.value = null;
+}
 
 // Select a file and get presigned URL
 async function selectFile(file) {
@@ -233,12 +297,27 @@ watch(
           <div
             class="px-2 py-1.5 border-b border-gray-200 dark:border-gray-700"
           >
-            <h3 class="text-sm font-semibold">Previewable Files</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ previewableFiles.length }} file{{
-                previewableFiles.length !== 1 ? "s" : ""
-              }}
-            </p>
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-semibold">
+                  {{ selectedFolder ? "Files in Folder" : "Previewable Files" }}
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ displayFiles.length }} file{{
+                    displayFiles.length !== 1 ? "s" : ""
+                  }}
+                </p>
+              </div>
+              <!-- Back button when in folder -->
+              <button
+                v-if="selectedFolder"
+                @click="backToFolders"
+                class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+              >
+                <div class="i-carbon-arrow-left inline-block mr-1" />
+                Back
+              </button>
+            </div>
           </div>
 
           <!-- File List (Scrollable with min height) -->
@@ -246,9 +325,13 @@ watch(
             class="file-list-scroll overflow-y-auto"
             style="min-height: 200px; max-height: 400px"
           >
-            <!-- No files -->
+            <!-- No files and no folders -->
             <div
-              v-if="previewableFiles.length === 0"
+              v-if="
+                displayFiles.length === 0 &&
+                !selectedFolder &&
+                previewableFolders.length === 0
+              "
               class="text-center py-8 px-3 text-gray-600 dark:text-gray-400"
             >
               <div class="i-carbon-document-blank text-4xl mb-2 inline-block" />
@@ -256,8 +339,58 @@ watch(
               <p class="text-xs mt-1">Supported: CSV, JSON, JSONL, Parquet</p>
             </div>
 
+            <!-- Loading folder -->
+            <div
+              v-else-if="loadingFolder"
+              class="text-center py-8 px-3 text-gray-600 dark:text-gray-400"
+            >
+              <div
+                class="i-carbon-loading inline-block text-2xl animate-spin mb-2"
+              />
+              <p class="text-sm">Loading folder...</p>
+            </div>
+
+            <!-- Folders (show when not in a folder) -->
+            <div
+              v-else-if="!selectedFolder && previewableFolders.length > 0"
+              class="py-1"
+            >
+              <div
+                class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400"
+              >
+                Folders
+              </div>
+              <div
+                v-for="folder in previewableFolders"
+                :key="folder.path"
+                class="folder-item px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                @click="loadFolder(folder)"
+              >
+                <div class="flex items-center gap-2">
+                  <div
+                    class="i-carbon-folder text-yellow-600 dark:text-yellow-400"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">
+                      {{ folder.path.replace(/\/$/, "") }}
+                    </div>
+                  </div>
+                  <div class="i-carbon-chevron-right text-gray-400" />
+                </div>
+              </div>
+
+              <!-- Root files section if any -->
+              <div v-if="previewableFiles.length > 0" class="mt-2">
+                <div
+                  class="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400"
+                >
+                  Root Files
+                </div>
+              </div>
+            </div>
+
             <!-- File groups -->
-            <div v-else class="py-1">
+            <div v-if="displayFiles.length > 0" class="py-1">
               <div
                 v-for="(files, dir) in groupedFiles"
                 :key="dir"
@@ -317,7 +450,7 @@ watch(
               </label>
               <textarea
                 v-model="sqlQuery"
-                placeholder="SELECT * FROM dataset LIMIT 100"
+                placeholder="SELECT * FROM dataset LIMIT 10"
                 rows="8"
                 class="w-full px-2 py-1.5 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-black dark:text-white resize-vertical"
               />

@@ -40,6 +40,7 @@ const loading = ref(false);
 const error = ref(null);
 const previewData = ref(null);
 const fileFormat = ref(null);
+const actualMaxRows = ref(null); // Track actual limit used (for SQL vs regular preview)
 
 // TAR-specific state
 const isTAR = ref(false);
@@ -127,19 +128,21 @@ async function loadFilePreview(url, format) {
     // Check for LIMIT clause
     const queryUpper = props.sqlQuery.toUpperCase();
     if (!queryUpper.includes("LIMIT")) {
-      emit(
-        "warning",
-        "No LIMIT clause found - adding LIMIT 10000 automatically",
-      );
+      emit("warning", "No LIMIT clause found - adding LIMIT 10 automatically");
     }
+
+    const sqlMaxRows = 10; // Default LIMIT 10 for wide tables
+    actualMaxRows.value = sqlMaxRows;
 
     const result = await executeSQLQuery(url, props.sqlQuery, {
       format,
-      maxRows: 10000, // Backend will apply this if no LIMIT
+      maxRows: sqlMaxRows,
     });
     previewData.value = result;
   } else {
     // Regular preview
+    actualMaxRows.value = props.maxRows;
+
     const result = await previewFile(url, {
       format,
       maxRows: props.maxRows,
@@ -164,6 +167,7 @@ const stats = computed(() => {
     columns: previewData.value.columns.length,
     rows: previewData.value.total_rows,
     truncated: previewData.value.truncated,
+    maxRows: actualMaxRows.value || props.maxRows, // Use actual limit
     fileSize: formatBytes(previewData.value.file_size),
   };
 });
@@ -187,7 +191,7 @@ const stats = computed(() => {
               v-if="stats.truncated"
               class="text-yellow-600 dark:text-yellow-400"
             >
-              (truncated to {{ maxRows }} rows)
+              (truncated to {{ stats.maxRows }} rows)
             </span>
             <span v-if="stats.fileSize !== 'Unknown'" class="ml-2">
               · {{ stats.fileSize }}
