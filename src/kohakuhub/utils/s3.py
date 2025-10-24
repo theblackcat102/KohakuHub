@@ -1,5 +1,7 @@
 """S3 client utilities and helper functions."""
 
+import atexit
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import boto3
@@ -10,6 +12,67 @@ from kohakuhub.config import cfg
 from kohakuhub.logger import get_logger
 
 logger = get_logger("S3")
+
+# Global process pool for CPU-intensive presigned URL generation
+_presigned_url_process_pool = None
+
+
+def get_presigned_url_process_pool():
+    """Get or create global process pool for presigned URL generation."""
+    global _presigned_url_process_pool
+    if _presigned_url_process_pool is None:
+        # Use process pool for CPU-bound signature calculation
+        _presigned_url_process_pool = ProcessPoolExecutor(max_workers=8)
+        atexit.register(_presigned_url_process_pool.shutdown)
+    return _presigned_url_process_pool
+
+
+def _generate_single_part_url(args: tuple) -> dict:
+    """
+    Generate presigned URL for a single part (picklable for multiprocessing).
+
+    Args:
+        args: Tuple of (bucket, key, upload_id, part_number, expires_in, s3_config)
+
+    Returns:
+        Dict with part_number and url
+    """
+    bucket, key, upload_id, part_number, expires_in, s3_config = args
+
+    # Create S3 client (must be done in each process)
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=s3_config["endpoint"],
+        aws_access_key_id=s3_config["access_key"],
+        aws_secret_access_key=s3_config["secret_key"],
+        region_name=s3_config.get("region", "us-east-1"),
+        config=BotoConfig(
+            signature_version=s3_config.get("signature_version") or "s3v4",
+            s3=(
+                {"addressing_style": "path"}
+                if s3_config.get("force_path_style")
+                else {}
+            ),
+        ),
+    )
+
+    # Generate presigned URL (local computation, no network call)
+    url = s3.generate_presigned_url(
+        "upload_part",
+        Params={
+            "Bucket": bucket,
+            "Key": key,
+            "UploadId": upload_id,
+            "PartNumber": part_number,
+        },
+        ExpiresIn=expires_in,
+    )
+
+    # Replace endpoint if needed
+    if s3_config.get("public_endpoint") != s3_config.get("endpoint"):
+        url = url.replace(s3_config["endpoint"], s3_config["public_endpoint"])
+
+    return {"part_number": part_number, "url": url}
 
 
 def get_multipart_threshold() -> int:
@@ -252,24 +315,54 @@ def _generate_multipart_upload_urls_sync(
         )
         upload_id = response["UploadId"]
 
-    part_urls = []
-    for part_number in range(1, part_count + 1):
-        url = s3.generate_presigned_url(
-            "upload_part",
-            Params={
-                "Bucket": bucket,
-                "Key": key,
-                "UploadId": upload_id,
-                "PartNumber": part_number,
-            },
-            ExpiresIn=expires_in,
+    # Prepare S3 config for multiprocessing (must be picklable)
+    s3_config = {
+        "endpoint": cfg.s3.endpoint,
+        "public_endpoint": cfg.s3.public_endpoint,
+        "access_key": cfg.s3.access_key,
+        "secret_key": cfg.s3.secret_key,
+        "region": cfg.s3.region,
+        "signature_version": cfg.s3.signature_version,
+        "force_path_style": cfg.s3.force_path_style,
+    }
+
+    # For large part counts (>10), use multiprocessing for parallel signature generation
+    if part_count > 10:
+        logger.info(
+            f"Generating {part_count} presigned URLs in parallel (multiprocessing)..."
         )
-        part_urls.append(
-            {
-                "part_number": part_number,
-                "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),
-            }
-        )
+
+        # Prepare arguments for each part
+        args_list = [
+            (bucket, key, upload_id, part_number, expires_in, s3_config)
+            for part_number in range(1, part_count + 1)
+        ]
+
+        # Generate URLs in parallel using process pool
+        pool = get_presigned_url_process_pool()
+        part_urls = list(pool.map(_generate_single_part_url, args_list))
+
+        logger.success(f"Generated {part_count} presigned URLs in parallel")
+    else:
+        # For small part counts, use sequential generation (faster due to no overhead)
+        part_urls = []
+        for part_number in range(1, part_count + 1):
+            url = s3.generate_presigned_url(
+                "upload_part",
+                Params={
+                    "Bucket": bucket,
+                    "Key": key,
+                    "UploadId": upload_id,
+                    "PartNumber": part_number,
+                },
+                ExpiresIn=expires_in,
+            )
+            part_urls.append(
+                {
+                    "part_number": part_number,
+                    "url": url.replace(cfg.s3.endpoint, cfg.s3.public_endpoint),
+                }
+            )
 
     expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime(
         "%Y-%m-%dT%H:%M:%S.%fZ"
