@@ -33,7 +33,7 @@ const modalMediaType = ref("image"); // "image" or "video"
 // Max cell length before truncation
 const MAX_CELL_LENGTH = 100;
 
-// Sorting logic
+// Sorting logic (MUST be defined before virtual scrolling!)
 const sortedRows = computed(() => {
   if (!sortColumn.value) return props.rows;
 
@@ -60,6 +60,32 @@ const sortedRows = computed(() => {
   return sortDirection.value === "desc" ? sorted.reverse() : sorted;
 });
 
+// Simple infinite scroll - only adds rows, never removes
+const ROWS_PER_BATCH = 100;
+const displayedRowCount = ref(100);
+
+const displayedRows = computed(() => {
+  return sortedRows.value.slice(0, displayedRowCount.value);
+});
+
+const hasMore = computed(() => {
+  return displayedRowCount.value < sortedRows.value.length;
+});
+
+function handleScroll(event) {
+  const element = event.target;
+  const scrollBottom =
+    element.scrollHeight - element.scrollTop - element.clientHeight;
+
+  // Load more when within 200px of bottom
+  if (scrollBottom < 200 && hasMore.value) {
+    displayedRowCount.value = Math.min(
+      displayedRowCount.value + ROWS_PER_BATCH,
+      sortedRows.value.length,
+    );
+  }
+}
+
 // Toggle sort
 function toggleSort(column) {
   if (sortColumn.value === column) {
@@ -68,6 +94,8 @@ function toggleSort(column) {
     sortColumn.value = column;
     sortDirection.value = "asc";
   }
+  // Reset displayed count when sorting
+  displayedRowCount.value = 100;
 }
 
 // Format cell value
@@ -185,10 +213,14 @@ function closeMediaModal() {
       </span>
     </div>
 
-    <!-- Data table -->
-    <div class="table-wrapper overflow-auto">
+    <!-- Data table with infinite scroll -->
+    <div
+      class="table-wrapper overflow-auto"
+      @scroll="handleScroll"
+      style="max-height: 600px"
+    >
       <table class="data-table w-full border-collapse">
-        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800">
+        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800 z-10">
           <tr>
             <th
               class="column-header px-2 py-3 text-left text-sm font-semibold border-b-2 border-gray-200 dark:border-gray-700"
@@ -215,19 +247,20 @@ function closeMediaModal() {
           </tr>
         </thead>
         <tbody>
+          <!-- Only render visible rows -->
           <tr
-            v-for="(row, rowIndex) in sortedRows"
-            :key="rowIndex"
+            v-for="(row, index) in displayedRows"
+            :key="index"
             class="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-            @click="toggleRowDetail(rowIndex)"
+            @click="toggleRowDetail(index)"
             :class="{
-              'bg-blue-50 dark:bg-blue-900/20': selectedRowIndex === rowIndex,
+              'bg-blue-50 dark:bg-blue-900/20': selectedRowIndex === index,
             }"
           >
             <td
               class="cell px-2 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
             >
-              {{ rowIndex + 1 }}
+              {{ index + 1 }}
             </td>
             <td
               v-for="(value, colIndex) in row"
@@ -277,6 +310,17 @@ function closeMediaModal() {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Infinite scroll indicator -->
+    <div
+      v-if="hasMore"
+      class="p-3 text-center border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+    >
+      <div class="text-xs text-gray-600 dark:text-gray-400">
+        Showing {{ displayedRowCount }} of {{ sortedRows.length }} rows - scroll
+        down for more
+      </div>
     </div>
 
     <!-- Empty state -->
