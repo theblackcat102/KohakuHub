@@ -25,51 +25,61 @@ async def resolve_url_redirects(url: str, auth_headers: dict[str, str] = None) -
     For /resolve URLs that return 302, we need to follow the redirect
     and use the final S3 presigned URL for fsspec/DuckDB.
 
-    Uses GET with manual redirect handling to get Location header
+    Uses HEAD with manual redirect handling to get Location header
     without downloading file content.
 
     Args:
-        url: Original URL (e.g., /datasets/.../resolve/main/file.csv or S3 URL)
+        url: Original URL (e.g., /datasets/.../resolve/main/file.csv or http://localhost:5173/datasets/...)
         auth_headers: Optional auth headers (Authorization, Cookie) from user request
 
     Returns:
         Final S3 presigned URL after following redirects (or original if external URL)
     """
-    # If already an S3 URL (starts with http:// or https:// with s3/amazonaws), use as-is
+    # Extract path from URL
     if url.startswith("http://") or url.startswith("https://"):
-        # External URL, don't try to resolve
+        # Parse URL to get path component
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        path = parsed.path
+    else:
+        # Already a path
+        path = url
+
+    # Check if this is a /resolve path (internal)
+    # Pattern: /{repo_type}s/{namespace}/{name}/resolve/{revision}/{file_path}
+    if "/resolve/" not in path:
+        # Not a resolve URL, return as-is (external URL or S3 presigned URL)
         return url
 
-    # Internal /resolve URL - make authenticated request to get S3 URL
+    # This is a resolve path - make authenticated request to backend
     try:
-        # Build full URL (relative path to absolute)
-        full_url = f"{cfg.app.base_url}{url}"
+        # Build full backend URL using our base_url
+        backend_url = f"{cfg.app.base_url.rstrip('/')}{path}"
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            # Send GET request with auth headers, don't follow redirects
+            # Send GET request with auth headers to get redirect
+            # Use stream() to only read headers, not content
             headers = auth_headers or {}
-            async with client.stream("GET", full_url, headers=headers) as response:
-                # Check for redirect status codes
-                if response.status_code in [301, 302, 303, 307, 308]:
+            async with client.stream("GET", backend_url, headers=headers) as response:
+                # Check for any 3xx redirect with Location header
+                if 300 <= response.status_code < 400:
                     location = response.headers.get("Location")
                     if location:
                         logger.debug(
-                            f"Resolved internal URL: {url[:50]}... -> S3 presigned URL"
+                            f"Resolved /resolve path: {path[:60]}... -> S3 presigned URL"
                         )
-                        # Close stream immediately without reading content
-                        await response.aclose()
                         return location
 
-                # For other status codes, close and return original
-                await response.aclose()
+                # For other status codes, log warning and return original
                 logger.warning(
-                    f"Expected redirect for {url}, got {response.status_code}"
+                    f"Expected redirect for {path}, got {response.status_code}"
                 )
                 return url
 
     except Exception as e:
         # If request fails, fall back to original URL
-        logger.error(f"Could not resolve internal URL {url[:50]}...: {e}")
+        logger.error(f"Could not resolve /resolve path {path[:60]}...: {e}")
         return url
 
 
