@@ -7,8 +7,6 @@
     "dev": "vite",
     "prebuild": "node scripts/prebuild.cjs",
     "build": "vite build",
-    "build:agpl-only": "cross-env VITE_DISABLE_DATASET_VIEWER=true vite build",
-    "build:no-viewer": "npm run build:agpl-only",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,vue,css,scss,json}\""
   },
