@@ -278,8 +278,9 @@ async def try_fallback_tree(
     if not sources:
         return None
 
-    # Construct API path
-    kohaku_path = f"/api/{repo_type}s/{namespace}/{name}/tree/{revision}/{path}"
+    # Construct API path (strip leading slash from path to avoid double slash)
+    clean_path = path.lstrip("/") if path else ""
+    kohaku_path = f"/api/{repo_type}s/{namespace}/{name}/tree/{revision}/{clean_path}"
 
     # Try each source
     for source in sources:
