@@ -149,6 +149,20 @@ function main() {
     copyFile(contributingSource, contributingDest);
   }
 
+  // Copy LICENSING.md
+  const licensingSource = path.join(rootDir, 'LICENSING.md');
+  const licensingDest = path.join(docsPublicDir, 'licensing.md');
+  if (fs.existsSync(licensingSource)) {
+    copyFile(licensingSource, licensingDest);
+  }
+
+  // Copy BUILD_WITHOUT_DATASET_VIEWER.md
+  const buildGuideSource = path.join(rootDir, 'BUILD_WITHOUT_DATASET_VIEWER.md');
+  const buildGuideDest = path.join(docsPublicDir, 'build-without-dataset-viewer.md');
+  if (fs.existsSync(buildGuideSource)) {
+    copyFile(buildGuideSource, buildGuideDest);
+  }
+
   // Copy logo files
   console.log('\nCopying logo files...');
   const logoFiles = [
