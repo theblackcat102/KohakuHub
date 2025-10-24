@@ -273,16 +273,8 @@ function formatSize(bytes) {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
-// Auto-select first file if available
-watch(
-  () => previewableFiles.value,
-  (files) => {
-    if (files.length > 0 && !selectedFile.value) {
-      selectFile(files[0]);
-    }
-  },
-  { immediate: true },
-);
+// Do NOT auto-select files to avoid overloading backend
+// User must explicitly click to preview a file
 </script>
 
 <template>
