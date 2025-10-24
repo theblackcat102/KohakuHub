@@ -1,63 +1,56 @@
-"""Custom logging module for KohakuHub with colored output and formatted tracebacks."""
+"""Loguru-based logging implementation for KohakuHub."""
 
 import os
 import sys
+import logging
+
 import traceback as tb
-from datetime import datetime
+from loguru import logger
 from enum import Enum
 from typing import Optional
 
-
-class Color:
-    """ANSI color codes for terminal output."""
-
-    # Text colors
-    RESET = "\033[0m"
-    BLACK = "\033[30m"
-    RED = "\033[31m"
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    BLUE = "\033[34m"
-    MAGENTA = "\033[35m"
-    CYAN = "\033[36m"
-    WHITE = "\033[37m"
-
-    # Bright colors
-    BRIGHT_BLACK = "\033[90m"
-    BRIGHT_RED = "\033[91m"
-    BRIGHT_GREEN = "\033[92m"
-    BRIGHT_YELLOW = "\033[93m"
-    BRIGHT_BLUE = "\033[94m"
-    BRIGHT_MAGENTA = "\033[95m"
-    BRIGHT_CYAN = "\033[96m"
-    BRIGHT_WHITE = "\033[97m"
-
-    # Background colors
-    BG_BLACK = "\033[40m"
-    BG_RED = "\033[41m"
-    BG_GREEN = "\033[42m"
-    BG_YELLOW = "\033[43m"
-    BG_BLUE = "\033[44m"
-
-    # Text styles
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    UNDERLINE = "\033[4m"
+from kohakuhub.config import cfg
 
 
 class LogLevel(Enum):
-    """Log levels with associated colors."""
+    """Log levels mapping to loguru levels."""
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    SUCCESS = "SUCCESS"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+    TRACE = "TRACE"
 
-    DEBUG = ("DEBUG", Color.BRIGHT_BLACK)
-    INFO = ("INFO", Color.BRIGHT_CYAN)
-    SUCCESS = ("SUCCESS", Color.BRIGHT_GREEN)
-    WARNING = ("WARNING", Color.BRIGHT_YELLOW)
-    ERROR = ("ERROR", Color.BRIGHT_RED)
-    CRITICAL = ("CRITICAL", Color.BG_RED + Color.WHITE + Color.BOLD)
+
+class InterceptHandler(logging.Handler):
+    """
+    Logger Interceptor：Redirects standard library logs to Loguru.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Get Level Name and API name from LogRecord
+        try:
+            level = logger.level(record.levelname).name
+            api_name = record.name.upper()
+            if "UVICORN" in api_name:
+                api_name = "UVICORN"
+        except ValueError:
+            level = record.levelno
+
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.bind(api_name=api_name).opt(depth=depth, exception=record.exc_info).log(
+            level,
+            record.getMessage()
+        )
 
 
 class Logger:
-    """Custom logger with API name prefix and colored output."""
+    """Loguru-based logger"""
 
     def __init__(self, api_name: str = "APP"):
         """Initialize logger with API name.
@@ -66,73 +59,48 @@ class Logger:
             api_name: Name of the API/module (e.g., "AUTH", "FILE", "LFS")
         """
         self.api_name = api_name.upper()
-
-    def _get_timestamp(self) -> str:
-        """Get current timestamp in HH:MM:SS format."""
-        return datetime.now().strftime("%H:%M:%S")
-
-    def _format_message(self, level: LogLevel, message: str) -> str:
-        """Format log message with colors and structure.
-
-        Format: [LEVEL][API-NAME][Worker:PID][HH:MM:SS] message
-
-        Args:
-            level: Log level
-            message: Message to log
-
-        Returns:
-            Formatted colored string
-        """
-        level_name, level_color = level.value
-        timestamp = self._get_timestamp()
-        worker_id = os.getpid()  # Process ID identifies the worker
-
-        # Build formatted message
-        parts = [
-            f"{level_color}[{level_name}]{Color.RESET}",
-            f"{Color.BRIGHT_MAGENTA}[{self.api_name}]{Color.RESET}",
-            f"{Color.BLUE}[W:{worker_id}]{Color.RESET}",
-            f"{Color.BRIGHT_BLACK}[{timestamp}]{Color.RESET}",
-            message,
-        ]
-
-        return " ".join(parts)
+        self._logger = logger.bind(api_name=api_name)
 
     def _log(self, level: LogLevel, message: str):
         """Internal log method."""
-        formatted = self._format_message(level, message)
-        print(
-            formatted,
-            file=(
-                sys.stderr
-                if level in [LogLevel.ERROR, LogLevel.CRITICAL]
-                else sys.stdout
-            ),
-        )
+        match level:
+            case LogLevel.DEBUG:
+                self._logger.debug(message)
+            case LogLevel.INFO:
+                self._logger.info(message)
+            case LogLevel.SUCCESS:
+                self._logger.success(message)
+            case LogLevel.WARNING:
+                self._logger.warning(message)
+            case LogLevel.ERROR:
+                self._logger.error(message)
+            case LogLevel.CRITICAL:
+                self._logger.critical(message)
+            case LogLevel.TRACE:
+                self._logger.trace(message)
+            case _:
+                self._logger.log(level, message)
 
     def debug(self, message: str):
-        """Log debug message."""
         self._log(LogLevel.DEBUG, message)
 
     def info(self, message: str):
-        """Log info message."""
         self._log(LogLevel.INFO, message)
 
     def success(self, message: str):
-        """Log success message."""
         self._log(LogLevel.SUCCESS, message)
 
     def warning(self, message: str):
-        """Log warning message."""
         self._log(LogLevel.WARNING, message)
 
     def error(self, message: str):
-        """Log error message."""
         self._log(LogLevel.ERROR, message)
 
     def critical(self, message: str):
-        """Log critical error message."""
         self._log(LogLevel.CRITICAL, message)
+
+    def trace(self, message: str):
+        self._log(LogLevel.TRACE, message)
 
     def exception(self, message: str, exc: Optional[Exception] = None):
         """Log exception with formatted traceback.
@@ -168,9 +136,9 @@ class Logger:
         frames = tb.extract_tb(exc_tb)
 
         # Print header
-        print(f"\n{Color.BRIGHT_RED}{'═' * 100}{Color.RESET}", file=sys.stderr)
-        print(f"{Color.BRIGHT_RED}{Color.BOLD}TRACEBACK{Color.RESET}", file=sys.stderr)
-        print(f"{Color.BRIGHT_RED}{'═' * 100}{Color.RESET}\n", file=sys.stderr)
+        self.trace(f"{'=' * 50}")
+        self.trace("TRACEBACK")
+        self.trace(f"{'=' * 50}")
 
         # Print stack frames as tables
         for i, frame in enumerate(frames, 1):
@@ -179,7 +147,7 @@ class Logger:
         # Print final error table
         self._print_error_table(exc_type, exc_value, frames[-1] if frames else None)
 
-        print(f"{Color.BRIGHT_RED}{'═' * 100}{Color.RESET}\n", file=sys.stderr)
+        self.trace(f"{'=' * 50}")
 
     def _print_frame_table(self, index: int, frame: tb.FrameSummary, is_last: bool):
         """Print single stack frame as a table.
@@ -189,39 +157,27 @@ class Logger:
             frame: Frame summary
             is_last: Whether this is the last frame (error location)
         """
-        color = Color.BRIGHT_RED if is_last else Color.BRIGHT_BLACK
+        # loguru only renders colors in format
+        # color = "ff0000" if is_last else "09D0EF"
 
         # Table header
-        print(
-            f"{color}┌─ Frame #{index} {' (ERROR HERE)' if is_last else ''}",
-            file=sys.stderr,
-        )
+        self.trace(f"┌─ Frame #{index} {' (ERROR HERE)' if is_last else ''}")
 
         # File
-        print(
-            f"{color}│ {Color.CYAN}File:{Color.RESET} {frame.filename}", file=sys.stderr
-        )
+        self.trace(f"│ File: {frame.filename}")
 
         # Line number
-        print(
-            f"{color}│ {Color.YELLOW}Line:{Color.RESET} {frame.lineno}", file=sys.stderr
-        )
+        self.trace(f"│ Line: {frame.lineno}")
 
         # Function/Code
         if frame.name:
-            print(
-                f"{color}│ {Color.GREEN}In:{Color.RESET} {frame.name}()",
-                file=sys.stderr,
-            )
+            self.trace(f"│ In:{frame.name}()")
 
         if frame.line:
             # Show the actual code line
-            print(
-                f"{color}│ {Color.BRIGHT_WHITE}Code:{Color.RESET} {frame.line.strip()}",
-                file=sys.stderr,
-            )
+            self.trace(f"│ Code: {frame.line.strip()}")
 
-        print(f"{color}└{'─' * 99}{Color.RESET}\n", file=sys.stderr)
+        self.trace(f"└{'─' * 99}")
 
     def _print_error_table(
         self, exc_type, exc_value, last_frame: Optional[tb.FrameSummary]
@@ -234,45 +190,82 @@ class Logger:
             last_frame: Last stack frame (error location)
         """
         # Table header
-        print(
-            f"{Color.BG_RED}{Color.WHITE}{Color.BOLD} EXCEPTION DETAILS {Color.RESET}",
-            file=sys.stderr,
-        )
-        print(f"{Color.BRIGHT_RED}┌{'─' * 99}", file=sys.stderr)
+        self.trace(" EXCEPTION DETAILS ")
+
+        self.trace(f"┌{'─' * 99}")
 
         # Error type
-        print(
-            f"{Color.BRIGHT_RED}│ {Color.BOLD}Type:{Color.RESET} {Color.BRIGHT_RED}{exc_type.__name__}{Color.RESET}",
-            file=sys.stderr,
-        )
+        self.trace(f"│ Type: {exc_type.__name__}")
 
         # Error message
-        print(
-            f"{Color.BRIGHT_RED}│ {Color.BOLD}Message:{Color.RESET} {Color.WHITE}{str(exc_value)}{Color.RESET}",
-            file=sys.stderr,
-        )
+        self.trace(f"│ Message: {str(exc_value)}")
 
         if last_frame:
             # Error location
-            print(
-                f"{Color.BRIGHT_RED}│ {Color.BOLD}Location:{Color.RESET} {Color.CYAN}{last_frame.filename}{Color.RESET}:{Color.YELLOW}{last_frame.lineno}{Color.RESET}",
-                file=sys.stderr,
-            )
+            self.trace(f"│ Location: {last_frame.filename}:{last_frame.lineno}")
 
             if last_frame.line:
                 # Code that caused error
-                print(
-                    f"{Color.BRIGHT_RED}│ {Color.BOLD}Code:{Color.RESET} {Color.BRIGHT_WHITE}{last_frame.line.strip()}{Color.RESET}",
-                    file=sys.stderr,
-                )
+                self.trace(f"│ Code: {last_frame.line.strip()}")
 
-        print(f"{Color.BRIGHT_RED}└{'─' * 99}{Color.RESET}", file=sys.stderr)
+        self.trace(f"└{'─' * 99}")
 
 
 class LoggerFactory:
-    """Factory to create loggers with different API names."""
+    """Factory to create loguru loggers."""
 
     _loggers = {}
+
+    @classmethod
+    def init_logger_settings(cls):
+
+        log_dir = cfg.app.log_dir
+        if not os.path.exists(log_dir):
+            os.mkdir(log_dir)
+        log_path = os.path.join(log_dir, "kohakuhub.log")
+        log_level = cfg.app.log_level.upper()
+        log_format = cfg.app.log_format.lower()
+        # Configure loguru format to match existing style
+
+        # Remove default handler
+        logger.remove()
+
+        """ About Color codes for loguru.
+        Actually, it also support 8bit , Hex , RGB color codes.
+        See https://loguru.readthedocs.io/en/stable/api/logger.html#color
+        """
+        logger.level("DEBUG", color="<fg #222024>")
+        logger.level("INFO", color="<fg #09D0EF>")
+        logger.level("SUCCESS", color="<fg #66FF00>")
+        logger.level("WARNING", color="<fg #FFEB2A>")
+        logger.level("ERROR", color="<fg #FF160C>")
+        logger.level("CRITICAL", color="<white><bg #FF160C><bold>")
+        logger.level("TRACE", color="<fg #FF160C>")
+
+        """Add Defualt Terminal logger"""
+        logger.add(
+            sys.stderr,
+            format="<level>[{level}]</level><fg #FF00CD>[{extra[api_name]}]</fg #FF00CD><blue>[W:{process}]</blue>[{time:HH:mm:ss}] {message}",
+            level=log_level,
+            colorize=True
+        )
+
+        """Add File logger"""
+        if log_format == "file":
+            logger.add(
+                log_path,
+                format="<level>[{level}]</level><fg #FF00CD>[{extra[api_name]}]</fg #FF00CD><blue>[W:{process}]</blue>[{time:HH:mm:ss}] {message}",
+                level=log_level,
+                rotation="2 MB"
+            )
+
+        logger_name_list = [name for name in logging.root.manager.loggerDict]
+        for logger_name in logger_name_list:
+            _logger = logging.getLogger(logger_name)
+            _logger.setLevel(logging.INFO)
+            _logger.handlers = []
+            if '.' not in logger_name:
+                _logger.addHandler(InterceptHandler())
 
     @classmethod
     def get_logger(cls, api_name: str) -> Logger:
@@ -289,22 +282,16 @@ class LoggerFactory:
         return cls._loggers[api_name]
 
 
-# Convenience function for getting logger
+def init_logger_settings():
+    """Initialize logger settings."""
+    LoggerFactory.init_logger_settings()
+
+
 def get_logger(api_name: str) -> Logger:
     """Get logger for specific API.
 
-    Usage:
-        logger = get_logger("AUTH")
-        logger.info("User logged in")
-        logger.error("Login failed")
-
-        try:
-            # ... code ...
-        except Exception as e:
-            logger.exception("Failed to process request", e)
-
     Args:
-        api_name: Name of the API/module (e.g., "AUTH", "FILE", "LFS")
+        api_name: Name of the API/module
 
     Returns:
         Logger instance
@@ -312,6 +299,7 @@ def get_logger(api_name: str) -> Logger:
     return LoggerFactory.get_logger(api_name)
 
 
+init_logger_settings()
 # Pre-create common loggers
 logger_auth = get_logger("AUTH")
 logger_file = get_logger("FILE")

@@ -73,3 +73,7 @@ download_keep_sessions_days = 30  # Keep sessions from last N days
 debug_log_payloads = false  # Log commit payloads (development only)
 # Site identification
 site_name = "KohakuHub"  # Customizable site name (e.g., "MyCompany Hub")
+# Log Settings
+log_level = "INFO"  # Low level logs will be filted (avaiable options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL" )
+log_format = "terminal"  # Output logs to "file" or "terminal" (maybe sql in future) 
+log_dir = "logs/"  # Path to log file (if log_format is "file")
