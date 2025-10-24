@@ -112,7 +112,11 @@ def _execute_query_sync(url: str, query: str, file_format: str, max_rows: int):
 
 
 async def execute_sql_query(
-    url: str, query: str, file_format: str = "parquet", max_rows: int = 1000
+    url: str,
+    query: str,
+    file_format: str = "parquet",
+    max_rows: int = 10,
+    auth_headers: dict[str, str] = None,
 ) -> dict[str, Any]:
     """
     Execute SQL query on remote dataset using DuckDB.
@@ -121,10 +125,11 @@ async def execute_sql_query(
     so it doesn't download the entire file!
 
     Args:
-        url: File URL (HTTP/HTTPS, including S3 presigned URLs)
+        url: File URL (internal /resolve path or S3 presigned URL)
         query: SQL query to execute
         file_format: File format (csv, parquet, jsonl, json)
-        max_rows: Maximum rows to return (safety limit)
+        max_rows: Maximum rows to return (default: 10 for wide tables)
+        auth_headers: Optional auth headers for internal /resolve URLs
 
     Returns:
         {
@@ -136,13 +141,13 @@ async def execute_sql_query(
         }
 
     Example queries:
-        SELECT * FROM dataset LIMIT 100
+        SELECT * FROM dataset LIMIT 10
         SELECT age, COUNT(*) as count FROM dataset GROUP BY age
         SELECT * FROM dataset WHERE salary > 100000 ORDER BY salary DESC
     """
-    # Resolve redirects first (302 from resolve endpoint -> S3 presigned URL)
+    # Resolve redirects first (handles internal /resolve URLs with auth)
     # This prevents DuckDB from repeatedly hitting our backend for range requests
-    resolved_url = await resolve_url_redirects(url)
+    resolved_url = await resolve_url_redirects(url, auth_headers)
 
     # Run in thread pool (DuckDB is synchronous)
     # Use resolved_url (not original url) to avoid repeated backend hits

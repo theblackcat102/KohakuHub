@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 import httpx
 
+from kohakuhub.datasetviewer.parsers import resolve_url_redirects
+
 
 class ParquetStreamParser:
     """
@@ -92,7 +94,9 @@ class WebDatasetTARParser:
     """
 
     @staticmethod
-    async def parse_streaming(url: str, max_samples: int = 100) -> dict[str, Any]:
+    async def parse_streaming(
+        url: str, max_samples: int = 100, auth_headers: dict[str, str] = None
+    ) -> dict[str, Any]:
         """
         Parse webdataset TAR file using streaming.
 
@@ -100,8 +104,9 @@ class WebDatasetTARParser:
         Does NOT load file content - only headers!
 
         Args:
-            url: TAR file URL
+            url: TAR file URL (internal /resolve path or S3 URL)
             max_samples: Maximum number of samples (IDs) to collect
+            auth_headers: Optional auth headers for internal requests
 
         Returns:
             {
@@ -114,8 +119,11 @@ class WebDatasetTARParser:
                 "truncated": bool
             }
         """
+        # Resolve URL first if it's an internal path
+        resolved_url = await resolve_url_redirects(url, auth_headers)
+
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
+            async with client.stream("GET", resolved_url) as response:
                 response.raise_for_status()
 
                 # Stream TAR file
@@ -228,12 +236,18 @@ class TARStreamParser:
     """
 
     @staticmethod
-    async def list_files_streaming(url: str) -> dict[str, Any]:
+    async def list_files_streaming(
+        url: str, auth_headers: dict[str, str] = None
+    ) -> dict[str, Any]:
         """
         List files in TAR by streaming headers only.
 
         This is MUCH more efficient than current implementation
         which loads entire TAR into memory!
+
+        Args:
+            url: TAR file URL (internal /resolve path or S3 URL)
+            auth_headers: Optional auth headers for internal requests
 
         Returns:
             {
@@ -244,11 +258,14 @@ class TARStreamParser:
                 "total_size": N  # Total TAR size
             }
         """
+        # Resolve URL first if it's an internal path
+        resolved_url = await resolve_url_redirects(url, auth_headers)
+
         files = []
         offset = 0
 
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
+            async with client.stream("GET", resolved_url) as response:
                 response.raise_for_status()
 
                 total_size = int(response.headers.get("content-length", 0))

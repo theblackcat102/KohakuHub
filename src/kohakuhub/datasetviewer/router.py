@@ -6,7 +6,7 @@ Minimal, auth-free endpoints for previewing dataset files.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, HttpUrl
 
 from kohakuhub.datasetviewer.logger import get_logger
@@ -32,6 +32,24 @@ logger = get_logger("Router")
 router = APIRouter(prefix="/dataset-viewer", tags=["Dataset Viewer"])
 
 
+def get_auth_headers(
+    session_id: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
+) -> dict[str, str]:
+    """Extract authentication headers from request for internal /resolve requests."""
+    headers = {}
+
+    # Pass Authorization header if present
+    if authorization:
+        headers["Authorization"] = authorization
+
+    # Pass session cookie if present
+    if session_id:
+        headers["Cookie"] = f"session_id={session_id}"
+
+    return headers
+
+
 class PreviewRequest(BaseModel):
     """Request to preview a file."""
 
@@ -47,7 +65,7 @@ class SQLQueryRequest(BaseModel):
     url: HttpUrl  # S3 presigned URL or any HTTP(S) URL
     query: str  # SQL query to execute
     format: Optional[str] = None  # Auto-detect if not provided
-    max_rows: int = 10000  # Safety limit
+    max_rows: int = 10  # Default: 10 rows (datasets can have many columns)
 
 
 class PreviewResponse(BaseModel):
@@ -97,6 +115,7 @@ async def preview_file(
     request: Request,
     req: PreviewRequest,
     identifier: str = Depends(check_rate_limit_dependency),
+    auth_headers: dict[str, str] = Depends(get_auth_headers),
 ):
     """
     Preview a dataset file from URL.
@@ -138,15 +157,17 @@ async def preview_file(
         f"Previewing {file_format} file: {url_str[:80]}... (max_rows={req.max_rows})"
     )
 
-    # Parse file
+    # Parse file (pass auth headers for internal /resolve URLs)
     try:
         if file_format == "csv" or file_format == "tsv":
             delimiter = "\t" if file_format == "tsv" else req.delimiter
-            result = await CSVParser.parse(url_str, req.max_rows, delimiter)
+            result = await CSVParser.parse(
+                url_str, req.max_rows, delimiter, auth_headers
+            )
         elif file_format == "jsonl":
-            result = await JSONLParser.parse(url_str, req.max_rows)
+            result = await JSONLParser.parse(url_str, req.max_rows, auth_headers)
         elif file_format == "parquet":
-            result = await ParquetParser.parse(url_str, req.max_rows)
+            result = await ParquetParser.parse(url_str, req.max_rows, auth_headers)
         else:
             raise HTTPException(
                 400,
@@ -174,6 +195,7 @@ async def list_tar_files(
     request: Request,
     req: TARListRequest,
     identifier: str = Depends(check_rate_limit_dependency),
+    auth_headers: dict[str, str] = Depends(get_auth_headers),
 ):
     """
     List files in a TAR archive.
@@ -188,7 +210,7 @@ async def list_tar_files(
 
     try:
         # Use streaming parser (doesn't load full TAR into memory!)
-        result = await TARStreamParser.list_files_streaming(str(req.url))
+        result = await TARStreamParser.list_files_streaming(str(req.url), auth_headers)
         limiter.finish_request(identifier, 0)  # Only reads headers, minimal data
         return result
     except Exception as e:
@@ -201,6 +223,7 @@ async def extract_tar_file(
     request: Request,
     req: TARExtractRequest,
     identifier: str = Depends(check_rate_limit_dependency),
+    auth_headers: dict[str, str] = Depends(get_auth_headers),
 ):
     """
     Extract a single file from TAR archive.
@@ -216,7 +239,9 @@ async def extract_tar_file(
     limiter = get_rate_limiter()
 
     try:
-        content = await TARParser.extract_file(str(req.url), req.file_name)
+        content = await TARParser.extract_file(
+            str(req.url), req.file_name, auth_headers
+        )
         limiter.finish_request(identifier, len(content))
 
         # Return raw bytes
@@ -235,6 +260,7 @@ async def preview_webdataset_tar(
     req: TARListRequest,
     max_samples: int = Query(100, description="Max samples to preview"),
     identifier: str = Depends(check_rate_limit_dependency),
+    auth_headers: dict[str, str] = Depends(get_auth_headers),
 ):
     """
     Preview TAR file in webdataset format.
@@ -252,7 +278,9 @@ async def preview_webdataset_tar(
     limiter = get_rate_limiter()
 
     try:
-        result = await WebDatasetTARParser.parse_streaming(str(req.url), max_samples)
+        result = await WebDatasetTARParser.parse_streaming(
+            str(req.url), max_samples, auth_headers
+        )
         limiter.finish_request(identifier, 0)
         return result
     except Exception as e:
@@ -278,6 +306,7 @@ async def execute_sql(
     request: Request,
     req: SQLQueryRequest,
     identifier: str = Depends(check_rate_limit_dependency),
+    auth_headers: dict[str, str] = Depends(get_auth_headers),
 ):
     """
     Execute SQL query on dataset file using DuckDB.
@@ -326,7 +355,9 @@ async def execute_sql(
         )
 
     try:
-        result = await execute_sql_query(url_str, req.query, file_format, req.max_rows)
+        result = await execute_sql_query(
+            url_str, req.query, file_format, req.max_rows, auth_headers
+        )
 
         limiter.finish_request(identifier, 0)
 

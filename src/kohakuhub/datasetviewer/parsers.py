@@ -12,53 +12,64 @@ import duckdb
 import httpx
 from fsspec.implementations.http import HTTPFileSystem
 
+from kohakuhub.config import cfg
 from kohakuhub.datasetviewer.logger import get_logger
 
 logger = get_logger("Parser")
 
 
-async def resolve_url_redirects(url: str) -> str:
+async def resolve_url_redirects(url: str, auth_headers: dict[str, str] = None) -> str:
     """
-    Resolve URL redirects by following 302 responses.
+    Resolve URL redirects by following 302 responses with authentication.
 
-    For resolve URLs that return 302, we need to follow the redirect
+    For /resolve URLs that return 302, we need to follow the redirect
     and use the final S3 presigned URL for fsspec/DuckDB.
-    Otherwise, they keep hitting our backend for every range request.
 
-    Uses GET with streaming (no redirect following) to detect 302 responses
-    without actually downloading content.
+    Uses GET with manual redirect handling to get Location header
+    without downloading file content.
 
     Args:
-        url: Original URL (may return 302)
+        url: Original URL (e.g., /datasets/.../resolve/main/file.csv or S3 URL)
+        auth_headers: Optional auth headers (Authorization, Cookie) from user request
 
     Returns:
-        Final URL after following redirects (or original if no redirect)
+        Final S3 presigned URL after following redirects (or original if external URL)
     """
+    # If already an S3 URL (starts with http:// or https:// with s3/amazonaws), use as-is
+    if url.startswith("http://") or url.startswith("https://"):
+        # External URL, don't try to resolve
+        return url
+
+    # Internal /resolve URL - make authenticated request to get S3 URL
     try:
+        # Build full URL (relative path to absolute)
+        full_url = f"{cfg.app.base_url}{url}"
+
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            # Send GET request with streaming, but don't follow redirects
-            # This gives us the correct 302 response that GET would return
-            async with client.stream("GET", url) as response:
+            # Send GET request with auth headers, don't follow redirects
+            headers = auth_headers or {}
+            async with client.stream("GET", full_url, headers=headers) as response:
                 # Check for redirect status codes
                 if response.status_code in [301, 302, 303, 307, 308]:
                     location = response.headers.get("Location")
                     if location:
                         logger.debug(
-                            f"Resolved redirect: {url[:50]}... -> {location[:50]}..."
+                            f"Resolved internal URL: {url[:50]}... -> S3 presigned URL"
                         )
                         # Close stream immediately without reading content
                         await response.aclose()
                         return location
 
-                # For other status codes (200, 4xx, 5xx), use original URL
-                # Close stream without reading content
+                # For other status codes, close and return original
                 await response.aclose()
+                logger.warning(
+                    f"Expected redirect for {url}, got {response.status_code}"
+                )
                 return url
 
     except Exception as e:
         # If request fails, fall back to original URL
-        # fsspec will handle the actual request
-        logger.warning(f"Could not resolve redirects for {url[:50]}...: {e}")
+        logger.error(f"Could not resolve internal URL {url[:50]}...: {e}")
         return url
 
 
@@ -111,21 +122,25 @@ class CSVParser:
 
     @staticmethod
     async def parse(
-        url: str, max_rows: int = 1000, delimiter: str = ","
+        url: str,
+        max_rows: int = 1000,
+        delimiter: str = ",",
+        auth_headers: dict[str, str] = None,
     ) -> dict[str, Any]:
         """
         Parse CSV file from URL using DuckDB.
 
         Args:
-            url: File URL (presigned S3 URL)
+            url: File URL (internal /resolve path or S3 presigned URL)
             max_rows: Maximum rows to return
             delimiter: CSV delimiter
+            auth_headers: Optional auth headers for internal /resolve URLs
 
         Returns:
             Dict with columns, rows, total_rows, truncated, file_size
         """
-        # Resolve redirects first
-        resolved_url = await resolve_url_redirects(url)
+        # Resolve redirects first (handles internal /resolve URLs)
+        resolved_url = await resolve_url_redirects(url, auth_headers)
 
         # Run in thread pool to avoid blocking event loop
         return await asyncio.to_thread(
@@ -169,19 +184,22 @@ class JSONLParser:
         }
 
     @staticmethod
-    async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
+    async def parse(
+        url: str, max_rows: int = 1000, auth_headers: dict[str, str] = None
+    ) -> dict[str, Any]:
         """
         Parse JSONL file from URL using DuckDB.
 
         Args:
-            url: File URL
+            url: File URL (internal /resolve path or S3 presigned URL)
             max_rows: Maximum rows to return
+            auth_headers: Optional auth headers for internal /resolve URLs
 
         Returns:
             Dict with columns, rows, total_rows, truncated, file_size
         """
-        # Resolve redirects first
-        resolved_url = await resolve_url_redirects(url)
+        # Resolve redirects first (handles internal /resolve URLs)
+        resolved_url = await resolve_url_redirects(url, auth_headers)
 
         # Run in thread pool to avoid blocking event loop
         return await asyncio.to_thread(JSONLParser._parse_sync, resolved_url, max_rows)
@@ -223,19 +241,22 @@ class JSONParser:
         }
 
     @staticmethod
-    async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
+    async def parse(
+        url: str, max_rows: int = 1000, auth_headers: dict[str, str] = None
+    ) -> dict[str, Any]:
         """
         Parse JSON array file from URL using DuckDB.
 
         Args:
-            url: File URL
+            url: File URL (internal /resolve path or S3 presigned URL)
             max_rows: Maximum rows to return
+            auth_headers: Optional auth headers for internal /resolve URLs
 
         Returns:
             Dict with columns, rows, total_rows, truncated, file_size
         """
-        # Resolve redirects first
-        resolved_url = await resolve_url_redirects(url)
+        # Resolve redirects first (handles internal /resolve URLs)
+        resolved_url = await resolve_url_redirects(url, auth_headers)
 
         # Run in thread pool to avoid blocking event loop
         return await asyncio.to_thread(JSONParser._parse_sync, resolved_url, max_rows)
@@ -275,20 +296,23 @@ class ParquetParser:
         }
 
     @staticmethod
-    async def parse(url: str, max_rows: int = 1000) -> dict[str, Any]:
+    async def parse(
+        url: str, max_rows: int = 1000, auth_headers: dict[str, str] = None
+    ) -> dict[str, Any]:
         """
         Parse Parquet file from URL using DuckDB.
 
         Args:
-            url: File URL (HTTP/HTTPS, including S3 presigned URLs)
+            url: File URL (internal /resolve path or S3 presigned URL)
             max_rows: Maximum rows to return
+            auth_headers: Optional auth headers for internal /resolve URLs
 
         Returns:
             Dict with columns, rows, total_rows, truncated, file_size
         """
-        # Resolve redirects first (302 from resolve endpoint -> S3 presigned URL)
+        # Resolve redirects first (handles internal /resolve URLs)
         # This prevents DuckDB from repeatedly hitting our backend
-        resolved_url = await resolve_url_redirects(url)
+        resolved_url = await resolve_url_redirects(url, auth_headers)
 
         # Run in thread pool to avoid blocking event loop
         return await asyncio.to_thread(
@@ -375,19 +399,22 @@ class TARParser:
                 raise ParserError(f"File not found in archive: {file_name}")
 
     @staticmethod
-    async def extract_file(url: str, file_name: str) -> bytes:
+    async def extract_file(
+        url: str, file_name: str, auth_headers: dict[str, str] = None
+    ) -> bytes:
         """
         Extract single file from TAR archive using streaming.
 
         Args:
-            url: TAR file URL
+            url: TAR file URL (internal /resolve path or S3 presigned URL)
             file_name: Name of file to extract
+            auth_headers: Optional auth headers for internal /resolve URLs
 
         Returns:
             File content as bytes
         """
-        # Resolve redirects first
-        resolved_url = await resolve_url_redirects(url)
+        # Resolve redirects first (handles internal /resolve URLs)
+        resolved_url = await resolve_url_redirects(url, auth_headers)
 
         # Run in thread pool to avoid blocking
         return await asyncio.to_thread(
