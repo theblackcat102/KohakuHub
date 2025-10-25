@@ -151,7 +151,9 @@ class AppConfig(BaseModel):
     site_name: str = "KohakuHub"  # Configurable site name (e.g., "MyCompany Hub")
     # Log settings
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-    log_format: str = "file"  # Output logs to "file" or "terminal" (maybe sql in future) 
+    log_format: str = (
+        "file"  # Output logs to "file" or "terminal" (maybe sql in future)
+    )
     log_dir: str = "logs/"  # Path to log file (if log_format is "file")
 
 

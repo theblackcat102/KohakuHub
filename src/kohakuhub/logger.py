@@ -14,6 +14,7 @@ from kohakuhub.config import cfg
 
 class LogLevel(Enum):
     """Log levels mapping to loguru levels."""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     SUCCESS = "SUCCESS"
@@ -44,8 +45,7 @@ class InterceptHandler(logging.Handler):
             depth += 1
 
         logger.bind(api_name=api_name).opt(depth=depth, exception=record.exc_info).log(
-            level,
-            record.getMessage()
+            level, record.getMessage()
         )
 
 
@@ -247,7 +247,7 @@ class LoggerFactory:
             sys.stderr,
             format="<level>[{level}]</level><fg #FF00CD>[{extra[api_name]}]</fg #FF00CD><blue>[W:{process}]</blue>[{time:HH:mm:ss}] {message}",
             level=log_level,
-            colorize=True
+            colorize=True,
         )
 
         """Add File logger"""
@@ -256,7 +256,7 @@ class LoggerFactory:
                 log_path,
                 format="<level>[{level}]</level><fg #FF00CD>[{extra[api_name]}]</fg #FF00CD><blue>[W:{process}]</blue>[{time:HH:mm:ss}] {message}",
                 level=log_level,
-                rotation="2 MB"
+                rotation="2 MB",
             )
 
         logger_name_list = [name for name in logging.root.manager.loggerDict]
@@ -264,7 +264,7 @@ class LoggerFactory:
             _logger = logging.getLogger(logger_name)
             _logger.setLevel(logging.INFO)
             _logger.handlers = []
-            if '.' not in logger_name:
+            if "." not in logger_name:
                 _logger.addHandler(InterceptHandler())
 
     @classmethod
