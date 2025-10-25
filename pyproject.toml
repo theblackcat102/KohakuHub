@@ -26,6 +26,7 @@ dependencies = [
     "httpx",
     "loguru",
     "numpy",
+    "pandas",
     "peewee",
     "psycopg2-binary",
     "pyarrow",
@@ -51,6 +52,11 @@ dev = [
     "pytest-xdist>=3.0.0",
     "pytest-timeout>=2.1.0",
     "pytest-mock>=3.12.0",
+]
+kohakuboard = [
+    "ipykernel",
+    "matplotlib",
+    "black[jupyter]",
 ]
 
 

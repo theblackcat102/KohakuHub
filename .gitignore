@@ -1,3 +1,5 @@
+kohakuboard/
+!src/kohakuboard
 *.backup.*
 .DS_store
 *_old.*
