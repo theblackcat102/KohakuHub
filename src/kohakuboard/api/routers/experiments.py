@@ -157,17 +157,35 @@ async def get_media_log(experiment_id: str, media_name: str):
         raise HTTPException(status_code=404, detail="Experiment not found")
 
     # Mock media data with real placeholder URLs
+    # Use varied step intervals to test slider synchronization
     media_entries = []
     total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-    log_every = 1000  # Log media every 1000 steps
+
+    # Vary log_every based on media name to create different step patterns
+    if media_name == "generated_images":
+        log_every = 1000  # Steps: 0, 1000, 2000, ...
+    elif media_name == "model_predictions":
+        log_every = 1001  # Steps: 0, 1001, 2002, ... (slightly offset)
+    elif media_name == "attention_maps":
+        log_every = 999  # Steps: 0, 999, 1998, ... (slightly different)
+    else:
+        log_every = 1000
 
     for step in range(0, total_steps, log_every):
+        # Alternate between image and video for variety
+        media_type = "image" if step % (log_every * 5) != 0 else "video"
+
         media_entries.append(
             {
+                "name": f"{media_name}_{step:06d}",
                 "step": step,
-                "type": "image",
-                "url": f"https://picsum.photos/seed/{experiment_id}-{media_name}-{step}/512/512",
-                "caption": f"{media_name} at step {step}",
+                "type": media_type,
+                "url": (
+                    f"https://picsum.photos/seed/{experiment_id}-{media_name}-{step}/512/512"
+                    if media_type == "image"
+                    else f"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                ),
+                "caption": f"Generated {media_name} showing model output at training step {step}. Quality improves over time as the model learns.",
             }
         )
 
@@ -187,7 +205,16 @@ async def get_table_log(experiment_id: str, table_name: str):
         raise HTTPException(status_code=404, detail="Experiment not found")
 
     total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-    log_every = 5000
+
+    # Vary log_every based on table name to test slider synchronization
+    if table_name == "validation_results":
+        log_every = 5000  # Steps: 0, 5000, 10000, ...
+    elif table_name == "layer_stats":
+        log_every = 4999  # Steps: 0, 4999, 9998, ... (slightly offset)
+    elif table_name == "confusion_matrix":
+        log_every = 5001  # Steps: 0, 5001, 10002, ... (slightly different)
+    else:
+        log_every = 5000
 
     table_entries = []
     for step in range(0, total_steps, log_every):
@@ -258,7 +285,16 @@ async def get_histogram_log(experiment_id: str, histogram_name: str):
         raise HTTPException(status_code=404, detail="Experiment not found")
 
     total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-    log_every = 2000
+
+    # Vary log_every based on histogram name to test slider synchronization
+    if histogram_name == "gradients":
+        log_every = 2000  # Steps: 0, 2000, 4000, ...
+    elif histogram_name == "weights":
+        log_every = 1998  # Steps: 0, 1998, 3996, ... (slightly offset)
+    elif histogram_name == "activations":
+        log_every = 2002  # Steps: 0, 2002, 4004, ... (slightly different)
+    else:
+        log_every = 2000
 
     histogram_entries = []
     for step in range(0, total_steps, log_every):
