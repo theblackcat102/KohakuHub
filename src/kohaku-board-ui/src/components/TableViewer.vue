@@ -1,8 +1,11 @@
 <script setup>
+import { useSliderSync } from "@/composables/useSliderSync";
+
 const props = defineProps({
   tableData: Array,
   height: Number,
   currentStep: Number,
+  cardId: String,
 });
 
 const emit = defineEmits(["update:currentStep"]);
@@ -14,10 +17,23 @@ const stepIndex = computed({
   },
   set(index) {
     if (props.tableData && props.tableData[index]) {
-      emit("update:currentStep", props.tableData[index].step);
+      const newStep = props.tableData[index].step;
+      emit("update:currentStep", newStep);
+
+      // Trigger synchronization if shift is pressed
+      triggerSync(newStep);
     }
   },
 });
+
+// Setup slider synchronization
+const { isShiftPressed, triggerSync } = useSliderSync(
+  computed(() => `table-${props.cardId}`),
+  computed(() => props.tableData || []),
+  (newStep) => {
+    emit("update:currentStep", newStep);
+  },
+);
 
 const currentTable = computed(() => {
   if (!props.tableData || props.tableData.length === 0) return null;
@@ -29,7 +45,14 @@ const currentTable = computed(() => {
 <template>
   <div class="table-viewer flex flex-col" :style="{ height: `${height}px` }">
     <div v-if="currentTable" class="flex flex-col h-full">
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto relative">
+        <!-- Shift indicator -->
+        <div
+          v-if="isShiftPressed"
+          class="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold z-10"
+        >
+          SYNC MODE
+        </div>
         <el-table :data="currentTable.rows" size="small" stripe>
           <el-table-column
             v-for="(col, idx) in currentTable.columns"
@@ -63,12 +86,18 @@ const currentTable = computed(() => {
             class="text-sm text-gray-600 dark:text-gray-400 mb-2 text-center"
           >
             Step: {{ currentTable.step }}
+            <span v-if="isShiftPressed" class="text-blue-500 font-bold ml-2">
+              (Shift pressed - syncing all sliders)
+            </span>
           </div>
           <el-slider
             v-model="stepIndex"
             :min="0"
             :max="tableData.length - 1"
             :marks="{ 0: 'Start', [tableData.length - 1]: 'End' }"
+            :format-tooltip="
+              (index) => `Step: ${tableData[index]?.step ?? index}`
+            "
           />
         </div>
       </div>

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
+import { initializeSliderSync } from "@/composables/useSliderSync";
 
 const darkMode = ref(false);
 
@@ -9,6 +10,9 @@ onMounted(() => {
     savedTheme === "dark" ||
     (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches);
   updateTheme();
+
+  // Initialize global slider synchronization
+  initializeSliderSync();
 });
 
 function toggleDarkMode() {
@@ -37,7 +41,11 @@ function updateTheme() {
       <div class="flex items-center justify-between max-w-full mx-auto">
         <div class="flex items-center gap-6">
           <router-link to="/" class="flex items-center gap-2">
-            <img src="/images/logo-square.svg" alt="KohakuBoard" class="h-8 w-8" />
+            <img
+              src="/images/logo-square.svg"
+              alt="KohakuBoard"
+              class="h-8 w-8"
+            />
             <h1
               class="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent"
             >

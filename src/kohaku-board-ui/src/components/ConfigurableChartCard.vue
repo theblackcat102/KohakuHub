@@ -262,11 +262,17 @@ function startResizeRight(e) {
     class="chart-card-wrapper"
     :class="{ 'resizing-width': isResizingWidth }"
     :style="{
-      flex: `0 0 calc(${props.initialConfig.widthPercent || 100}% - 16px)`,
-      maxWidth: `calc(${props.initialConfig.widthPercent || 100}% - 16px)`,
+      flex: `0 0 calc(${localWidth || 100}% - 16px)`,
+      maxWidth: `calc(${localWidth || 100}% - 16px)`,
     }"
   >
-    <div v-if="isResizingWidth" class="width-preview-overlay">
+    <div
+      v-if="isResizingWidth"
+      class="width-preview-overlay"
+      :style="{
+        width: `calc(${previewWidth}% - 16px)`,
+      }"
+    >
       <div class="width-preview-text">
         {{
           previewWidth === 100
@@ -376,6 +382,7 @@ function startResizeRight(e) {
           :media-data="mediaData"
           :height="localHeight"
           :current-step="props.initialConfig.currentStep || 0"
+          :card-id="props.cardId"
           @update:current-step="(s) => emitConfig({ currentStep: s })"
         />
         <HistogramViewer
@@ -383,6 +390,7 @@ function startResizeRight(e) {
           :histogram-data="histogramData"
           :height="localHeight"
           :current-step="props.initialConfig.currentStep || 0"
+          :card-id="props.cardId"
           @update:current-step="(s) => emitConfig({ currentStep: s })"
         />
         <TableViewer
@@ -390,6 +398,7 @@ function startResizeRight(e) {
           :table-data="tableData"
           :height="localHeight"
           :current-step="props.initialConfig.currentStep || 0"
+          :card-id="props.cardId"
           @update:current-step="(s) => emitConfig({ currentStep: s })"
         />
         <el-empty v-else description="Select metrics" />
@@ -648,7 +657,6 @@ function startResizeRight(e) {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
   bottom: 0;
   background: rgba(64, 158, 255, 0.1);
   border: 3px dashed rgba(64, 158, 255, 0.5);
@@ -657,6 +665,7 @@ function startResizeRight(e) {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  min-width: 100%;
 }
 
 .width-preview-text {

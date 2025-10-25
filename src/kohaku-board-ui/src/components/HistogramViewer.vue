@@ -1,10 +1,12 @@
 <script setup>
 import Plotly from "plotly.js-dist-min";
+import { useSliderSync } from "@/composables/useSliderSync";
 
 const props = defineProps({
   histogramData: Array,
   height: Number,
   currentStep: Number,
+  cardId: String,
 });
 
 const emit = defineEmits(["update:currentStep"]);
@@ -21,10 +23,23 @@ const stepIndex = computed({
   },
   set(index) {
     if (props.histogramData && props.histogramData[index]) {
-      emit("update:currentStep", props.histogramData[index].step);
+      const newStep = props.histogramData[index].step;
+      emit("update:currentStep", newStep);
+
+      // Trigger synchronization if shift is pressed
+      triggerSync(newStep);
     }
   },
 });
+
+// Setup slider synchronization
+const { isShiftPressed, triggerSync } = useSliderSync(
+  computed(() => `histogram-${props.cardId}`),
+  computed(() => props.histogramData || []),
+  (newStep) => {
+    emit("update:currentStep", newStep);
+  },
+);
 
 const currentHistogram = computed(() => {
   if (!props.histogramData || props.histogramData.length === 0) return null;
@@ -111,19 +126,33 @@ function createPlot() {
     :style="{ height: `${height}px` }"
   >
     <div v-if="currentHistogram" class="flex flex-col h-full">
-      <div ref="plotDiv" class="flex-1"></div>
+      <div ref="plotDiv" class="flex-1 relative">
+        <!-- Shift indicator -->
+        <div
+          v-if="isShiftPressed"
+          class="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold z-10"
+        >
+          SYNC MODE
+        </div>
+      </div>
       <div class="mt-2 flex justify-center">
         <div class="w-1/2">
           <div
             class="text-sm text-gray-600 dark:text-gray-400 mb-2 text-center"
           >
             Step: {{ currentHistogram.step }}
+            <span v-if="isShiftPressed" class="text-blue-500 font-bold ml-2">
+              (Shift pressed - syncing all sliders)
+            </span>
           </div>
           <el-slider
             v-model="stepIndex"
             :min="0"
             :max="histogramData.length - 1"
             :marks="{ 0: 'Start', [histogramData.length - 1]: 'End' }"
+            :format-tooltip="
+              (index) => `Step: ${histogramData[index]?.step ?? index}`
+            "
           />
         </div>
       </div>
