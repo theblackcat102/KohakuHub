@@ -15,6 +15,7 @@ config.toml
 docker-compose.yml
 kohakuhub.conf
 lint-reports/
+/logs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

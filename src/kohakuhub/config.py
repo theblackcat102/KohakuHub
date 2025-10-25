@@ -149,6 +149,10 @@ class AppConfig(BaseModel):
     ]
     # Site identification
     site_name: str = "KohakuHub"  # Configurable site name (e.g., "MyCompany Hub")
+    # Log settings
+    log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    log_format: str = "file"  # Output logs to "file" or "terminal" (maybe sql in future) 
+    log_dir: str = "logs/"  # Path to log file (if log_format is "file")
 
 
 class Config(BaseModel):
@@ -423,6 +427,12 @@ def load_config(path: str = None) -> Config:
         app_env["debug_log_payloads"] = (
             os.environ["KOHAKU_HUB_DEBUG_LOG_PAYLOADS"].lower() == "true"
         )
+    if "KOHAKU_HUB_LOG_LEVEL" in os.environ:
+        app_env["log_level"] = os.environ["KOHAKU_HUB_LOG_LEVEL"]
+    if "KOHAKU_HUB_LOG_FORMAT" in os.environ:
+        app_env["log_format"] = os.environ["KOHAKU_HUB_LOG_FORMAT"]
+    if "KOHAKU_HUB_LOG_DIR" in os.environ:
+        app_env["log_dir"] = os.environ["KOHAKU_HUB_LOG_DIR"]
     if app_env:
         config_from_env["app"] = app_env
 

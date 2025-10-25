@@ -24,6 +24,7 @@ dependencies = [
     "fastapi",
     "fsspec",
     "httpx",
+    "loguru",
     "numpy",
     "peewee",
     "psycopg2-binary",

@@ -360,6 +360,9 @@ def generate_hub_api_service(config: dict) -> str:
       - KOHAKU_HUB_LFS_KEEP_VERSIONS=5
       - KOHAKU_HUB_LFS_AUTO_GC=true
       - KOHAKU_HUB_AUTO_MIGRATE=true # Auto-confirm database migrations (required for Docker)
+      - KOHAKU_HUB_LOG_LEVEL=INFO
+      - KOHAKU_HUB_LOG_FORMAT=terminal
+      - KOHAKU_HUB_LOG_DIR=logs/
 
       ## ===== Auth & SMTP Configuration =====
       - KOHAKU_HUB_REQUIRE_EMAIL_VERIFICATION=false
