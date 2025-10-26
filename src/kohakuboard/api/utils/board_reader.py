@@ -63,11 +63,12 @@ class BoardReader:
 
             # Return all columns (including step, global_step, timestamp for x-axis)
             # step, global_step, timestamp should be first for better UX
+            # Also convert "__" back to "/" for namespace support
             axis_cols = [
                 col for col in columns if col in ("step", "global_step", "timestamp")
             ]
             other_cols = [
-                col
+                col.replace("__", "/")  # Convert back to namespace format
                 for col in columns
                 if col not in ("step", "global_step", "timestamp")
             ]
@@ -91,15 +92,16 @@ class BoardReader:
         conn = self._get_connection()
         try:
             # Special handling for step/global_step/timestamp - they're already included
+            # Escape metric name (convert "/" to "__" for DuckDB column name)
+            escaped_metric = metric.replace("/", "__")
+
             # Build query - always select step, global_step, timestamp, and the requested metric
-            query = (
-                f"SELECT step, global_step, timestamp, {metric} as value FROM metrics"
-            )
+            query = f'SELECT step, global_step, timestamp, "{escaped_metric}" as value FROM metrics'
 
             # For regular metrics, filter out NULLs
             # For step/global_step/timestamp, include all rows (they're never NULL)
             if metric not in ("step", "global_step", "timestamp"):
-                query += f" WHERE {metric} IS NOT NULL"
+                query += f' WHERE "{escaped_metric}" IS NOT NULL'
 
             if limit:
                 query += f" LIMIT {limit}"
@@ -225,6 +227,64 @@ class BoardReader:
         finally:
             conn.close()
 
+    def get_available_histogram_names(self) -> List[str]:
+        """Get list of available histogram log names
+
+        Returns:
+            List of unique histogram log names
+        """
+        conn = self._get_connection()
+        try:
+            result = conn.execute(
+                "SELECT DISTINCT name FROM histograms ORDER BY name"
+            ).fetchall()
+            return [row[0] for row in result]
+        except Exception as e:
+            logger.warning(f"Failed to query histograms table: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_histogram_data(
+        self, name: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get histogram data for a specific log name
+
+        Args:
+            name: Histogram log name
+            limit: Optional row limit
+
+        Returns:
+            List of dicts with step, global_step, bins, values
+        """
+        conn = self._get_connection()
+        try:
+            query = f"SELECT * FROM histograms WHERE name = ?"
+            if limit:
+                query += f" LIMIT {limit}"
+
+            result = conn.execute(query, [name]).fetchall()
+
+            # Get column names
+            columns = [desc[0] for desc in conn.description]
+
+            # Convert to list of dicts, parsing JSON fields
+            data = []
+            for row in result:
+                row_dict = dict(zip(columns, row))
+
+                # Parse JSON bins and counts fields
+                if row_dict.get("bins"):
+                    row_dict["bins"] = json.loads(row_dict["bins"])
+                if row_dict.get("counts"):
+                    row_dict["counts"] = json.loads(row_dict["counts"])
+
+                data.append(row_dict)
+
+            return data
+        finally:
+            conn.close()
+
     def get_media_file_path(self, filename: str) -> Optional[Path]:
         """Get full path to media file
 
@@ -262,14 +322,23 @@ class BoardReader:
             except Exception:
                 tables_count = 0
 
+            try:
+                histograms_count = conn.execute(
+                    "SELECT COUNT(*) FROM histograms"
+                ).fetchone()[0]
+            except Exception:
+                histograms_count = 0
+
             return {
                 "metadata": metadata,
                 "metrics_count": metrics_count,
                 "media_count": media_count,
                 "tables_count": tables_count,
+                "histograms_count": histograms_count,
                 "available_metrics": self.get_available_metrics(),
                 "available_media": self.get_available_media_names(),
                 "available_tables": self.get_available_table_names(),
+                "available_histograms": self.get_available_histogram_names(),
             }
         finally:
             conn.close()

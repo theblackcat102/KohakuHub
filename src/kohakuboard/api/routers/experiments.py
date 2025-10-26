@@ -107,7 +107,7 @@ async def get_experiment_summary(experiment_id: str):
                 "scalars": summary["available_metrics"],
                 "media": summary["available_media"],
                 "tables": summary["available_tables"],
-                "histograms": [],  # Not yet implemented in board storage
+                "histograms": summary["available_histograms"],
             },
         }
     except FileNotFoundError:
@@ -117,9 +117,13 @@ async def get_experiment_summary(experiment_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/experiments/{experiment_id}/scalars/{metric_name}")
+@router.get("/experiments/{experiment_id}/scalars/{metric_name:path}")
 async def get_scalar_metric(experiment_id: str, metric_name: str):
-    """Get scalar metric as step-value pairs"""
+    """Get scalar metric as step-value pairs
+
+    Note: metric_name can contain slashes (e.g., "train/loss")
+    FastAPI path parameter automatically URL-decodes it
+    """
     logger_api.info(f"Fetching scalar '{metric_name}' for experiment: {experiment_id}")
 
     try:
@@ -143,7 +147,7 @@ async def get_scalar_metric(experiment_id: str, metric_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/experiments/{experiment_id}/media/{media_name}")
+@router.get("/experiments/{experiment_id}/media/{media_name:path}")
 async def get_media_log(experiment_id: str, media_name: str):
     """Get media log entries"""
     logger_api.info(f"Fetching media '{media_name}' for experiment: {experiment_id}")
@@ -180,7 +184,7 @@ async def get_media_log(experiment_id: str, media_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/experiments/{experiment_id}/tables/{table_name}")
+@router.get("/experiments/{experiment_id}/tables/{table_name:path}")
 async def get_table_log(experiment_id: str, table_name: str):
     """Get table log entries"""
     logger_api.info(f"Fetching table '{table_name}' for experiment: {experiment_id}")
@@ -203,12 +207,27 @@ async def get_table_log(experiment_id: str, table_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/experiments/{experiment_id}/histograms/{histogram_name}")
+@router.get("/experiments/{experiment_id}/histograms/{histogram_name:path}")
 async def get_histogram_log(experiment_id: str, histogram_name: str):
     """Get histogram log entries"""
     logger_api.info(
         f"Fetching histogram '{histogram_name}' for experiment: {experiment_id}"
     )
 
-    # Histograms not yet implemented in board storage
-    raise HTTPException(status_code=501, detail="Histograms not yet implemented")
+    try:
+        board_dir = Path(cfg.app.board_data_dir) / experiment_id
+        reader = BoardReader(board_dir)
+        data = reader.get_histogram_data(histogram_name)
+
+        return {
+            "experiment_id": experiment_id,
+            "histogram_name": histogram_name,
+            "data": data,
+        }
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    except Exception as e:
+        logger_api.error(
+            f"Failed to get histogram {histogram_name} for {experiment_id}: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
