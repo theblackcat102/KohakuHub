@@ -1,41 +1,16 @@
-"""Experiments API endpoints"""
+"""Experiments API endpoints - serves real board data"""
 
-import random
+from pathlib import Path
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Optional
 
-from kohakuboard.api.utils.mock_data import (
-    generate_experiment,
-    generate_metrics_data,
-    generate_sparse_metrics_data,
-    generate_histogram_data,
-    generate_table_data,
-)
+from kohakuboard.api.utils.board_reader import BoardReader, list_boards
 from kohakuboard.config import cfg
 from kohakuboard.logger import logger_api
 
 router = APIRouter()
-
-# Mock experiment storage with large datasets for testing WebGL performance
-MOCK_EXPERIMENTS = {
-    "exp-001": generate_experiment(
-        "exp-001", "ResNet50 Training (1K steps)", steps=1000, status="completed"
-    ),
-    "exp-002": generate_experiment(
-        "exp-002", "BERT Fine-tuning (10K steps)", steps=10000, status="running"
-    ),
-    "exp-003": generate_experiment(
-        "exp-003", "ViT Pretraining (50K steps)", steps=50000, status="completed"
-    ),
-    "exp-004": generate_experiment(
-        "exp-004", "GPT-2 Training (100K steps)", steps=100000, status="completed"
-    ),
-    "exp-005": generate_experiment(
-        "exp-005", "Stable Diffusion (25K steps)", steps=25000, status="stopped"
-    ),
-}
 
 
 class MetricsQuery(BaseModel):
@@ -48,9 +23,34 @@ class MetricsQuery(BaseModel):
 
 @router.get("/experiments")
 async def list_experiments():
-    """List all experiments"""
-    logger_api.info("Fetching experiments list")
-    return list(MOCK_EXPERIMENTS.values())
+    """List all experiments (boards)"""
+    logger_api.info("Fetching experiments list from boards")
+
+    try:
+        boards = list_boards(Path(cfg.app.board_data_dir))
+
+        # Convert board format to experiment format
+        experiments = []
+        for board in boards:
+            experiments.append(
+                {
+                    "id": board["board_id"],
+                    "name": board["name"],
+                    "description": f"Config: {board.get('config', {})}",
+                    "status": "completed",  # For now, all boards are considered completed
+                    "total_steps": 0,  # Will be filled from actual data if needed
+                    "duration": "N/A",
+                    "created_at": board.get("created_at", ""),
+                }
+            )
+
+        logger_api.info(f"Found {len(experiments)} experiments")
+        return experiments
+    except Exception as e:
+        logger_api.error(f"Failed to list experiments: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list experiments: {str(e)}"
+        )
 
 
 @router.get("/experiments/{experiment_id}")
@@ -58,48 +58,25 @@ async def get_experiment(experiment_id: str):
     """Get experiment details"""
     logger_api.info(f"Fetching experiment: {experiment_id}")
 
-    if experiment_id not in MOCK_EXPERIMENTS:
+    try:
+        board_dir = Path(cfg.app.board_data_dir) / experiment_id
+        reader = BoardReader(board_dir)
+        metadata = reader.get_metadata()
+
+        return {
+            "id": experiment_id,
+            "name": metadata.get("name", experiment_id),
+            "description": f"Config: {metadata.get('config', {})}",
+            "status": "completed",
+            "total_steps": 0,  # TODO: Calculate from data
+            "duration": "N/A",
+            "created_at": metadata.get("created_at", ""),
+        }
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Experiment not found")
-
-    return MOCK_EXPERIMENTS[experiment_id]
-
-
-@router.get("/experiments/{experiment_id}/metrics")
-async def get_metrics(
-    experiment_id: str,
-    metric_names: Optional[str] = Query(
-        None, description="Comma-separated metric names"
-    ),
-    start_step: Optional[int] = Query(None, description="Start step"),
-    end_step: Optional[int] = Query(None, description="End step"),
-    steps: int = Query(None, description="Number of steps", le=cfg.mock.max_steps),
-):
-    """Get metrics data for an experiment"""
-    logger_api.info(f"Fetching metrics for experiment: {experiment_id}")
-
-    if experiment_id not in MOCK_EXPERIMENTS:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-
-    if steps is None:
-        steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-
-    # Parse metric names
-    metrics = None
-    if metric_names:
-        metrics = [m.strip() for m in metric_names.split(",")]
-
-    # Generate metrics data
-    metrics_data = generate_metrics_data(steps=steps, metrics=metrics)
-
-    # Filter by step range if provided
-    if start_step is not None or end_step is not None:
-        for metric in metrics_data:
-            start = start_step or 0
-            end = end_step or len(metric["x"])
-            metric["x"] = metric["x"][start:end]
-            metric["y"] = metric["y"][start:end]
-
-    return {"experiment_id": experiment_id, "metrics": metrics_data}
+    except Exception as e:
+        logger_api.error(f"Failed to get experiment {experiment_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/experiments/{experiment_id}/summary")
@@ -107,22 +84,37 @@ async def get_experiment_summary(experiment_id: str):
     """Get experiment summary with available data"""
     logger_api.info(f"Fetching summary for experiment: {experiment_id}")
 
-    if experiment_id not in MOCK_EXPERIMENTS:
+    try:
+        board_dir = Path(cfg.app.board_data_dir) / experiment_id
+        reader = BoardReader(board_dir)
+        summary = reader.get_summary()
+
+        metadata = summary["metadata"]
+
+        return {
+            "experiment_id": experiment_id,
+            "experiment_info": {
+                "id": experiment_id,
+                "name": metadata.get("name", experiment_id),
+                "description": f"Config: {metadata.get('config', {})}",
+                "status": "completed",
+                "total_steps": summary["metrics_count"],
+                "duration": "N/A",
+                "created_at": metadata.get("created_at", ""),
+            },
+            "total_steps": summary["metrics_count"],
+            "available_data": {
+                "scalars": summary["available_metrics"],
+                "media": summary["available_media"],
+                "tables": summary["available_tables"],
+                "histograms": [],  # Not yet implemented in board storage
+            },
+        }
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Experiment not found")
-
-    sample = generate_sparse_metrics_data(total_events=100)
-
-    return {
-        "experiment_id": experiment_id,
-        "experiment_info": MOCK_EXPERIMENTS[experiment_id],
-        "total_steps": MOCK_EXPERIMENTS[experiment_id]["total_steps"],
-        "available_data": {
-            "scalars": [k for k in sample.keys() if k != "time"],
-            "media": ["generated_images", "model_predictions", "attention_maps"],
-            "tables": ["validation_results", "layer_stats", "confusion_matrix"],
-            "histograms": ["gradients", "weights", "activations"],
-        },
-    }
+    except Exception as e:
+        logger_api.error(f"Failed to get summary for {experiment_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/experiments/{experiment_id}/scalars/{metric_name}")
@@ -130,22 +122,25 @@ async def get_scalar_metric(experiment_id: str, metric_name: str):
     """Get scalar metric as step-value pairs"""
     logger_api.info(f"Fetching scalar '{metric_name}' for experiment: {experiment_id}")
 
-    if experiment_id not in MOCK_EXPERIMENTS:
+    try:
+        board_dir = Path(cfg.app.board_data_dir) / experiment_id
+        reader = BoardReader(board_dir)
+        data = reader.get_scalar_data(metric_name)
+
+        return {
+            "experiment_id": experiment_id,
+            "metric_name": metric_name,
+            "data": data,
+        }
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Experiment not found")
-
-    total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-    full_data = generate_sparse_metrics_data(total_events=total_steps)
-
-    if metric_name not in full_data:
-        raise HTTPException(status_code=404, detail=f"Metric '{metric_name}' not found")
-
-    # Return as step-value pairs (filter out None values)
-    data = []
-    for i, value in enumerate(full_data[metric_name]):
-        if value is not None:
-            data.append({"step": i, "value": value})
-
-    return {"experiment_id": experiment_id, "metric_name": metric_name, "data": data}
+    except Exception as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(
+                status_code=404, detail=f"Metric '{metric_name}' not found"
+            )
+        logger_api.error(f"Failed to get scalar {metric_name} for {experiment_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/experiments/{experiment_id}/media/{media_name}")
@@ -153,47 +148,36 @@ async def get_media_log(experiment_id: str, media_name: str):
     """Get media log entries"""
     logger_api.info(f"Fetching media '{media_name}' for experiment: {experiment_id}")
 
-    if experiment_id not in MOCK_EXPERIMENTS:
+    try:
+        board_dir = Path(cfg.app.board_data_dir) / experiment_id
+        reader = BoardReader(board_dir)
+        data = reader.get_media_data(media_name)
+
+        # Transform to expected format
+        media_entries = []
+        for entry in data:
+            media_entries.append(
+                {
+                    "name": entry.get("media_id", ""),
+                    "step": entry.get("step", 0),
+                    "type": entry.get("type", "image"),
+                    "url": f"/api/boards/{experiment_id}/media/files/{entry.get('filename', '')}",
+                    "caption": entry.get("caption", ""),
+                    "width": entry.get("width"),
+                    "height": entry.get("height"),
+                }
+            )
+
+        return {
+            "experiment_id": experiment_id,
+            "media_name": media_name,
+            "data": media_entries,
+        }
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Experiment not found")
-
-    # Mock media data with real placeholder URLs
-    # Use varied step intervals to test slider synchronization
-    media_entries = []
-    total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-
-    # Vary log_every based on media name to create different step patterns
-    if media_name == "generated_images":
-        log_every = 1000  # Steps: 0, 1000, 2000, ...
-    elif media_name == "model_predictions":
-        log_every = 1001  # Steps: 0, 1001, 2002, ... (slightly offset)
-    elif media_name == "attention_maps":
-        log_every = 999  # Steps: 0, 999, 1998, ... (slightly different)
-    else:
-        log_every = 1000
-
-    for step in range(0, total_steps, log_every):
-        # Alternate between image and video for variety
-        media_type = "image" if step % (log_every * 5) != 0 else "video"
-
-        media_entries.append(
-            {
-                "name": f"{media_name}_{step:06d}",
-                "step": step,
-                "type": media_type,
-                "url": (
-                    f"https://picsum.photos/seed/{experiment_id}-{media_name}-{step}/512/512"
-                    if media_type == "image"
-                    else f"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                ),
-                "caption": f"Generated {media_name} showing model output at training step {step}. Quality improves over time as the model learns.",
-            }
-        )
-
-    return {
-        "experiment_id": experiment_id,
-        "media_name": media_name,
-        "data": media_entries,
-    }
+    except Exception as e:
+        logger_api.error(f"Failed to get media {media_name} for {experiment_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/experiments/{experiment_id}/tables/{table_name}")
@@ -201,77 +185,22 @@ async def get_table_log(experiment_id: str, table_name: str):
     """Get table log entries"""
     logger_api.info(f"Fetching table '{table_name}' for experiment: {experiment_id}")
 
-    if experiment_id not in MOCK_EXPERIMENTS:
+    try:
+        board_dir = Path(cfg.app.board_data_dir) / experiment_id
+        reader = BoardReader(board_dir)
+        data = reader.get_table_data(table_name)
+
+        # Transform to expected format (data is already parsed)
+        return {
+            "experiment_id": experiment_id,
+            "table_name": table_name,
+            "data": data,
+        }
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Experiment not found")
-
-    total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-
-    # Vary log_every based on table name to test slider synchronization
-    if table_name == "validation_results":
-        log_every = 5000  # Steps: 0, 5000, 10000, ...
-    elif table_name == "layer_stats":
-        log_every = 4999  # Steps: 0, 4999, 9998, ... (slightly offset)
-    elif table_name == "confusion_matrix":
-        log_every = 5001  # Steps: 0, 5001, 10002, ... (slightly different)
-    else:
-        log_every = 5000
-
-    table_entries = []
-    for step in range(0, total_steps, log_every):
-        step_num = step // log_every
-        table_entries.append(
-            {
-                "step": step,
-                "columns": [
-                    "Sample",
-                    "Image",
-                    "Precision",
-                    "Recall",
-                    "F1-Score",
-                    "Support",
-                ],
-                "column_types": [
-                    "text",
-                    "image",
-                    "number",
-                    "number",
-                    "number",
-                    "number",
-                ],
-                "rows": [
-                    [
-                        "Cat",
-                        f"https://picsum.photos/seed/{experiment_id}-cat-{step}/64/64",
-                        0.85 + random.random() * 0.1,
-                        0.80 + random.random() * 0.1,
-                        0.82 + random.random() * 0.1,
-                        120,
-                    ],
-                    [
-                        "Dog",
-                        f"https://picsum.photos/seed/{experiment_id}-dog-{step}/64/64",
-                        0.88 + random.random() * 0.1,
-                        0.85 + random.random() * 0.1,
-                        0.86 + random.random() * 0.1,
-                        150,
-                    ],
-                    [
-                        "Bird",
-                        f"https://picsum.photos/seed/{experiment_id}-bird-{step}/64/64",
-                        0.75 + random.random() * 0.1,
-                        0.70 + random.random() * 0.1,
-                        0.72 + random.random() * 0.1,
-                        80,
-                    ],
-                ],
-            }
-        )
-
-    return {
-        "experiment_id": experiment_id,
-        "table_name": table_name,
-        "data": table_entries,
-    }
+    except Exception as e:
+        logger_api.error(f"Failed to get table {table_name} for {experiment_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/experiments/{experiment_id}/histograms/{histogram_name}")
@@ -281,77 +210,5 @@ async def get_histogram_log(experiment_id: str, histogram_name: str):
         f"Fetching histogram '{histogram_name}' for experiment: {experiment_id}"
     )
 
-    if experiment_id not in MOCK_EXPERIMENTS:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-
-    total_steps = MOCK_EXPERIMENTS[experiment_id]["total_steps"]
-
-    # Vary log_every based on histogram name to test slider synchronization
-    if histogram_name == "gradients":
-        log_every = 2000  # Steps: 0, 2000, 4000, ...
-    elif histogram_name == "weights":
-        log_every = 1998  # Steps: 0, 1998, 3996, ... (slightly offset)
-    elif histogram_name == "activations":
-        log_every = 2002  # Steps: 0, 2002, 4004, ... (slightly different)
-    else:
-        log_every = 2000
-
-    histogram_entries = []
-    for step in range(0, total_steps, log_every):
-        histogram_entries.append(
-            {
-                "step": step,
-                "bins": 50,
-                "values": [
-                    random.gauss(0, 1 - step / total_steps) for _ in range(10000)
-                ],
-            }
-        )
-
-    return {
-        "experiment_id": experiment_id,
-        "histogram_name": histogram_name,
-        "data": histogram_entries,
-    }
-
-
-@router.get("/experiments/{experiment_id}/histograms/{histogram_name}")
-async def get_histogram(
-    experiment_id: str,
-    histogram_name: str,
-    num_values: int = Query(10000, description="Number of data points", le=1000000),
-    distribution: str = Query(
-        "normal", description="Distribution type (normal, uniform, exponential)"
-    ),
-):
-    """Get histogram data"""
-    logger_api.info(
-        f"Fetching histogram '{histogram_name}' for experiment: {experiment_id}"
-    )
-
-    if experiment_id not in MOCK_EXPERIMENTS:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-
-    histogram_data = generate_histogram_data(
-        num_values=num_values, distribution=distribution
-    )
-
-    return histogram_data
-
-
-@router.get("/experiments/{experiment_id}/tables/{table_name}")
-async def get_table(
-    experiment_id: str,
-    table_name: str,
-    num_rows: int = Query(100, description="Number of rows", le=10000),
-    num_cols: int = Query(6, description="Number of columns", le=50),
-):
-    """Get table data"""
-    logger_api.info(f"Fetching table '{table_name}' for experiment: {experiment_id}")
-
-    if experiment_id not in MOCK_EXPERIMENTS:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-
-    table_data = generate_table_data(num_rows=num_rows, num_cols=num_cols)
-
-    return table_data
+    # Histograms not yet implemented in board storage
+    raise HTTPException(status_code=501, detail="Histograms not yet implemented")

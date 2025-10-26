@@ -68,29 +68,35 @@ const mediaData = ref(null);
 const histogramData = ref(null);
 const tableData = ref(null);
 const currentStepIndex = ref(0);
+const isCardLoading = ref(false);
 
 // Fetch non-scalar data based on type
 watch(
   cardType,
   async (type) => {
-    if (type === "media" && props.initialConfig.mediaName) {
-      const res = await fetch(
-        `/api/experiments/${props.experimentId}/media/${props.initialConfig.mediaName}`,
-      );
-      const data = await res.json();
-      mediaData.value = data.data;
-    } else if (type === "histogram" && props.initialConfig.histogramName) {
-      const res = await fetch(
-        `/api/experiments/${props.experimentId}/histograms/${props.initialConfig.histogramName}`,
-      );
-      const data = await res.json();
-      histogramData.value = data.data;
-    } else if (type === "table" && props.initialConfig.tableName) {
-      const res = await fetch(
-        `/api/experiments/${props.experimentId}/tables/${props.initialConfig.tableName}`,
-      );
-      const data = await res.json();
-      tableData.value = data.data;
+    isCardLoading.value = true;
+    try {
+      if (type === "media" && props.initialConfig.mediaName) {
+        const res = await fetch(
+          `/api/experiments/${props.experimentId}/media/${props.initialConfig.mediaName}`,
+        );
+        const data = await res.json();
+        mediaData.value = data.data;
+      } else if (type === "histogram" && props.initialConfig.histogramName) {
+        const res = await fetch(
+          `/api/experiments/${props.experimentId}/histograms/${props.initialConfig.histogramName}`,
+        );
+        const data = await res.json();
+        histogramData.value = data.data;
+      } else if (type === "table" && props.initialConfig.tableName) {
+        const res = await fetch(
+          `/api/experiments/${props.experimentId}/tables/${props.initialConfig.tableName}`,
+        );
+        const data = await res.json();
+        tableData.value = data.data;
+      }
+    } finally {
+      isCardLoading.value = false;
     }
   },
   { immediate: true },
@@ -119,8 +125,17 @@ const processedChartData = computed(() => {
       let lastXValue = null;
 
       for (let i = 0; i < xData.length; i++) {
-        const xVal = xData[i];
+        let xVal = xData[i];
         const yVal = yData[i];
+
+        // Convert timestamp strings to Date objects for Plotly
+        if (config.xMetric === "timestamp" && typeof xVal === "string") {
+          xVal = new Date(xVal);
+        }
+        // Convert walltime (unix seconds) to Date objects for Plotly
+        else if (config.xMetric === "walltime" && typeof xVal === "number") {
+          xVal = new Date(xVal * 1000); // Convert seconds to milliseconds
+        }
 
         if (xVal !== null) lastXValue = xVal;
         if (yVal !== null && lastXValue !== null) {
@@ -367,7 +382,16 @@ function startResizeRight(e) {
         </div>
       </template>
 
-      <div class="plot-container" :style="{ height: `${localHeight}px` }">
+      <div
+        class="plot-container relative"
+        :style="{ height: `${localHeight}px` }"
+      >
+        <div
+          v-if="isCardLoading"
+          class="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 z-10"
+        >
+          <div class="text-gray-500 dark:text-gray-400">Loading...</div>
+        </div>
         <LinePlot
           v-if="cardType === 'line' && processedChartData.length > 0"
           ref="plotRef"

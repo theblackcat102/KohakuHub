@@ -22,7 +22,13 @@ function viewExperiment(id) {
 }
 
 function formatDate(timestamp) {
+  if (!timestamp) return "N/A";
   return new Date(timestamp).toLocaleString();
+}
+
+function formatSteps(steps) {
+  if (steps === 0 || steps === undefined) return "N/A";
+  return steps.toLocaleString();
 }
 </script>
 
@@ -48,11 +54,14 @@ function formatDate(timestamp) {
       v-else-if="experiments.length === 0"
       class="bg-white dark:bg-gray-900 rounded-lg shadow-md p-8 text-center border border-gray-200 dark:border-gray-800"
     >
-      <div class="text-gray-500 dark:text-gray-400 mb-4">
-        No experiments yet
-      </div>
+      <div class="text-gray-500 dark:text-gray-400 mb-4">No boards found</div>
       <p class="text-sm text-gray-400 dark:text-gray-500">
-        Start tracking your ML experiments
+        Start tracking your ML experiments with KohakuBoard client library.
+        <br />
+        Boards are automatically discovered from:
+        <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded"
+          >./kohakuboard</code
+        >
       </p>
     </div>
 
@@ -88,15 +97,18 @@ function formatDate(timestamp) {
 
         <div class="grid grid-cols-2 gap-2 text-sm">
           <div>
-            <div class="text-gray-500 dark:text-gray-500">Steps</div>
-            <div class="font-medium text-gray-900 dark:text-gray-100">
-              {{ experiment.total_steps.toLocaleString() }}
+            <div class="text-gray-500 dark:text-gray-500">Board ID</div>
+            <div
+              class="font-mono text-xs text-gray-900 dark:text-gray-100 truncate"
+              :title="experiment.id"
+            >
+              {{ experiment.id }}
             </div>
           </div>
           <div>
-            <div class="text-gray-500 dark:text-gray-500">Duration</div>
+            <div class="text-gray-500 dark:text-gray-500">Status</div>
             <div class="font-medium text-gray-900 dark:text-gray-100">
-              {{ experiment.duration }}
+              {{ experiment.status }}
             </div>
           </div>
         </div>

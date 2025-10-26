@@ -45,7 +45,7 @@ class DuckDBStorage:
         self.tables_buffer: List[Dict[str, Any]] = []
 
         # Track known columns for schema evolution
-        self.known_metric_cols = {"step", "global_step"}
+        self.known_metric_cols = {"step", "global_step", "timestamp"}
 
         # Flush threshold
         self.flush_threshold = 10
@@ -57,7 +57,8 @@ class DuckDBStorage:
             """
             CREATE TABLE IF NOT EXISTS metrics (
                 step BIGINT NOT NULL,
-                global_step BIGINT
+                global_step BIGINT,
+                timestamp TIMESTAMP NOT NULL
             )
         """
         )
@@ -99,7 +100,11 @@ class DuckDBStorage:
         self.conn.commit()
 
     def append_metrics(
-        self, step: int, global_step: Optional[int], metrics: Dict[str, Any]
+        self,
+        step: int,
+        global_step: Optional[int],
+        metrics: Dict[str, Any],
+        timestamp: Any,
     ):
         """Append metrics for a step
 
@@ -107,10 +112,12 @@ class DuckDBStorage:
             step: Auto-increment step
             global_step: Explicit global step (optional)
             metrics: Dict of metric name -> value
+            timestamp: Timestamp of log event (datetime object)
         """
         row = {
             "step": step,
             "global_step": global_step,
+            "timestamp": timestamp,
             **metrics,
         }
         self.metrics_buffer.append(row)

@@ -162,11 +162,14 @@ class Board:
 
         # Send scalar message if we have scalars
         if scalars:
+            from datetime import datetime, timezone
+
             message = {
                 "type": "scalar",
                 "step": self._step,
                 "global_step": self._global_step,
                 "metrics": scalars,
+                "timestamp": datetime.now(timezone.utc),
             }
             self.queue.put(message)
 

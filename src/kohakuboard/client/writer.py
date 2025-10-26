@@ -105,8 +105,9 @@ class LogWriter:
         step = message["step"]
         global_step = message.get("global_step")
         metrics = message["metrics"]
+        timestamp = message.get("timestamp")
 
-        self.storage.append_metrics(step, global_step, metrics)
+        self.storage.append_metrics(step, global_step, metrics, timestamp)
 
     def _handle_media(self, message: dict):
         """Handle media logging (images/video/audio)"""

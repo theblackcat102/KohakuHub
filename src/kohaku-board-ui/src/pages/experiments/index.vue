@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { fetchExperiments } from "@/utils/api";
 import { useRouter } from "vue-router";
 
@@ -19,12 +19,40 @@ onMounted(async () => {
   }
 });
 
+const filteredExperiments = computed(() => {
+  let filtered = experiments.value;
+
+  // Filter by search query
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    filtered = filtered.filter(
+      (exp) =>
+        exp.name.toLowerCase().includes(query) ||
+        exp.id.toLowerCase().includes(query) ||
+        (exp.description && exp.description.toLowerCase().includes(query)),
+    );
+  }
+
+  // Filter by status
+  if (statusFilter.value !== "all") {
+    filtered = filtered.filter((exp) => exp.status === statusFilter.value);
+  }
+
+  return filtered;
+});
+
 function viewExperiment(id) {
   router.push(`/experiments/${id}`);
 }
 
 function formatDate(timestamp) {
+  if (!timestamp) return "N/A";
   return new Date(timestamp).toLocaleString();
+}
+
+function formatSteps(steps) {
+  if (steps === 0 || steps === undefined) return "N/A";
+  return steps.toLocaleString();
 }
 </script>
 
@@ -58,15 +86,14 @@ function formatDate(timestamp) {
         <thead class="border-b border-gray-200 dark:border-gray-700">
           <tr>
             <th class="text-left py-3 px-4">Name</th>
+            <th class="text-left py-3 px-4">Board ID</th>
             <th class="text-left py-3 px-4">Status</th>
-            <th class="text-left py-3 px-4">Steps</th>
-            <th class="text-left py-3 px-4">Duration</th>
             <th class="text-left py-3 px-4">Created</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="experiment in experiments"
+            v-for="experiment in filteredExperiments"
             :key="experiment.id"
             @click="viewExperiment(experiment.id)"
             class="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
@@ -76,6 +103,9 @@ function formatDate(timestamp) {
               <div class="text-sm text-gray-500 dark:text-gray-400">
                 {{ experiment.description }}
               </div>
+            </td>
+            <td class="py-3 px-4 font-mono text-sm">
+              {{ experiment.id }}
             </td>
             <td class="py-3 px-4">
               <span
@@ -92,14 +122,19 @@ function formatDate(timestamp) {
                 {{ experiment.status }}
               </span>
             </td>
-            <td class="py-3 px-4">{{ experiment.total_steps }}</td>
-            <td class="py-3 px-4">{{ experiment.duration }}</td>
             <td class="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">
               {{ formatDate(experiment.created_at) }}
             </td>
           </tr>
         </tbody>
       </table>
+
+      <div
+        v-if="filteredExperiments.length === 0"
+        class="text-center py-8 text-gray-500 dark:text-gray-400"
+      >
+        No experiments match your filters
+      </div>
     </div>
   </div>
 </template>

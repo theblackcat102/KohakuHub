@@ -12,6 +12,7 @@ class AppConfig:
     port: int = 48889
     api_base: str = "/api"
     cors_origins: list = None
+    board_data_dir: str = "./kohakuboard"
 
     def __post_init__(self):
         if self.cors_origins is None:
@@ -44,6 +45,7 @@ class Config:
                 host=os.getenv("KOHAKU_BOARD_HOST", "0.0.0.0"),
                 port=int(os.getenv("KOHAKU_BOARD_PORT", "48889")),
                 api_base=os.getenv("KOHAKU_BOARD_API_BASE", "/api"),
+                board_data_dir=os.getenv("KOHAKU_BOARD_DATA_DIR", "./kohakuboard"),
             ),
             mock=MockDataConfig(
                 default_steps=int(os.getenv("KOHAKU_BOARD_DEFAULT_STEPS", "1000")),

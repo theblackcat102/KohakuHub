@@ -175,6 +175,21 @@ function downsampleData(x, y, rate) {
   return { x: newX, y: newY };
 }
 
+function formatDuration(seconds) {
+  if (seconds < 60) {
+    return `${seconds.toFixed(2)}s`;
+  } else if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toFixed(0);
+    return `${mins}m ${secs}s`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = (seconds % 60).toFixed(0);
+    return `${hours}h ${mins}m ${secs}s`;
+  }
+}
+
 const processedData = computed(() => {
   const mode = config.smoothingMode;
   const value = config.smoothingValue;
@@ -290,7 +305,24 @@ function createPlot() {
       legendgroup: series.name,
     };
 
-    if (series.originalY) {
+    // Custom hover template for relative_walltime
+    if (props.xaxis === "relative_walltime") {
+      trace.customdata = series.x.map((xVal, idx) => ({
+        duration: formatDuration(xVal),
+        original: series.originalY ? series.originalY[idx] : null,
+      }));
+      if (series.originalY) {
+        trace.hovertemplate =
+          "<b>%{fullData.name}</b><br>" +
+          "Time: %{customdata.duration}<br>" +
+          "Value: %{y:.4f} (%{customdata.original:.4f})<extra></extra>";
+      } else {
+        trace.hovertemplate =
+          "<b>%{fullData.name}</b><br>" +
+          "Time: %{customdata.duration}<br>" +
+          "Value: %{y:.4f}<extra></extra>";
+      }
+    } else if (series.originalY) {
       trace.customdata = series.originalY.map((origY, idx) => ({
         original: origY,
         smoothed: series.y[idx],
@@ -368,7 +400,25 @@ function createPlot() {
     },
   };
 
-  layout.xaxis.hoverformat = props.xaxis.includes("Step") ? "d" : ".4f";
+  // Format x-axis based on metric type
+  if (props.xaxis.includes("step") || props.xaxis.includes("Step")) {
+    layout.xaxis.hoverformat = "d"; // Integer format
+  } else if (props.xaxis === "timestamp") {
+    layout.xaxis.type = "date";
+    layout.xaxis.hoverformat = "%Y-%m-%d %H:%M:%S"; // DateTime format
+  } else if (props.xaxis === "walltime") {
+    layout.xaxis.type = "date";
+    layout.xaxis.hoverformat = "%Y-%m-%d %H:%M:%S"; // DateTime format
+  } else if (props.xaxis === "relative_walltime") {
+    // Custom tick formatting for duration
+    layout.xaxis.title = "Time since start";
+    layout.xaxis.tickmode = "auto";
+    layout.xaxis.tickformat = ".1f";
+    layout.xaxis.ticksuffix = "s";
+    // Hover is handled by custom template above
+  } else {
+    layout.xaxis.hoverformat = ".4f"; // Default float format
+  }
 
   const plotConfig = {
     responsive: true,

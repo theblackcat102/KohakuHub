@@ -7,7 +7,6 @@ const route = useRoute();
 const { animationsEnabled } = useAnimationPreference();
 const metricDataCache = ref({});
 const availableMetrics = ref([]);
-const loading = ref(true);
 
 const tabs = ref([{ name: "Metrics", cards: [] }]);
 const activeTab = ref("Metrics");
@@ -30,6 +29,13 @@ onMounted(async () => {
     const summary = await summaryResponse.json();
     availableMetrics.value = summary.available_data.scalars;
 
+    // Add computed time metrics (will be calculated after fetching timestamp)
+    // These are not in the backend, but calculated on frontend
+    if (availableMetrics.value.includes("timestamp")) {
+      availableMetrics.value.push("walltime");
+      availableMetrics.value.push("relative_walltime");
+    }
+
     // Try to load saved layout
     const saved = localStorage.getItem(storageKey.value);
     if (saved) {
@@ -42,19 +48,21 @@ onMounted(async () => {
       const cards = [];
       let cardId = 1;
 
-      // Scalar metrics
+      // Scalar metrics (exclude step/global_step from y-axis, use as x-axis only)
       for (const metric of summary.available_data.scalars) {
-        cards.push({
-          id: `card-${cardId++}`,
-          config: {
-            type: "line",
-            title: metric,
-            widthPercent: 33,
-            height: 400,
-            xMetric: "step",
-            yMetrics: [metric],
-          },
-        });
+        if (metric !== "step" && metric !== "global_step") {
+          cards.push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "line",
+              title: metric,
+              widthPercent: 33,
+              height: 400,
+              xMetric: "step", // Will be updated to global_step if used
+              yMetrics: [metric],
+            },
+          });
+        }
       }
 
       // Add media example
@@ -108,12 +116,44 @@ onMounted(async () => {
 
     // Fetch all metrics needed by visible cards
     await fetchMetricsForTab();
+
+    // Determine default x-axis (prefer global_step if it's used, otherwise step)
+    await determineDefaultXAxis();
   } catch (error) {
     console.error("Failed to load experiment:", error);
-  } finally {
-    loading.value = false;
   }
 });
+
+async function determineDefaultXAxis() {
+  // Check if global_step has any non-zero values
+  try {
+    const response = await fetch(
+      `/api/experiments/${route.params.id}/scalars/global_step`,
+    );
+    const result = await response.json();
+
+    // Check if any global_step value is non-zero
+    const hasNonZeroGlobalStep = result.data.some(
+      (item) => item.value !== 0 && item.value !== null,
+    );
+
+    // Update all cards to use global_step if it's being used
+    if (hasNonZeroGlobalStep) {
+      for (const tab of tabs.value) {
+        for (const card of tab.cards) {
+          if (card.config.type === "line" || !card.config.type) {
+            if (card.config.xMetric === "step") {
+              card.config.xMetric = "global_step";
+            }
+          }
+        }
+      }
+      saveLayout();
+    }
+  } catch (error) {
+    console.error("Failed to determine default x-axis:", error);
+  }
+}
 
 async function fetchMetricsForTab() {
   const tab = tabs.value.find((t) => t.name === activeTab.value);
@@ -150,10 +190,47 @@ async function fetchMetricsForTab() {
         }
 
         metricDataCache.value[metric] = sparseArray;
+
+        // Also store timestamp data if available
+        if (result.data[0]?.timestamp) {
+          const timestampArray = new Array(sparseArray.length).fill(null);
+          for (const item of result.data) {
+            timestampArray[item.step] = item.timestamp;
+          }
+          metricDataCache.value[`${metric}_timestamp`] = timestampArray;
+        }
       } catch (error) {
         console.error(`Failed to fetch metric ${metric}:`, error);
       }
     }
+  }
+
+  // Calculate walltime and relative_walltime from timestamps
+  if (metricDataCache.value.timestamp) {
+    const timestamps = metricDataCache.value.timestamp;
+    const walltime = [];
+    const relativeWalltime = [];
+    let startTime = null;
+
+    for (let i = 0; i < timestamps.length; i++) {
+      if (timestamps[i]) {
+        const ts = new Date(timestamps[i]).getTime() / 1000; // Convert to seconds
+        walltime[i] = ts;
+
+        if (startTime === null) {
+          startTime = ts;
+          relativeWalltime[i] = 0;
+        } else {
+          relativeWalltime[i] = ts - startTime;
+        }
+      } else {
+        walltime[i] = null;
+        relativeWalltime[i] = null;
+      }
+    }
+
+    metricDataCache.value.walltime = walltime;
+    metricDataCache.value.relative_walltime = relativeWalltime;
   }
 }
 
@@ -405,7 +482,7 @@ watch(activeTab, () => {
 </script>
 
 <template>
-  <div v-loading="loading" class="container-main">
+  <div class="container-main">
     <div class="mb-6 flex items-center justify-between">
       <h1 class="text-3xl font-bold">Experiment: {{ route.params.id }}</h1>
       <div class="flex gap-2">
