@@ -2,11 +2,13 @@
 import { ref, onMounted } from "vue";
 import { initializeSliderSync } from "@/composables/useSliderSync";
 import { useAnimationPreference } from "@/composables/useAnimationPreference";
+import { getSystemInfo } from "@/utils/api";
 
 const darkMode = ref(false);
 const { animationsEnabled, toggleAnimations } = useAnimationPreference();
+const systemInfo = ref(null);
 
-onMounted(() => {
+onMounted(async () => {
   const savedTheme = localStorage.getItem("theme");
   darkMode.value =
     savedTheme === "dark" ||
@@ -15,6 +17,13 @@ onMounted(() => {
 
   // Initialize global slider synchronization
   initializeSliderSync();
+
+  // Fetch system info for mode detection
+  try {
+    systemInfo.value = await getSystemInfo();
+  } catch (error) {
+    console.error("Failed to fetch system info:", error);
+  }
 });
 
 function toggleDarkMode() {
@@ -59,13 +68,13 @@ function updateTheme() {
               to="/"
               class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400"
             >
-              Dashboard
+              Projects
             </router-link>
             <router-link
               to="/experiments"
               class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400"
             >
-              Experiments
+              Experiments (Legacy)
             </router-link>
           </div>
         </div>

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import { fetchProjects } from "@/utils/api";
 import { useRouter } from "vue-router";
+import { fetchProjects } from "@/utils/api";
 
 const router = useRouter();
 const projects = ref([]);
@@ -26,25 +26,14 @@ function formatDate(timestamp) {
   if (!timestamp) return "N/A";
   return new Date(timestamp).toLocaleString();
 }
-
-function formatSteps(steps) {
-  if (steps === 0 || steps === undefined) return "N/A";
-  return steps.toLocaleString();
-}
 </script>
 
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
-        Dashboard
+        Projects
       </h1>
-      <router-link
-        to="/experiments"
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md font-medium transition-colors shadow-sm"
-      >
-        View All Experiments
-      </router-link>
     </div>
 
     <div v-if="loading" class="text-center py-12">
