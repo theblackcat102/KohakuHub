@@ -16,18 +16,20 @@ def main():
 
     print("Starting basic logging example...")
 
-    # Simple logging without explicit steps
+    # Simple training loop with explicit steps
     for i in range(100):
-        # Log scalars (non-blocking)
+        # Call step() once per optimizer step (like wandb)
+        board.step()
+
+        # Log scalars (non-blocking, like wandb.log())
         board.log(
-            iteration=i,
             loss=1.0 / (i + 1),  # Decreasing loss
             accuracy=min(0.99, 0.5 + i * 0.005),  # Increasing accuracy
         )
 
         # Log occasionally
         if i % 10 == 0:
-            print(f"Iteration {i}: logged metrics")
+            print(f"Step {i}: logged metrics")
 
         time.sleep(0.01)  # Simulate work
 

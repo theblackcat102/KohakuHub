@@ -23,22 +23,21 @@ def main():
 
     print("Training simulation with images and tables...")
 
-    # Simulate training epochs with explicit steps
+    # Simulate training epochs
     for epoch in range(5):
-        # Explicit step increment (this is our "global_step")
-        # This should be ONCE per epoch, not per batch!
-        board.step()
-
         print(f"\n=== Epoch {epoch + 1} ===")
 
         # Simulate training batches
         epoch_losses = []
         for batch_idx in range(100):
+            # PER-BATCH step increment (this is our "global_step" = optimizer step)
+            board.step()  # Call this like optimizer.step()
+
             # Simulate training
             loss = np.random.randn() * 0.1 + (2.0 / (epoch + 1))
             epoch_losses.append(loss)
 
-            # Log every batch (all belong to same global_step=epoch)
+            # Log per-batch metrics (like wandb.log())
             board.log(
                 batch_loss=float(loss),
                 learning_rate=0.001 * (0.9**epoch),
@@ -60,14 +59,14 @@ def main():
 
             time.sleep(0.01)  # Simulate work
 
-        # Epoch summary metrics
+        # Epoch summary metrics (log at end of epoch)
         train_loss = np.mean(epoch_losses)
         val_loss = train_loss * 0.9  # Simulate validation
 
         board.log(
+            epoch=epoch,
             epoch_train_loss=float(train_loss),
             epoch_val_loss=float(val_loss),
-            epoch=epoch + 1,
         )
 
         # Log per-class metrics table
