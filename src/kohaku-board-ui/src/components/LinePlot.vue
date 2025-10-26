@@ -1,6 +1,9 @@
 <script setup>
 import { ref, reactive, onMounted, watch, onUnmounted, computed } from "vue";
 import Plotly from "plotly.js-dist-min";
+import { useAnimationPreference } from "@/composables/useAnimationPreference";
+
+const { animationsEnabled } = useAnimationPreference();
 
 const props = defineProps({
   data: {
@@ -343,7 +346,8 @@ function createPlot() {
     font: { color: colors.text },
     margin: { t: 10, r: 20, b: 30, l: 50 },
     hovermode: "x unified",
-    hoverdistance: 20,
+    hoverdistance: -1,
+    spikedistance: -1,
     hoverlabel: {
       namelength: -1,
       bgcolor: isDarkMode()
@@ -370,9 +374,23 @@ function createPlot() {
     responsive: true,
     displayModeBar: false,
     displaylogo: false,
+    plotGlPixelRatio: 2,
   };
 
-  Plotly.react(plotDiv.value, traces, layout, plotConfig);
+  const transitionConfig = animationsEnabled.value
+    ? {
+        duration: 0,
+        easing: "linear",
+      }
+    : {
+        duration: 0,
+        easing: "linear",
+      };
+
+  Plotly.react(plotDiv.value, traces, layout, {
+    ...plotConfig,
+    transition: transitionConfig,
+  });
 }
 
 function resetView() {

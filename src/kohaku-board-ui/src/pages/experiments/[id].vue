@@ -1,8 +1,10 @@
 <script setup>
 import { VueDraggable } from "vue-draggable-plus";
 import ConfigurableChartCard from "@/components/ConfigurableChartCard.vue";
+import { useAnimationPreference } from "@/composables/useAnimationPreference";
 
 const route = useRoute();
+const { animationsEnabled } = useAnimationPreference();
 const metricDataCache = ref({});
 const availableMetrics = ref([]);
 const loading = ref(true);
@@ -285,26 +287,37 @@ function updateCard({ id, config }) {
     } else if (widthChanged) {
       const rows = calculateRows(currentTab.cards);
 
+      // Sync all rows (because width change can cause passive row wrapping)
       for (const row of rows) {
         if (row.length > 1) {
-          let maxHeight = 0;
-          for (const idx of row) {
-            if (idx !== cardIndex) {
-              maxHeight = Math.max(
-                maxHeight,
-                currentTab.cards[idx].config.height,
-              );
-            }
-          }
-          if (maxHeight === 0)
-            maxHeight = currentTab.cards[cardIndex].config.height;
+          // Determine the target height for this row
+          // Priority: use height of existing cards (excluding the actively resized one if in this row)
+          const isActiveCardInRow = row.includes(cardIndex);
 
-          for (const idx of row) {
-            if (currentTab.cards[idx].config.height !== maxHeight) {
-              currentTab.cards[idx].config = {
-                ...currentTab.cards[idx].config,
-                height: maxHeight,
-              };
+          let targetHeight = null;
+
+          // First, try to find height from other cards (not the actively resized one)
+          const otherCards = row.filter((idx) => idx !== cardIndex);
+          if (otherCards.length > 0) {
+            // Use the first other card's height as the row's target height
+            targetHeight = currentTab.cards[otherCards[0]].config.height;
+          } else if (isActiveCardInRow) {
+            // If this row only has the actively resized card, use its current height
+            targetHeight = currentTab.cards[cardIndex].config.height;
+          }
+
+          if (targetHeight !== null) {
+            // Sync all cards in this row to the target height
+            for (const idx of row) {
+              if (currentTab.cards[idx].config.height !== targetHeight) {
+                console.log(
+                  `[Card ${idx}] Width change caused row wrap, syncing to row height: ${targetHeight}px`,
+                );
+                currentTab.cards[idx].config = {
+                  ...currentTab.cards[idx].config,
+                  height: targetHeight,
+                };
+              }
             }
           }
         }
@@ -324,6 +337,65 @@ function removeCard(id) {
     tab.cards = tab.cards.filter((c) => c.id !== id);
     saveLayout();
   }
+}
+
+function onDragEnd(evt) {
+  console.log("[DragEnd] Syncing heights after drag", evt);
+  const currentTab = tabs.value.find((t) => t.name === activeTab.value);
+  if (!currentTab) return;
+
+  const draggedIndex = evt.newIndex;
+  const oldIndex = evt.oldIndex;
+
+  if (draggedIndex === undefined || oldIndex === undefined) {
+    saveLayout();
+    return;
+  }
+
+  // Calculate rows after the drag
+  const newRows = calculateRows(currentTab.cards);
+
+  // Sync ALL rows that have multiple cards
+  for (const row of newRows) {
+    if (row.length > 1) {
+      // Find the "dominant" height: the most common height among cards in this row
+      const heightCounts = {};
+
+      for (const idx of row) {
+        const h = currentTab.cards[idx].config.height;
+        heightCounts[h] = (heightCounts[h] || 0) + 1;
+      }
+
+      // Find the most common height (the row's "original" height)
+      let dominantHeight = null;
+      let maxCount = 0;
+
+      for (const [height, count] of Object.entries(heightCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          dominantHeight = parseInt(height);
+        }
+      }
+
+      if (dominantHeight !== null) {
+        // Sync ALL cards in this row to the dominant height
+        for (const idx of row) {
+          if (currentTab.cards[idx].config.height !== dominantHeight) {
+            const cardLabel = idx === draggedIndex ? "(dragged)" : "(in-row)";
+            console.log(
+              `[DragEnd] Card ${idx} ${cardLabel} syncing to dominant row height: ${dominantHeight}px`,
+            );
+            currentTab.cards[idx].config = {
+              ...currentTab.cards[idx].config,
+              height: dominantHeight,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  saveLayout();
 }
 
 watch(activeTab, () => {
@@ -371,9 +443,10 @@ watch(activeTab, () => {
 
     <VueDraggable
       v-model="currentTabCards"
-      :animation="200"
+      :animation="animationsEnabled ? 200 : 0"
       handle=".card-drag-handle"
       class="flex flex-wrap gap-4 mt-4"
+      @end="onDragEnd"
     >
       <ConfigurableChartCard
         v-for="card in currentTabCards"

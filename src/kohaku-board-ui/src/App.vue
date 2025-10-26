@@ -1,8 +1,10 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { initializeSliderSync } from "@/composables/useSliderSync";
+import { useAnimationPreference } from "@/composables/useAnimationPreference";
 
 const darkMode = ref(false);
+const { animationsEnabled, toggleAnimations } = useAnimationPreference();
 
 onMounted(() => {
   const savedTheme = localStorage.getItem("theme");
@@ -67,13 +69,26 @@ function updateTheme() {
             </router-link>
           </div>
         </div>
-        <button
-          @click="toggleDarkMode"
-          class="p-2 rounded-md transition-colors bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-lg"
-        >
-          <span v-if="darkMode">☀️</span>
-          <span v-else>🌙</span>
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            @click="toggleAnimations"
+            class="p-2 rounded-md transition-colors bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-lg"
+            :title="
+              animationsEnabled ? 'Disable animations' : 'Enable animations'
+            "
+          >
+            <span v-if="animationsEnabled">🎬</span>
+            <span v-else>⏸️</span>
+          </button>
+          <button
+            @click="toggleDarkMode"
+            class="p-2 rounded-md transition-colors bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-lg"
+            title="Toggle dark mode"
+          >
+            <span v-if="darkMode">☀️</span>
+            <span v-else>🌙</span>
+          </button>
+        </div>
       </div>
     </nav>
     <main class="max-w-full mx-auto px-6 py-6">
@@ -81,3 +96,28 @@ function updateTheme() {
     </main>
   </div>
 </template>
+
+<style>
+/* Global animation control */
+.no-animations,
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
+}
+
+/* Also respect system preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+</style>
