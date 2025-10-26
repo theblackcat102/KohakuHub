@@ -2,9 +2,11 @@
 import { VueDraggable } from "vue-draggable-plus";
 import ConfigurableChartCard from "@/components/ConfigurableChartCard.vue";
 import { useAnimationPreference } from "@/composables/useAnimationPreference";
+import { useHoverSync } from "@/composables/useHoverSync";
 
 const route = useRoute();
 const { animationsEnabled } = useAnimationPreference();
+const { hoverSyncEnabled, toggleHoverSync } = useHoverSync();
 const metricDataCache = ref({});
 const availableMetrics = ref([]);
 
@@ -847,6 +849,23 @@ function onDragEnd(evt) {
         <template #label>
           <div class="flex items-center gap-2">
             <span>{{ tab.name }}</span>
+            <!-- Hover sync toggle button for active tab -->
+            <el-button
+              v-if="tab.name === activeTab && !isEditingTabs"
+              size="small"
+              circle
+              @click.stop="toggleHoverSync"
+              :title="
+                hoverSyncEnabled ? 'Disable Hover Sync' : 'Enable Hover Sync'
+              "
+              :type="hoverSyncEnabled ? 'primary' : 'default'"
+            >
+              <i
+                :class="
+                  hoverSyncEnabled ? 'i-ep-connection' : 'i-ep-connection'
+                "
+              ></i>
+            </el-button>
             <!-- Global settings button for active tab -->
             <el-button
               v-if="tab.name === activeTab && !isEditingTabs"
@@ -919,6 +938,8 @@ function onDragEnd(evt) {
           ...card.config,
           height: isMobile ? defaultCardHeight : card.config.height,
         }"
+        :tab-name="activeTab"
+        :hover-sync-enabled="hoverSyncEnabled"
         @update:config="updateCard"
         @remove="removeCard(card.id)"
       />

@@ -2,8 +2,10 @@
 import { ref, reactive, onMounted, watch, onUnmounted, computed } from "vue";
 import Plotly from "plotly.js-dist-min";
 import { useAnimationPreference } from "@/composables/useAnimationPreference";
+import { useHoverSync } from "@/composables/useHoverSync";
 
 const { animationsEnabled } = useAnimationPreference();
+const { registerChart, unregisterChart } = useHoverSync();
 
 const emit = defineEmits([
   "update:smoothingMode",
@@ -50,10 +52,24 @@ const props = defineProps({
     type: Number,
     default: undefined,
   },
+  // Hover sync props
+  tabName: {
+    type: String,
+    default: "",
+  },
+  chartId: {
+    type: String,
+    required: true,
+  },
+  hoverSyncEnabled: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const plotDiv = ref(null);
 let myResizeObserver = null;
+let unregisterHoverSync = null;
 const showConfigModal = ref(false);
 const modalMouseDownTarget = ref(null);
 
@@ -94,6 +110,11 @@ onMounted(() => {
   createPlot();
   setupResizeObserver();
   watchThemeChanges();
+
+  // Use nextTick to ensure plotDiv is fully initialized after createPlot
+  nextTick(() => {
+    setupHoverSync();
+  });
 });
 
 onUpdated(() => {
@@ -104,6 +125,9 @@ onUnmounted(() => {
   console.log("[LinePlot] Unmounting, disconnecting ResizeObserver");
   if (myResizeObserver) {
     myResizeObserver.disconnect();
+  }
+  if (unregisterHoverSync) {
+    unregisterHoverSync();
   }
 });
 
@@ -567,6 +591,53 @@ function watchThemeChanges() {
   });
 
   onUnmounted(() => observer.disconnect());
+}
+
+function setupHoverSync() {
+  console.log(`[LinePlot] setupHoverSync called for chart ${props.chartId}`);
+  console.log(`[LinePlot] Props:`, {
+    hoverSyncEnabled: props.hoverSyncEnabled,
+    tabName: props.tabName,
+    chartId: props.chartId,
+    xaxis: props.xaxis,
+    hasPlotDiv: !!plotDiv.value,
+  });
+
+  if (!props.hoverSyncEnabled) {
+    console.log(
+      `[LinePlot] Hover sync disabled via prop, skipping registration`,
+    );
+    return;
+  }
+
+  if (!props.tabName) {
+    console.log(`[LinePlot] No tabName provided, skipping registration`);
+    return;
+  }
+
+  if (!plotDiv.value) {
+    console.log(`[LinePlot] plotDiv not available yet, skipping registration`);
+    return;
+  }
+
+  // Function to get current x-axis type from props
+  const getXAxisType = () => {
+    console.log(`[LinePlot] getXAxisType called, returning:`, props.xaxis);
+    return props.xaxis;
+  };
+
+  // Register this chart for hover synchronization
+  console.log(`[LinePlot] Calling registerChart for ${props.chartId}`);
+  unregisterHoverSync = registerChart(
+    props.tabName,
+    props.chartId,
+    plotDiv.value,
+    getXAxisType,
+  );
+
+  console.log(
+    `[LinePlot] Successfully registered for hover sync: ${props.chartId} in tab ${props.tabName}`,
+  );
 }
 
 defineExpose({

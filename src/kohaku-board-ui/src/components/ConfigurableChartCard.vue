@@ -10,11 +10,20 @@ const props = defineProps({
   availableMetrics: Array,
   initialConfig: Object,
   experimentId: String,
+  tabName: String,
+  hoverSyncEnabled: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const emit = defineEmits(["update:config", "remove"]);
 
 console.log(`[${props.cardId}] Component created`);
+console.log(`[${props.cardId}] Hover sync props:`, {
+  tabName: props.tabName,
+  hoverSyncEnabled: props.hoverSyncEnabled,
+});
 
 // Direct reference to props
 const cfg = props.initialConfig;
@@ -488,6 +497,9 @@ function startResizeRight(e) {
           :smoothing-mode="props.initialConfig.smoothingMode"
           :smoothing-value="props.initialConfig.smoothingValue"
           :downsample-rate="props.initialConfig.downsampleRate"
+          :tab-name="props.tabName"
+          :chart-id="props.cardId"
+          :hover-sync-enabled="props.hoverSyncEnabled"
           @update:smoothing-mode="(v) => emitConfig({ smoothingMode: v })"
           @update:smoothing-value="(v) => emitConfig({ smoothingValue: v })"
           @update:downsample-rate="(v) => emitConfig({ downsampleRate: v })"
