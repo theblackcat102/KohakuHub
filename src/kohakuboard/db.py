@@ -1,7 +1,7 @@
 """Database models for KohakuBoard.
 
-Separate from KohakuHub for licensing compliance (AGPL-3.0).
-Can be optionally integrated with KohakuHub by connecting to same database.
+Uses EXACTLY the same schema as KohakuHub for User, Session, Token, UserOrganization.
+This ensures future integration with KohakuHub by sharing the same database.
 """
 
 from datetime import datetime, timezone
@@ -10,6 +10,7 @@ from functools import partial
 from peewee import (
     AutoField,
     BigIntegerField,
+    BlobField,
     BooleanField,
     CharField,
     DateTimeField,
@@ -51,10 +52,13 @@ def init_db(backend: str, database_url: str):
         db_path = database_url.replace("sqlite:///", "")
         db = SqliteDatabase(db_path, pragmas={"foreign_keys": 1})
 
+    # Bind models to db
+    BaseModel._meta.database = db
+
     # Create tables
     with db:
         db.create_tables(
-            [User, Session, Token, Board],
+            [User, Session, Token, UserOrganization, Board],
             safe=True,
         )
 
@@ -69,25 +73,47 @@ class BaseModel(Model):
 
 
 class User(BaseModel):
-    """User model for authentication
+    """Unified User/Organization model - EXACTLY same as KohakuHub
 
-    Can coexist with KohakuHub User table (same table name).
-    When integrated with KohakuHub, both systems use the same users.
+    When is_org=False: Regular user with email/password
+    When is_org=True: Organization (no email/password required)
     """
 
     id = AutoField()
     username = CharField(unique=True, index=True)
-    email = CharField(unique=True, index=True)
-    password_hash = CharField()
+    normalized_name = CharField(unique=True, index=True)
+    is_org = BooleanField(default=False, index=True)
+
+    # User-specific fields (nullable for orgs)
+    email = CharField(unique=True, index=True, null=True)
+    password_hash = CharField(null=True)
+    email_verified = BooleanField(default=False)
     is_active = BooleanField(default=True)
+
+    # Separate quotas for private and public repositories
+    private_quota_bytes = BigIntegerField(null=True)
+    public_quota_bytes = BigIntegerField(null=True)
+    private_used_bytes = BigIntegerField(default=0)
+    public_used_bytes = BigIntegerField(default=0)
+
+    # Profile fields
+    full_name = CharField(null=True)
+    bio = TextField(null=True)
+    description = TextField(null=True)
+    website = CharField(null=True)
+    social_media = TextField(null=True)
+
+    # Avatar
+    avatar = BlobField(null=True)
+    avatar_updated_at = DateTimeField(null=True)
     created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
 
     class Meta:
-        table_name = "user"  # Same as KohakuHub for compatibility
+        table_name = "user"
 
 
 class Session(BaseModel):
-    """User session for web authentication"""
+    """User session - EXACTLY same as KohakuHub"""
 
     id = AutoField()
     session_id = CharField(unique=True, index=True)
@@ -101,7 +127,7 @@ class Session(BaseModel):
 
 
 class Token(BaseModel):
-    """API token for programmatic access"""
+    """API token - EXACTLY same as KohakuHub"""
 
     id = AutoField()
     user = ForeignKeyField(User, backref="tokens", on_delete="CASCADE", index=True)
@@ -114,23 +140,45 @@ class Token(BaseModel):
         table_name = "token"
 
 
-class Board(BaseModel):
-    """Board metadata for remote hosting
+class UserOrganization(BaseModel):
+    """User-Organization membership - EXACTLY same as KohakuHub
 
-    Stores information about uploaded training runs.
+    Links regular users (is_org=False) to organizations (is_org=True).
+    """
+
+    id = AutoField()
+    user = ForeignKeyField(
+        User, backref="org_memberships", on_delete="CASCADE", index=True
+    )
+    organization = ForeignKeyField(
+        User, backref="members", on_delete="CASCADE", index=True
+    )
+    role = CharField(default="member")  # visitor, member, admin, super-admin
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        table_name = "userorganization"
+        indexes = ((("user", "organization"), True),)
+
+
+class Board(BaseModel):
+    """Board metadata for KohakuBoard
+
+    Stores information about training runs/boards.
+    Can be owned by users OR organizations (owner is User with is_org flag).
     """
 
     id = AutoField()
     run_id = CharField(unique=True, index=True)  # Globally unique identifier
-    name = CharField()  # Human-readable name
+    name = CharField()
     project_name = CharField(index=True)  # User-defined project grouping
     owner = ForeignKeyField(User, backref="boards", on_delete="CASCADE", index=True)
-    private = BooleanField(default=True)  # Public/private visibility
+    private = BooleanField(default=True)
 
     # Storage metadata
-    config = TextField(null=True)  # JSON string of config dict
-    backend = CharField(default="duckdb")  # "duckdb" or "parquet"
-    storage_path = CharField()  # Relative path: users/{username}/{project}/{run_id}
+    config = TextField(null=True)  # JSON string
+    backend = CharField(default="duckdb")
+    storage_path = CharField()  # Relative: users/{username}/{project}/{run_id}
     total_size_bytes = BigIntegerField(default=0)
 
     # Timestamps
@@ -140,6 +188,4 @@ class Board(BaseModel):
 
     class Meta:
         table_name = "board"
-        indexes = (
-            (("owner_id", "project_name"), False),
-        )  # Index for fast project queries
+        indexes = ((("owner", "project_name"), False),)
