@@ -1,6 +1,6 @@
 kohakuboard/
 !src/kohakuboard
-*.backup.*
+*.backup*
 .DS_store
 *_old.*
 *_refactor.*
