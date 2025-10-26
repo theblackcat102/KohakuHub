@@ -5,6 +5,12 @@ import { useAnimationPreference } from "@/composables/useAnimationPreference";
 
 const { animationsEnabled } = useAnimationPreference();
 
+const emit = defineEmits([
+  "update:smoothingMode",
+  "update:smoothingValue",
+  "update:downsampleRate",
+]);
+
 const props = defineProps({
   data: {
     type: Array,
@@ -31,22 +37,57 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Config props (can be controlled by parent)
+  smoothingMode: {
+    type: String,
+    default: undefined,
+  },
+  smoothingValue: {
+    type: Number,
+    default: undefined,
+  },
+  downsampleRate: {
+    type: Number,
+    default: undefined,
+  },
 });
 
 const plotDiv = ref(null);
 let myResizeObserver = null;
 const showConfigModal = ref(false);
 const modalMouseDownTarget = ref(null);
+
+// Internal config (can be overridden by props)
 const config = reactive({
   xRange: { auto: true, min: null, max: null },
   yRange: { auto: true, min: null, max: null },
-  smoothingMode: "disabled",
-  smoothingValue: 0.9,
-  downsampleRate: 1,
+  smoothingMode: props.smoothingMode ?? "disabled",
+  smoothingValue: props.smoothingValue ?? 0.9,
+  downsampleRate: props.downsampleRate ?? -1, // -1 = adaptive
   showOriginal: true,
   showMarkers: false,
   lineWidth: 1.5,
 });
+
+// Watch for prop changes and update internal config
+watch(
+  () => props.smoothingMode,
+  (val) => {
+    if (val !== undefined) config.smoothingMode = val;
+  },
+);
+watch(
+  () => props.smoothingValue,
+  (val) => {
+    if (val !== undefined) config.smoothingValue = val;
+  },
+);
+watch(
+  () => props.downsampleRate,
+  (val) => {
+    if (val !== undefined) config.downsampleRate = val;
+  },
+);
 
 onMounted(() => {
   console.log("[LinePlot] Mounted");
@@ -90,7 +131,17 @@ watch(
 
 watch(
   config,
-  () => {
+  (newConfig, oldConfig) => {
+    // Emit changes to parent for persistence
+    if (newConfig.smoothingMode !== oldConfig?.smoothingMode) {
+      emit("update:smoothingMode", newConfig.smoothingMode);
+    }
+    if (newConfig.smoothingValue !== oldConfig?.smoothingValue) {
+      emit("update:smoothingValue", newConfig.smoothingValue);
+    }
+    if (newConfig.downsampleRate !== oldConfig?.downsampleRate) {
+      emit("update:downsampleRate", newConfig.downsampleRate);
+    }
     createPlot();
   },
   { deep: true },
@@ -162,6 +213,17 @@ function applySmoothing(y, mode, value) {
 }
 
 function downsampleData(x, y, rate) {
+  // Adaptive downsampling if rate is -1
+  if (rate === -1) {
+    // Target: ~5000 points for smooth rendering
+    const targetPoints = 5000;
+    if (x.length <= targetPoints) {
+      return { x, y }; // No downsampling needed
+    }
+    // Calculate adaptive rate
+    rate = Math.ceil(x.length / targetPoints);
+  }
+
   if (rate <= 1) return { x, y };
 
   const newX = [];

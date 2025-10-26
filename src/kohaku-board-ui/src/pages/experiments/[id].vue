@@ -15,6 +15,35 @@ const isEditingTabs = ref(false);
 const isUpdating = ref(false);
 const showAddTabDialog = ref(false);
 const newTabName = ref("");
+const showGlobalSettings = ref(false);
+
+// Pagination for WebGL context limit
+const currentPage = ref(0);
+const isMobile = ref(window.innerWidth <= 900); // Match CSS breakpoint
+
+// Realtime responsive detection
+const mediaQuery = window.matchMedia("(max-width: 900px)");
+const handleResize = (e) => {
+  isMobile.value = e.matches;
+  currentPage.value = 0; // Reset to first page when switching mobile/desktop
+};
+
+onMounted(() => {
+  mediaQuery.addEventListener("change", handleResize);
+});
+
+onUnmounted(() => {
+  mediaQuery.removeEventListener("change", handleResize);
+});
+
+// Global settings (apply to all cards in current tab)
+const globalSettings = ref({
+  xAxis: "global_step",
+  smoothing: "disabled",
+  smoothingValue: 0.9,
+  histogramMode: "flow",
+  downsampleRate: -1, // -1 = adaptive
+});
 
 const storageKey = computed(() => `experiment-layout-${route.params.id}`);
 
@@ -43,71 +72,197 @@ onMounted(async () => {
       tabs.value = layout.tabs;
       activeTab.value = layout.activeTab;
       nextCardId.value = layout.nextCardId;
+
+      // Load global settings if saved
+      if (layout.globalSettings) {
+        globalSettings.value = layout.globalSettings;
+      }
     } else {
       // Default: one card per scalar metric + examples of other types
       const cards = [];
       let cardId = 1;
 
-      // Scalar metrics (exclude step/global_step from y-axis, use as x-axis only)
+      // Metrics that should NOT have default charts (only for axis selection)
+      const axisOnlyMetrics = new Set([
+        "step",
+        "global_step",
+        "timestamp",
+        "walltime",
+        "relative_walltime",
+      ]);
+
+      // Group metrics by namespace (before "/" is namespace)
+      const metricsByNamespace = new Map();
+      metricsByNamespace.set("", []); // Main namespace
+
       for (const metric of summary.available_data.scalars) {
-        if (metric !== "step" && metric !== "global_step") {
-          cards.push({
+        // Skip axis-only metrics - they shouldn't get default charts
+        if (axisOnlyMetrics.has(metric)) {
+          continue;
+        }
+
+        const slashIdx = metric.indexOf("/");
+        if (slashIdx > 0) {
+          // Has namespace: "train/loss" -> namespace="train", name="loss"
+          const namespace = metric.substring(0, slashIdx);
+          if (!metricsByNamespace.has(namespace)) {
+            metricsByNamespace.set(namespace, []);
+          }
+          metricsByNamespace.get(namespace).push(metric);
+        } else {
+          // No namespace, goes to main
+          metricsByNamespace.get("").push(metric);
+        }
+      }
+
+      // Create cards for main namespace
+      for (const metric of metricsByNamespace.get("")) {
+        cards.push({
+          id: `card-${cardId++}`,
+          config: {
+            type: "line",
+            title: metric,
+            widthPercent: 33,
+            height: 400,
+            xMetric: "step", // Will be updated to global_step if used
+            yMetrics: [metric],
+          },
+        });
+      }
+
+      tabs.value[0].cards = cards;
+
+      // Create tabs for each namespace (scalars + tables + histograms)
+      const tabsByNamespace = new Map();
+
+      // Add scalar metrics to tabs
+      for (const [namespace, metrics] of metricsByNamespace.entries()) {
+        if (namespace !== "") {
+          if (!tabsByNamespace.has(namespace)) {
+            tabsByNamespace.set(namespace, []);
+          }
+          for (const metric of metrics) {
+            tabsByNamespace.get(namespace).push({
+              id: `card-${cardId++}`,
+              config: {
+                type: "line",
+                title: metric,
+                widthPercent: 33,
+                height: 400,
+                xMetric: "step",
+                yMetrics: [metric],
+              },
+            });
+          }
+        }
+      }
+
+      // Add tables to namespace tabs
+      for (const tableName of summary.available_data.tables) {
+        const slashIdx = tableName.indexOf("/");
+        if (slashIdx > 0) {
+          const namespace = tableName.substring(0, slashIdx);
+          if (!tabsByNamespace.has(namespace)) {
+            tabsByNamespace.set(namespace, []);
+          }
+          tabsByNamespace.get(namespace).push({
             id: `card-${cardId++}`,
             config: {
-              type: "line",
-              title: metric,
-              widthPercent: 33,
+              type: "table",
+              title: tableName,
+              widthPercent: 50,
               height: 400,
-              xMetric: "step", // Will be updated to global_step if used
-              yMetrics: [metric],
+              tableName: tableName,
+              currentStep: 0,
             },
           });
         }
       }
 
-      // Add media example
-      if (summary.available_data.media.length > 0) {
-        cards.push({
-          id: `card-${cardId++}`,
-          config: {
-            type: "media",
-            title: summary.available_data.media[0],
-            widthPercent: 33,
-            height: 400,
-            mediaName: summary.available_data.media[0],
-            currentStep: 0,
-          },
-        });
+      // Add histograms to namespace tabs
+      for (const histName of summary.available_data.histograms) {
+        const slashIdx = histName.indexOf("/");
+        if (slashIdx > 0) {
+          const namespace = histName.substring(0, slashIdx);
+          if (!tabsByNamespace.has(namespace)) {
+            tabsByNamespace.set(namespace, []);
+          }
+
+          // Default to flow mode for gradients/params
+          const defaultMode =
+            namespace === "gradients" || namespace === "params"
+              ? "flow"
+              : "single";
+
+          tabsByNamespace.get(namespace).push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "histogram",
+              title: histName,
+              widthPercent: 33,
+              height: 400,
+              histogramName: histName,
+              currentStep: 0,
+              histogramMode: defaultMode, // Add mode to config
+            },
+          });
+        }
       }
 
-      // Add histogram example
-      if (summary.available_data.histograms.length > 0) {
-        cards.push({
-          id: `card-${cardId++}`,
-          config: {
-            type: "histogram",
-            title: summary.available_data.histograms[0],
-            widthPercent: 33,
-            height: 400,
-            histogramName: summary.available_data.histograms[0],
-            currentStep: 0,
-          },
-        });
+      // Create tabs from collected cards
+      for (const [namespace, namespaceCards] of tabsByNamespace.entries()) {
+        if (namespaceCards.length > 0) {
+          tabs.value.push({ name: namespace, cards: namespaceCards });
+        }
       }
 
-      // Add table example
-      if (summary.available_data.tables.length > 0) {
-        cards.push({
-          id: `card-${cardId++}`,
-          config: {
-            type: "table",
-            title: summary.available_data.tables[0],
-            widthPercent: 50,
-            height: 400,
-            tableName: summary.available_data.tables[0],
-            currentStep: 0,
-          },
-        });
+      // Media/tables/histograms without namespace go to main tab
+      for (const mediaName of summary.available_data.media) {
+        if (!mediaName.includes("/")) {
+          cards.push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "media",
+              title: mediaName,
+              widthPercent: 33,
+              height: 400,
+              mediaName: mediaName,
+              currentStep: 0,
+            },
+          });
+        }
+      }
+
+      for (const tableName of summary.available_data.tables) {
+        if (!tableName.includes("/")) {
+          cards.push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "table",
+              title: tableName,
+              widthPercent: 50,
+              height: 400,
+              tableName: tableName,
+              currentStep: 0,
+            },
+          });
+        }
+      }
+
+      for (const histName of summary.available_data.histograms) {
+        if (!histName.includes("/")) {
+          cards.push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "histogram",
+              title: histName,
+              widthPercent: 33,
+              height: 400,
+              histogramName: histName,
+              currentStep: 0,
+            },
+          });
+        }
       }
 
       tabs.value[0].cards = cards;
@@ -156,81 +311,105 @@ async function determineDefaultXAxis() {
 }
 
 async function fetchMetricsForTab() {
-  const tab = tabs.value.find((t) => t.name === activeTab.value);
-  if (!tab) return;
+  try {
+    const tab = tabs.value.find((t) => t.name === activeTab.value);
+    if (!tab) return;
 
-  const neededMetrics = new Set();
-  for (const card of tab.cards) {
-    // Only fetch for line plot cards
-    if (card.config.type === "line" || !card.config.type) {
-      if (card.config.xMetric) neededMetrics.add(card.config.xMetric);
-      if (card.config.yMetrics) {
-        for (const yMetric of card.config.yMetrics) {
-          neededMetrics.add(yMetric);
+    // Metrics that are computed on frontend (don't fetch from API)
+    const computedMetrics = new Set(["walltime", "relative_walltime"]);
+
+    const neededMetrics = new Set();
+    for (const card of tab.cards) {
+      // Only fetch for line plot cards
+      if (card.config.type === "line" || !card.config.type) {
+        if (card.config.xMetric && !computedMetrics.has(card.config.xMetric)) {
+          neededMetrics.add(card.config.xMetric);
         }
-      }
-    }
-  }
-
-  // Fetch missing metrics
-  for (const metric of neededMetrics) {
-    if (!metricDataCache.value[metric]) {
-      try {
-        const response = await fetch(
-          `/api/experiments/${route.params.id}/scalars/${metric}`,
-        );
-        const result = await response.json();
-
-        // Convert step-value pairs to sparse array
-        const sparseArray = new Array(
-          result.data[result.data.length - 1]?.step + 1 || 0,
-        ).fill(null);
-        for (const item of result.data) {
-          sparseArray[item.step] = item.value;
-        }
-
-        metricDataCache.value[metric] = sparseArray;
-
-        // Also store timestamp data if available
-        if (result.data[0]?.timestamp) {
-          const timestampArray = new Array(sparseArray.length).fill(null);
-          for (const item of result.data) {
-            timestampArray[item.step] = item.timestamp;
+        if (card.config.yMetrics) {
+          for (const yMetric of card.config.yMetrics) {
+            if (!computedMetrics.has(yMetric)) {
+              neededMetrics.add(yMetric);
+            }
           }
-          metricDataCache.value[`${metric}_timestamp`] = timestampArray;
         }
-      } catch (error) {
-        console.error(`Failed to fetch metric ${metric}:`, error);
       }
     }
-  }
 
-  // Calculate walltime and relative_walltime from timestamps
-  if (metricDataCache.value.timestamp) {
-    const timestamps = metricDataCache.value.timestamp;
-    const walltime = [];
-    const relativeWalltime = [];
-    let startTime = null;
+    // Fetch missing metrics
+    for (const metric of neededMetrics) {
+      if (!metricDataCache.value[metric]) {
+        try {
+          // URL-encode metric name (e.g., "train/loss" -> "train%2Floss")
+          const encodedMetric = encodeURIComponent(metric);
+          const response = await fetch(
+            `/api/experiments/${route.params.id}/scalars/${encodedMetric}`,
+          );
 
-    for (let i = 0; i < timestamps.length; i++) {
-      if (timestamps[i]) {
-        const ts = new Date(timestamps[i]).getTime() / 1000; // Convert to seconds
-        walltime[i] = ts;
+          if (!response.ok) {
+            console.warn(`Failed to fetch ${metric}: ${response.status}`);
+            // Set empty array so card can still render (just shows "no data")
+            metricDataCache.value[metric] = [];
+            continue;
+          }
 
-        if (startTime === null) {
-          startTime = ts;
-          relativeWalltime[i] = 0;
+          const result = await response.json();
+
+          // Convert step-value pairs to sparse array
+          const sparseArray = new Array(
+            result.data[result.data.length - 1]?.step + 1 || 0,
+          ).fill(null);
+          for (const item of result.data) {
+            sparseArray[item.step] = item.value;
+          }
+
+          metricDataCache.value[metric] = sparseArray;
+
+          // Also store timestamp data if available
+          if (result.data[0]?.timestamp) {
+            const timestampArray = new Array(sparseArray.length).fill(null);
+            for (const item of result.data) {
+              timestampArray[item.step] = item.timestamp;
+            }
+            metricDataCache.value[`${metric}_timestamp`] = timestampArray;
+          }
+        } catch (error) {
+          console.error(`Failed to fetch metric ${metric}:`, error);
+          // Set empty array so card can still render
+          metricDataCache.value[metric] = [];
+        }
+      }
+    }
+
+    // Calculate walltime and relative_walltime from timestamps
+    if (metricDataCache.value.timestamp) {
+      const timestamps = metricDataCache.value.timestamp;
+      const walltime = [];
+      const relativeWalltime = [];
+      let startTime = null;
+
+      for (let i = 0; i < timestamps.length; i++) {
+        if (timestamps[i]) {
+          const ts = new Date(timestamps[i]).getTime() / 1000; // Convert to seconds
+          walltime[i] = ts;
+
+          if (startTime === null) {
+            startTime = ts;
+            relativeWalltime[i] = 0;
+          } else {
+            relativeWalltime[i] = ts - startTime;
+          }
         } else {
-          relativeWalltime[i] = ts - startTime;
+          walltime[i] = null;
+          relativeWalltime[i] = null;
         }
-      } else {
-        walltime[i] = null;
-        relativeWalltime[i] = null;
       }
-    }
 
-    metricDataCache.value.walltime = walltime;
-    metricDataCache.value.relative_walltime = relativeWalltime;
+      metricDataCache.value.walltime = walltime;
+      metricDataCache.value.relative_walltime = relativeWalltime;
+    }
+  } catch (error) {
+    console.error("Error in fetchMetricsForTab:", error);
+    // Don't throw - allow page to render with partial data
   }
 }
 
@@ -256,11 +435,63 @@ const currentTabCards = computed({
   },
 });
 
+// Pagination
+const webglChartsPerPage = computed(() => (isMobile.value ? 2 : 12));
+const defaultCardHeight = computed(() => (isMobile.value ? 280 : 400));
+
+const paginatedCards = computed(() => {
+  const allCards = currentTabCards.value;
+
+  // Count WebGL charts (line and histogram)
+  let webglCount = 0;
+  let pageCards = [];
+  let currentPageCards = [];
+
+  for (const card of allCards) {
+    const isWebGL =
+      card.config.type === "line" || card.config.type === "histogram";
+
+    if (isWebGL) {
+      webglCount++;
+      if (webglCount > webglChartsPerPage.value) {
+        pageCards.push(currentPageCards);
+        currentPageCards = [card];
+        webglCount = 1;
+      } else {
+        currentPageCards.push(card);
+      }
+    } else {
+      currentPageCards.push(card);
+    }
+  }
+
+  if (currentPageCards.length > 0) {
+    pageCards.push(currentPageCards);
+  }
+
+  return pageCards;
+});
+
+const totalPages = computed(() => paginatedCards.value.length);
+
+const visibleCards = computed(() => {
+  if (paginatedCards.value.length === 0) return [];
+  const page = Math.min(currentPage.value, paginatedCards.value.length - 1);
+  return paginatedCards.value[page] || [];
+});
+
+watch(activeTab, () => {
+  currentPage.value = 0;
+  fetchMetricsForTab();
+  saveLayout();
+});
+
 function saveLayout() {
   const layout = {
     tabs: tabs.value,
     activeTab: activeTab.value,
     nextCardId: nextCardId.value,
+    globalSettings: globalSettings.value,
   };
   localStorage.setItem(storageKey.value, JSON.stringify(layout));
 }
@@ -328,7 +559,7 @@ function calculateRows(cards) {
   return rows;
 }
 
-function updateCard({ id, config }) {
+function updateCard({ id, config, syncAll, realtime }) {
   if (!config) return;
 
   const currentTab = tabs.value.find((t) => t.name === activeTab.value);
@@ -340,6 +571,41 @@ function updateCard({ id, config }) {
   const oldConfig = currentTab.cards[cardIndex].config;
   const heightChanged = oldConfig.height !== config.height;
   const widthChanged = oldConfig.widthPercent !== config.widthPercent;
+
+  // If syncAll flag is set (shift+resize), update ALL cards in tab
+  if (syncAll) {
+    // During realtime drag, skip if already updating to prevent jank
+    if (realtime && isUpdating.value) return;
+
+    // Only set updating flag for final update, not realtime
+    if (!realtime) {
+      if (isUpdating.value) return;
+      isUpdating.value = true;
+    }
+
+    try {
+      for (let i = 0; i < currentTab.cards.length; i++) {
+        const updates = {};
+        if (heightChanged) updates.height = config.height;
+        if (widthChanged) updates.widthPercent = config.widthPercent;
+
+        if (Object.keys(updates).length > 0) {
+          currentTab.cards[i].config = {
+            ...currentTab.cards[i].config,
+            ...updates,
+          };
+        }
+      }
+    } finally {
+      if (!realtime) {
+        nextTick(() => {
+          isUpdating.value = false;
+          saveLayout();
+        });
+      }
+    }
+    return;
+  }
 
   currentTab.cards[cardIndex].config = config;
 
@@ -416,6 +682,67 @@ function removeCard(id) {
   }
 }
 
+// Global settings functions
+const hasCustomSettings = computed(() => {
+  const tab = tabs.value.find((t) => t.name === activeTab.value);
+  if (!tab) return false;
+
+  // Check if any card has custom settings different from global
+  return tab.cards.some((card) => {
+    if (card.config.type === "line") {
+      return (
+        card.config.xMetric !== globalSettings.value.xAxis ||
+        (card.config.smoothingMode !== undefined &&
+          card.config.smoothingMode !== globalSettings.value.smoothing)
+      );
+    }
+    if (card.config.type === "histogram") {
+      return (
+        card.config.histogramMode !== undefined &&
+        card.config.histogramMode !== globalSettings.value.histogramMode
+      );
+    }
+    return false;
+  });
+});
+
+function applyGlobalSettings() {
+  const tabIndex = tabs.value.findIndex((t) => t.name === activeTab.value);
+  if (tabIndex === -1) return;
+
+  // Create completely new tab object to force Vue reactivity
+  const newCards = tabs.value[tabIndex].cards.map((card) => {
+    const newConfig = { ...card.config };
+
+    if (card.config.type === "line") {
+      newConfig.xMetric = globalSettings.value.xAxis;
+      newConfig.smoothingMode = globalSettings.value.smoothing;
+      newConfig.smoothingValue = globalSettings.value.smoothingValue;
+      newConfig.downsampleRate = globalSettings.value.downsampleRate;
+    } else if (card.config.type === "histogram") {
+      newConfig.histogramMode = globalSettings.value.histogramMode;
+    }
+
+    return {
+      ...card,
+      config: newConfig,
+    };
+  });
+
+  // Replace entire tabs array to trigger reactivity
+  tabs.value = [
+    ...tabs.value.slice(0, tabIndex),
+    { ...tabs.value[tabIndex], cards: newCards },
+    ...tabs.value.slice(tabIndex + 1),
+  ];
+
+  nextTick(() => {
+    saveLayout();
+    showGlobalSettings.value = false;
+    ElMessage.success("Applied global settings to all cards");
+  });
+}
+
 function onDragEnd(evt) {
   console.log("[DragEnd] Syncing heights after drag", evt);
   const currentTab = tabs.value.find((t) => t.name === activeTab.value);
@@ -474,25 +801,39 @@ function onDragEnd(evt) {
 
   saveLayout();
 }
-
-watch(activeTab, () => {
-  fetchMetricsForTab();
-  saveLayout();
-});
 </script>
 
 <template>
   <div class="container-main">
-    <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-3xl font-bold">Experiment: {{ route.params.id }}</h1>
-      <div class="flex gap-2">
-        <el-button type="primary" size="small" @click="addCard"
-          >Add Chart</el-button
-        >
-        <el-button size="small" @click="addTab">Add Tab</el-button>
-        <el-button size="small" @click="isEditingTabs = !isEditingTabs">
-          {{ isEditingTabs ? "Done Editing" : "Edit Tabs" }}
-        </el-button>
+    <div class="mb-6">
+      <!-- Desktop layout -->
+      <div v-if="!isMobile" class="flex items-center justify-between">
+        <h1 class="text-3xl font-bold">Experiment: {{ route.params.id }}</h1>
+        <div class="flex gap-2">
+          <el-button type="primary" size="small" @click="addCard"
+            >Add Chart</el-button
+          >
+          <el-button size="small" @click="addTab">Add Tab</el-button>
+          <el-button size="small" @click="isEditingTabs = !isEditingTabs">
+            {{ isEditingTabs ? "Done Editing" : "Edit Tabs" }}
+          </el-button>
+        </div>
+      </div>
+
+      <!-- Mobile layout -->
+      <div v-else>
+        <h1 class="text-xl font-bold mb-3">
+          Experiment: {{ route.params.id }}
+        </h1>
+        <div class="flex gap-2">
+          <el-button type="primary" size="small" @click="addCard" class="flex-1"
+            >Add Chart</el-button
+          >
+          <el-button size="small" @click="addTab">Add Tab</el-button>
+          <el-button size="small" @click="isEditingTabs = !isEditingTabs">
+            {{ isEditingTabs ? "Done" : "Edit" }}
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -504,35 +845,80 @@ watch(activeTab, () => {
         :name="tab.name"
       >
         <template #label>
-          <span>{{ tab.name }}</span>
-          <el-button
-            v-if="isEditingTabs && tabs.length > 1"
-            icon="Close"
-            size="small"
-            text
-            type="danger"
-            @click.stop="removeTab(tab.name)"
-            class="ml-2"
-          />
+          <div class="flex items-center gap-2">
+            <span>{{ tab.name }}</span>
+            <!-- Global settings button for active tab -->
+            <el-button
+              v-if="tab.name === activeTab && !isEditingTabs"
+              size="small"
+              circle
+              @click.stop="showGlobalSettings = true"
+              title="Global Tab Settings"
+            >
+              <i class="i-ep-setting"></i>
+            </el-button>
+            <!-- Remove tab button (edit mode) -->
+            <el-button
+              v-if="isEditingTabs && tabs.length > 1"
+              icon="Close"
+              size="small"
+              text
+              type="danger"
+              @click.stop="removeTab(tab.name)"
+            />
+          </div>
         </template>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- Pagination controls (if needed) -->
+    <div
+      v-if="totalPages > 1"
+      class="flex items-center justify-center gap-4 mb-4"
+    >
+      <el-button
+        size="small"
+        :disabled="currentPage === 0"
+        @click="currentPage--"
+        icon="ArrowLeft"
+      >
+        Previous
+      </el-button>
+      <span class="text-sm text-gray-600 dark:text-gray-400">
+        Page {{ currentPage + 1 }} / {{ totalPages }}
+        <span class="text-xs ml-2">
+          ({{ visibleCards.length }} charts, max {{ webglChartsPerPage }} WebGL
+          per page)
+        </span>
+      </span>
+      <el-button
+        size="small"
+        :disabled="currentPage >= totalPages - 1"
+        @click="currentPage++"
+        icon="ArrowRight"
+      >
+        Next
+      </el-button>
+    </div>
 
     <VueDraggable
       v-model="currentTabCards"
       :animation="animationsEnabled ? 200 : 0"
       handle=".card-drag-handle"
-      class="flex flex-wrap gap-4 mt-4"
+      class="flex flex-wrap gap-4"
       @end="onDragEnd"
     >
       <ConfigurableChartCard
-        v-for="card in currentTabCards"
+        v-for="card in visibleCards"
         :key="card.id"
         :card-id="card.id"
         :experiment-id="route.params.id"
         :sparse-data="sparseData"
         :available-metrics="availableMetrics"
-        :initial-config="card.config"
+        :initial-config="{
+          ...card.config,
+          height: isMobile ? defaultCardHeight : card.config.height,
+        }"
         @update:config="updateCard"
         @remove="removeCard(card.id)"
       />
@@ -559,6 +945,89 @@ watch(activeTab, () => {
       <template #footer>
         <el-button @click="showAddTabDialog = false">Cancel</el-button>
         <el-button type="primary" @click="confirmAddTab">Add</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Global Tab Settings Dialog -->
+    <el-dialog
+      v-model="showGlobalSettings"
+      title="Global Tab Settings"
+      width="600px"
+    >
+      <el-alert
+        v-if="hasCustomSettings"
+        type="warning"
+        :closable="false"
+        class="mb-4"
+      >
+        <template #title> Some cards have custom settings </template>
+        Click "Apply to All Cards" below to reset all cards to these global
+        settings
+      </el-alert>
+
+      <el-form label-width="160px">
+        <el-divider content-position="left">Line Chart Settings</el-divider>
+
+        <el-form-item label="X-Axis">
+          <el-select v-model="globalSettings.xAxis" class="w-full">
+            <el-option
+              v-for="metric in availableMetrics"
+              :key="metric"
+              :label="metric"
+              :value="metric"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="Smoothing">
+          <el-select v-model="globalSettings.smoothing" class="w-full">
+            <el-option label="Disabled" value="disabled" />
+            <el-option label="EMA" value="ema" />
+            <el-option label="Moving Average" value="ma" />
+            <el-option label="Gaussian" value="gaussian" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item
+          v-if="globalSettings.smoothing !== 'disabled'"
+          label="Smoothing Value"
+        >
+          <el-input-number
+            v-model="globalSettings.smoothingValue"
+            :min="0"
+            :max="globalSettings.smoothing === 'ema' ? 1 : 1000"
+            :step="globalSettings.smoothing === 'ema' ? 0.01 : 1"
+            class="w-full"
+          />
+        </el-form-item>
+
+        <el-form-item label="Downsample Rate">
+          <el-input-number
+            v-model="globalSettings.downsampleRate"
+            :min="-1"
+            :max="100"
+            class="w-full"
+          />
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            -1 = Adaptive (recommended), 1 = No downsampling
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">Histogram Settings</el-divider>
+
+        <el-form-item label="Histogram Mode">
+          <el-select v-model="globalSettings.histogramMode" class="w-full">
+            <el-option label="Single Step" value="single" />
+            <el-option label="Distribution Flow" value="flow" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showGlobalSettings = false">Cancel</el-button>
+        <el-button type="primary" @click="applyGlobalSettings">
+          Apply to All Cards
+        </el-button>
       </template>
     </el-dialog>
   </div>
