@@ -95,9 +95,11 @@ class MediaHandler:
             pil_image = self._to_pil(image)
 
             # Generate filename and hash
+            # Replace "/" with "__" in name to avoid subdirectory issues
+            safe_name = name.replace("/", "__")
             image_hash = self._hash_media(pil_image)
             ext = "png"
-            filename = f"{name}_{step:08d}_{image_hash[:8]}.{ext}"
+            filename = f"{safe_name}_{step:08d}_{image_hash[:8]}.{ext}"
             filepath = self.media_dir / filename
 
             # Save image
@@ -155,8 +157,10 @@ class MediaHandler:
         media_hash = self._hash_file(source_path)
 
         # Preserve original extension
+        # Replace "/" with "__" in name to avoid subdirectory issues
+        safe_name = name.replace("/", "__")
         ext = source_path.suffix.lstrip(".")
-        filename = f"{name}_{step:08d}_{media_hash[:8]}.{ext}"
+        filename = f"{safe_name}_{step:08d}_{media_hash[:8]}.{ext}"
         dest_path = self.media_dir / filename
 
         # Copy file if it doesn't exist (deduplication)

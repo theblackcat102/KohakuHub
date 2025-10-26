@@ -95,6 +95,8 @@ class LogWriter:
             self._handle_media(message)
         elif msg_type == "table":
             self._handle_table(message)
+        elif msg_type == "histogram":
+            self._handle_histogram(message)
         elif msg_type == "flush":
             self._handle_flush()
         else:
@@ -162,6 +164,16 @@ class LogWriter:
                     ] = f"<media id={media_id}>"
 
         self.storage.append_table(step, global_step, name, table_data)
+
+    def _handle_histogram(self, message: dict):
+        """Handle histogram logging"""
+        step = message["step"]
+        global_step = message.get("global_step")
+        name = message["name"]
+        values = message["values"]
+        num_bins = message.get("num_bins", 64)
+
+        self.storage.append_histogram(step, global_step, name, values, num_bins)
 
     def _handle_flush(self):
         """Handle explicit flush request"""

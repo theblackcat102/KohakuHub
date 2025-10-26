@@ -78,17 +78,31 @@ class TeeStream:
         self.stream1 = stream1
         self.stream2 = stream2
         self.prefix = prefix
+        self.current_line = ""  # Track current line for \r handling
 
     def write(self, data):
         """Write data to both streams"""
-        # Write to terminal
+        # Write to terminal (with \r for tqdm)
         self.stream1.write(data)
 
-        # Write to file with optional prefix
-        if self.prefix and data.strip():
-            self.stream2.write(self.prefix + data)
-        else:
-            self.stream2.write(data)
+        # For file: handle \r properly (tqdm progress bars)
+        for char in data:
+            if char == "\r":
+                # Carriage return - discard current line, start fresh
+                self.current_line = ""
+            elif char == "\n":
+                # Newline - write current line to file
+                if self.current_line:
+                    if self.prefix:
+                        self.stream2.write(self.prefix + self.current_line + "\n")
+                    else:
+                        self.stream2.write(self.current_line + "\n")
+                    self.current_line = ""
+                else:
+                    self.stream2.write("\n")
+            else:
+                # Regular character - add to current line
+                self.current_line += char
 
     def flush(self):
         """Flush both streams"""

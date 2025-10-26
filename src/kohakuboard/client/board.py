@@ -103,7 +103,9 @@ class Board:
         self._global_step: Optional[int] = None
 
         # Multiprocessing setup
-        self.queue = mp.Queue(maxsize=10000)  # Large queue for buffering
+        self.queue = mp.Queue(
+            maxsize=50000
+        )  # Very large queue for heavy logging (e.g., per-step histograms)
         self.stop_event = mp.Event()
 
         # Start writer process
@@ -309,6 +311,56 @@ class Board:
             "global_step": self._global_step,
             "name": name,
             "table_data": table.to_dict(),
+        }
+        self.queue.put(message)
+
+    def log_histogram(
+        self, name: str, values: Union[List[float], Any], num_bins: int = 64
+    ):
+        """Log histogram data (non-blocking)
+
+        Args:
+            name: Name for this histogram log (supports namespace: "gradients/layer1")
+            values: List of values or tensor to create histogram from
+            num_bins: Number of bins for histogram (default: 64)
+
+        Example:
+            >>> # Log gradient histogram
+            >>> grads = [p.grad.flatten().cpu().numpy() for p in model.parameters()]
+            >>> board.log_histogram("gradients/all", np.concatenate(grads))
+            >>>
+            >>> # Log parameter histogram
+            >>> params = model.fc1.weight.detach().cpu().numpy().flatten()
+            >>> board.log_histogram("params/fc1_weight", params)
+        """
+        # Increment step (auto-increment on every log call)
+        self._step += 1
+
+        # Check queue size and warn if getting full
+        try:
+            queue_size = self.queue.qsize()
+            if queue_size > 40000:
+                logger.warning(
+                    f"Queue size is {queue_size}/50000. Consider reducing histogram logging frequency."
+                )
+        except NotImplementedError:
+            pass  # qsize() not supported on all platforms
+
+        # Convert tensor to list if needed
+        if hasattr(values, "cpu"):  # PyTorch tensor
+            values = values.detach().cpu().numpy().flatten().tolist()
+        elif hasattr(values, "numpy"):  # NumPy array
+            values = values.flatten().tolist()
+        elif not isinstance(values, list):
+            values = list(values)
+
+        message = {
+            "type": "histogram",
+            "step": self._step,
+            "global_step": self._global_step,
+            "name": name,
+            "values": values,
+            "num_bins": num_bins,
         }
         self.queue.put(message)
 

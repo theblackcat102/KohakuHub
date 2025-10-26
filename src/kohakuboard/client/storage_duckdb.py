@@ -43,12 +43,16 @@ class DuckDBStorage:
         self.metrics_buffer: List[Dict[str, Any]] = []
         self.media_buffer: List[Dict[str, Any]] = []
         self.tables_buffer: List[Dict[str, Any]] = []
+        self.histograms_buffer: List[Dict[str, Any]] = []
 
         # Track known columns for schema evolution
         self.known_metric_cols = {"step", "global_step", "timestamp"}
 
-        # Flush threshold
-        self.flush_threshold = 10
+        # Flush thresholds
+        self.flush_threshold = 10  # Metrics
+        self.histogram_flush_threshold = (
+            100  # Histograms (batch aggressively for performance)
+        )
 
     def _init_tables(self):
         """Initialize database tables"""
@@ -97,6 +101,20 @@ class DuckDBStorage:
         """
         )
 
+        # Histograms table (pre-computed bins to save space)
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS histograms (
+                step BIGINT NOT NULL,
+                global_step BIGINT,
+                name VARCHAR NOT NULL,
+                num_bins INTEGER,
+                bins VARCHAR,
+                counts VARCHAR
+            )
+        """
+        )
+
         self.conn.commit()
 
     def append_metrics(
@@ -111,14 +129,17 @@ class DuckDBStorage:
         Args:
             step: Auto-increment step
             global_step: Explicit global step (optional)
-            metrics: Dict of metric name -> value
+            metrics: Dict of metric name -> value (can contain "/" for namespaces)
             timestamp: Timestamp of log event (datetime object)
         """
+        # Escape metric names (replace "/" with "__" for DuckDB)
+        escaped_metrics = {k.replace("/", "__"): v for k, v in metrics.items()}
+
         row = {
             "step": step,
             "global_step": global_step,
             "timestamp": timestamp,
-            **metrics,
+            **escaped_metrics,
         }
         self.metrics_buffer.append(row)
 
@@ -139,12 +160,14 @@ class DuckDBStorage:
         """
         for col in new_cols:
             try:
+                # Escape column name (replace "/" with "__" for DuckDB compatibility)
+                escaped_col = col.replace("/", "__")
                 # Add column as DOUBLE (works for most ML metrics)
                 self.conn.execute(
-                    f"ALTER TABLE metrics ADD COLUMN IF NOT EXISTS {col} DOUBLE"
+                    f'ALTER TABLE metrics ADD COLUMN IF NOT EXISTS "{escaped_col}" DOUBLE'
                 )
                 self.known_metric_cols.add(col)
-                logger.debug(f"Added new metric column: {col}")
+                logger.debug(f"Added new metric column: {col} (as {escaped_col})")
             except Exception as e:
                 logger.error(f"Failed to add column {col}: {e}")
 
@@ -271,11 +294,70 @@ class DuckDBStorage:
         except Exception as e:
             logger.error(f"Failed to flush tables: {e}")
 
+    def append_histogram(
+        self,
+        step: int,
+        global_step: Optional[int],
+        name: str,
+        values: List[float],
+        num_bins: int = 64,
+    ):
+        """Append histogram log entry (pre-computed bins to save space)
+
+        Args:
+            step: Auto-increment step
+            global_step: Explicit global step
+            name: Histogram log name
+            values: List of values to create histogram from
+            num_bins: Number of bins for histogram
+        """
+        # Compute histogram (bins + counts) instead of storing raw values
+        import numpy as np
+
+        values_array = np.array(values, dtype=np.float32)
+        counts, bin_edges = np.histogram(values_array, bins=num_bins)
+
+        row = {
+            "step": step,
+            "global_step": global_step,
+            "name": name,
+            "num_bins": num_bins,
+            "bins": json.dumps(bin_edges.tolist()),  # Bin edges
+            "counts": json.dumps(counts.tolist()),  # Counts per bin
+        }
+        self.histograms_buffer.append(row)
+
+        # Batch flush when threshold reached (not immediate!)
+        if len(self.histograms_buffer) >= self.histogram_flush_threshold:
+            self.flush_histograms()
+
+    def flush_histograms(self):
+        """Flush histograms buffer to DuckDB (TRUE INCREMENTAL!)"""
+        if not self.histograms_buffer:
+            return
+
+        try:
+            df = pd.DataFrame(self.histograms_buffer)
+            self.conn.append("histograms", df, by_name=True)
+            self.conn.commit()
+
+            logger.debug(
+                f"Appended {len(self.histograms_buffer)} histogram rows (INCREMENTAL)"
+            )
+            self.histograms_buffer.clear()
+
+        except KeyboardInterrupt:
+            logger.warning("Histograms flush interrupted")
+            self.histograms_buffer.clear()
+        except Exception as e:
+            logger.error(f"Failed to flush histograms: {e}")
+
     def flush_all(self):
         """Flush all buffers"""
         self.flush_metrics()
         self.flush_media()
         self.flush_tables()
+        self.flush_histograms()
         logger.info("Flushed all buffers to DuckDB")
 
     def close(self):
