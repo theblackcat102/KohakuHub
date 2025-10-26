@@ -3,13 +3,32 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from kohakuboard.api.routers import boards, experiments
 from kohakuboard.config import cfg
 from kohakuboard.logger import logger_api
 
+# Initialize database BEFORE importing routers (they need db to be ready)
+if cfg.app.mode == "remote":
+    from kohakuboard.db import init_db
+
+    logger_api.info(f"Initializing database (mode: {cfg.app.mode})")
+    logger_api.info(f"  Backend: {cfg.app.db_backend}")
+    logger_api.info(f"  URL: {cfg.app.database_url}")
+    init_db(cfg.app.db_backend, cfg.app.database_url)
+    logger_api.success("Database initialized")
+else:
+    logger_api.info(f"Running in {cfg.app.mode} mode (no database needed)")
+    # Create a dummy db object for local mode so imports don't fail
+    from kohakuboard import db as db_module
+    from peewee import SqliteDatabase
+
+    db_module.db = SqliteDatabase(":memory:")
+
+# Now import routers (after db is initialized)
+from kohakuboard.api import boards, experiments, projects, runs, sync, system
+
 app = FastAPI(
     title="KohakuBoard API",
-    description="ML Experiment Tracking API - Serves real board data from file system",
+    description=f"ML Experiment Tracking API - {cfg.app.mode.title()} mode",
     version="0.1.0",
     docs_url=f"{cfg.app.api_base}/docs",
     openapi_url=f"{cfg.app.api_base}/openapi.json",
@@ -24,9 +43,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers
-app.include_router(boards.router, prefix=cfg.app.api_base, tags=["boards"])
-app.include_router(experiments.router, prefix=cfg.app.api_base, tags=["experiments"])
+# Register new routers (project-based API)
+app.include_router(system.router, prefix=cfg.app.api_base, tags=["system"])
+app.include_router(projects.router, prefix=cfg.app.api_base, tags=["projects"])
+app.include_router(runs.router, prefix=cfg.app.api_base, tags=["runs"])
+
+# Register sync router (remote mode only, but always registered for API docs)
+app.include_router(sync.router, prefix=cfg.app.api_base, tags=["sync"])
+
+# Keep legacy routers for backward compatibility
+app.include_router(boards.router, prefix=cfg.app.api_base, tags=["boards (legacy)"])
+app.include_router(
+    experiments.router, prefix=cfg.app.api_base, tags=["experiments (legacy)"]
+)
 
 
 @app.get("/")
@@ -44,11 +73,14 @@ async def root():
     return {
         "name": "KohakuBoard API",
         "version": "0.1.0",
-        "description": "ML Experiment Tracking - Local-only backend",
+        "description": f"ML Experiment Tracking - {cfg.app.mode.title()} mode",
+        "mode": cfg.app.mode,
         "board_data_dir": cfg.app.board_data_dir,
         "board_count": board_count,
         "docs": f"{cfg.app.api_base}/docs",
         "endpoints": {
+            "system": f"{cfg.app.api_base}/system/info",
+            "projects": f"{cfg.app.api_base}/projects",
             "experiments": f"{cfg.app.api_base}/experiments",
             "boards": f"{cfg.app.api_base}/boards",
         },
