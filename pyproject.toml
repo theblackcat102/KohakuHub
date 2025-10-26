@@ -62,6 +62,7 @@ kohakuboard = [
 
 [project.scripts]
 kohub-cli = "kohub_cli.cli:cli"
+kobo = "kohakuboard.cli:cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
