@@ -35,8 +35,8 @@ def cli():
 @click.option("--port", default=48889, help="Server port (default: 48889)")
 @click.option("--host", default="0.0.0.0", help="Server host (default: 0.0.0.0)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
-@click.option("--no-browser", is_flag=True, help="Do not open browser automatically")
-def open(folder, port, host, reload, no_browser):
+@click.option("--browser", is_flag=True, help="Open browser automatically")
+def open(folder, port, host, reload, browser):
     """Open local board folder in browser
 
     Starts a local web server to browse boards in the specified folder.
@@ -45,7 +45,7 @@ def open(folder, port, host, reload, no_browser):
     Examples:
         kobo open ./kohakuboard
         kobo open /path/to/experiments --port 8080
-        kobo open ./boards --reload --no-browser
+        kobo open ./boards --reload --browser
     """
     folder_path = Path(folder).resolve()
 
@@ -63,7 +63,7 @@ def open(folder, port, host, reload, no_browser):
     click.echo()
 
     # Open browser after delay
-    if not no_browser:
+    if browser:
 
         def open_browser():
             time.sleep(1.5)  # Wait for server to start
@@ -124,12 +124,12 @@ def open(folder, port, host, reload, no_browser):
     help="Session secret for authentication (required in production)",
 )
 @click.option(
-    "--no-browser",
+    "--browser",
     is_flag=True,
-    help="Do not open browser automatically",
+    help="Open browser automatically",
 )
 def serve(
-    host, port, data_dir, db, db_backend, reload, workers, session_secret, no_browser
+    host, port, data_dir, db, db_backend, reload, workers, session_secret, browser
 ):
     """Start KohakuBoard server in remote mode with authentication
 
@@ -190,7 +190,7 @@ def serve(
     click.echo()
 
     # Open browser after delay
-    if not no_browser:
+    if browser:
 
         def open_browser():
             time.sleep(2)  # Wait for server to start

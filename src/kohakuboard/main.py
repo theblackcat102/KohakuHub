@@ -14,14 +14,14 @@ if cfg.app.mode == "remote":
     logger_api.info(f"  Backend: {cfg.app.db_backend}")
     logger_api.info(f"  URL: {cfg.app.database_url}")
     init_db(cfg.app.db_backend, cfg.app.database_url)
-    logger_api.success("Database initialized")
+    logger_api.info("✓ Database initialized")
 else:
     logger_api.info(f"Running in {cfg.app.mode} mode (no database needed)")
-    # Create a dummy db object for local mode so imports don't fail
-    from kohakuboard import db as db_module
+    # Initialize dummy database for local mode so imports don't fail
+    from kohakuboard.db import db
     from peewee import SqliteDatabase
 
-    db_module.db = SqliteDatabase(":memory:")
+    db.initialize(SqliteDatabase(":memory:"))
 
 # Now import routers (after db is initialized)
 from kohakuboard.api import boards, org, projects, runs, sync, system

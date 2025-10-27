@@ -13,6 +13,7 @@ from peewee import (
     BlobField,
     BooleanField,
     CharField,
+    DatabaseProxy,
     DateTimeField,
     ForeignKeyField,
     Model,
@@ -21,14 +22,12 @@ from peewee import (
     TextField,
 )
 
-# Database connection will be initialized based on config
-db = None
+# Database proxy - will be initialized later
+db = DatabaseProxy()
 
 
 def init_db(backend: str, database_url: str):
     """Initialize database connection"""
-    global db
-
     if backend == "postgres":
         # Parse PostgreSQL URL
         url = database_url.replace("postgresql://", "")
@@ -40,7 +39,7 @@ def init_db(backend: str, database_url: str):
         else:
             host, port = host_port, 5432
 
-        db = PostgresqlDatabase(
+        real_db = PostgresqlDatabase(
             dbname,
             user=user,
             password=password,
@@ -50,10 +49,10 @@ def init_db(backend: str, database_url: str):
     else:
         # SQLite
         db_path = database_url.replace("sqlite:///", "")
-        db = SqliteDatabase(db_path, pragmas={"foreign_keys": 1})
+        real_db = SqliteDatabase(db_path, pragmas={"foreign_keys": 1})
 
-    # Bind models to db
-    BaseModel._meta.database = db
+    # Initialize the proxy with the real database
+    db.initialize(real_db)
 
     # Create tables
     with db:

@@ -33,6 +33,7 @@ from kohakuboard.db_operations import (
     update_user,
 )
 from kohakuboard.logger import logger_api
+from kohakuboard.utils.datetime_utils import safe_isoformat
 from kohakuboard.utils.names import normalize_name
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -278,7 +279,7 @@ def get_me(user: User = Depends(get_current_user)):
         "username": user.username,
         "email": user.email,
         "email_verified": user.email_verified,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "created_at": safe_isoformat(user.created_at),
     }
 
 
@@ -293,8 +294,8 @@ async def list_tokens(user: User = Depends(get_current_user)):
             {
                 "id": t.id,
                 "name": t.name,
-                "last_used": t.last_used.isoformat() if t.last_used else None,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "last_used": safe_isoformat(t.last_used),
+                "created_at": safe_isoformat(t.created_at),
             }
             for t in tokens
         ]

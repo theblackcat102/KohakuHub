@@ -11,6 +11,7 @@ from kohakuboard.auth import get_optional_user
 from kohakuboard.config import cfg
 from kohakuboard.db import Board, User
 from kohakuboard.logger import logger_api
+from kohakuboard.utils.datetime_utils import safe_isoformat
 
 router = APIRouter()
 
@@ -66,11 +67,9 @@ def fetchProjectRuns(project_name: str, current_user: User | None):
                     "run_id": run.run_id,
                     "name": run.name,
                     "private": run.private,
-                    "created_at": run.created_at.isoformat(),
-                    "updated_at": run.updated_at.isoformat(),
-                    "last_synced_at": (
-                        run.last_synced_at.isoformat() if run.last_synced_at else None
-                    ),
+                    "created_at": safe_isoformat(run.created_at),
+                    "updated_at": safe_isoformat(run.updated_at),
+                    "last_synced_at": safe_isoformat(run.last_synced_at),
                     "total_size": run.total_size_bytes,
                     "config": json.loads(run.config) if run.config else {},
                 }
@@ -141,12 +140,8 @@ async def list_projects(current_user: User | None = Depends(get_optional_user)):
                     "name": project.project_name,
                     "display_name": project.project_name.replace("-", " ").title(),
                     "run_count": project.run_count,
-                    "created_at": (
-                        project.created_at.isoformat() if project.created_at else None
-                    ),
-                    "updated_at": (
-                        project.updated_at.isoformat() if project.updated_at else None
-                    ),
+                    "created_at": safe_isoformat(project.created_at),
+                    "updated_at": safe_isoformat(project.updated_at),
                 }
             )
 

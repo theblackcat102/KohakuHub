@@ -17,6 +17,7 @@ from kohakuboard.db_operations import (
     update_user_organization,
 )
 from kohakuboard.logger import logger_api
+from kohakuboard.utils.datetime_utils import safe_isoformat
 from kohakuboard.utils.names import normalize_name
 
 router = APIRouter()
@@ -99,7 +100,7 @@ async def get_organization_info(org_name: str):
     return {
         "name": org.username,
         "description": org.description,
-        "created_at": org.created_at.isoformat() if org.created_at else None,
+        "created_at": safe_isoformat(org.created_at),
     }
 
 
@@ -263,7 +264,7 @@ async def list_organization_members_endpoint(org_name: str):
             {
                 "user": m.user.username,
                 "role": m.role,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "created_at": safe_isoformat(m.created_at),
             }
             for m in members
         ]
@@ -296,7 +297,7 @@ async def list_user_organizations_endpoint(username: str):
                 "name": org.organization.username,
                 "description": org.organization.description,
                 "role": org.role,
-                "created_at": org.created_at.isoformat() if org.created_at else None,
+                "created_at": safe_isoformat(org.created_at),
             }
             for org in orgs
         ]
