@@ -296,7 +296,7 @@ export function useHoverSync() {
                   const xRange = xaxis.range || [0, 1];
                   const yRange = yaxis.range || [0, 1];
 
-                  // Create vertical spike line shape at xValue
+                  // Create vertical spike line (x-axis spike only)
                   const spikeShape = {
                     type: "line",
                     x0: xValue,
@@ -327,7 +327,7 @@ export function useHoverSync() {
                   });
 
                   console.log(
-                    `${LOG_PREFIX} Drew spike line at x=${xValue} for chart:`,
+                    `${LOG_PREFIX} Drew x-axis spike line at x=${xValue} for chart:`,
                     chartInfo.id,
                   );
                 } else {

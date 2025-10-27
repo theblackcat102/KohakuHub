@@ -18,6 +18,7 @@ const isUpdating = ref(false);
 const showAddTabDialog = ref(false);
 const newTabName = ref("");
 const showGlobalSettings = ref(false);
+const isInitializing = ref(true); // Prevent watch triggers during init
 
 // Pagination for WebGL context limit
 const currentPage = ref(0);
@@ -51,10 +52,18 @@ const storageKey = computed(
   () => `experiment-layout-${route.params.project}-${route.params.id}`,
 );
 
-onMounted(async () => {
+// Extracted initialization logic for reuse
+async function initializeExperiment() {
   try {
+    isInitializing.value = true;
+
     const projectName = route.params.project;
     const runId = route.params.id;
+
+    console.log(`[Init] Loading experiment: ${projectName}/${runId}`);
+
+    // Clear previous data
+    metricDataCache.value = {};
 
     // Fetch summary using runs API
     const summaryResponse = await fetch(
@@ -298,9 +307,18 @@ onMounted(async () => {
 
     // Determine default x-axis (prefer global_step if it's used, otherwise step)
     await determineDefaultXAxis();
+
+    // Initialization complete - allow watch to fire on user tab changes
+    isInitializing.value = false;
+    console.log("[Init] Initialization complete");
   } catch (error) {
     console.error("Failed to load experiment:", error);
+    isInitializing.value = false;
   }
+}
+
+onMounted(() => {
+  initializeExperiment();
 });
 
 async function determineDefaultXAxis() {
@@ -313,9 +331,10 @@ async function determineDefaultXAxis() {
     );
     const result = await response.json();
 
+    // New columnar format: {values: []}
     // Check if any global_step value is non-zero
-    const hasNonZeroGlobalStep = result.data.some(
-      (item) => item.value !== 0 && item.value !== null,
+    const hasNonZeroGlobalStep = result.values.some(
+      (value) => value !== 0 && value !== null,
     );
 
     // Update all cards to use global_step if it's being used
@@ -338,8 +357,14 @@ async function determineDefaultXAxis() {
 
 async function fetchMetricsForTab() {
   try {
+    console.log(
+      `[fetchMetricsForTab] Starting fetch for tab: ${activeTab.value}`,
+    );
     const tab = tabs.value.find((t) => t.name === activeTab.value);
-    if (!tab) return;
+    if (!tab) {
+      console.warn(`[fetchMetricsForTab] Tab not found: ${activeTab.value}`);
+      return;
+    }
 
     // Metrics that are computed on frontend (don't fetch from API)
     const computedMetrics = new Set(["walltime", "relative_walltime"]);
@@ -368,35 +393,65 @@ async function fetchMetricsForTab() {
     for (const metric of neededMetrics) {
       if (!metricDataCache.value[metric]) {
         try {
+          console.log(`[fetchMetricsForTab] Fetching metric: ${metric}`);
           // Don't URL-encode - FastAPI :path parameter handles it
           const response = await fetch(
             `/api/projects/${projectName}/runs/${runId}/scalars/${metric}`,
           );
 
           if (!response.ok) {
-            console.warn(`Failed to fetch ${metric}: ${response.status}`);
+            console.warn(
+              `[fetchMetricsForTab] Failed to fetch ${metric}: ${response.status}`,
+            );
             // Set empty array so card can still render (just shows "no data")
             metricDataCache.value[metric] = [];
             continue;
           }
 
           const result = await response.json();
+          console.log(
+            `[fetchMetricsForTab] Fetched ${metric}: ${result.values?.length || 0} values`,
+          );
 
-          // Convert step-value pairs to sparse array
-          const sparseArray = new Array(
-            result.data[result.data.length - 1]?.step + 1 || 0,
-          ).fill(null);
-          for (const item of result.data) {
-            sparseArray[item.step] = item.value;
+          // New columnar format: {steps: [], global_steps: [], timestamps: [], values: []}
+          // Convert to sparse array (indexed by step number)
+          const maxStep = Math.max(...result.steps);
+          const sparseArray = new Array(maxStep + 1).fill(null);
+
+          for (let i = 0; i < result.steps.length; i++) {
+            const step = result.steps[i];
+            let value = result.values[i];
+
+            // Convert special string markers back to numeric NaN/inf
+            // Backend sends these as strings because JSON doesn't support Infinity
+            if (value === "NaN") {
+              value = NaN;
+            } else if (value === "Infinity") {
+              value = Infinity;
+            } else if (value === "-Infinity") {
+              value = -Infinity;
+            }
+
+            sparseArray[step] = value;
           }
 
           metricDataCache.value[metric] = sparseArray;
+          console.log(
+            `[fetchMetricsForTab] Stored ${metric} in cache: ${sparseArray.length} slots, ${sparseArray.filter((v) => v !== null).length} non-null values`,
+          );
 
-          // Also store timestamp data if available
-          if (result.data[0]?.timestamp) {
+          // Also store timestamp data if available (as Unix seconds)
+          if (result.timestamps && result.timestamps.length > 0) {
             const timestampArray = new Array(sparseArray.length).fill(null);
-            for (const item of result.data) {
-              timestampArray[item.step] = item.timestamp;
+            for (let i = 0; i < result.steps.length; i++) {
+              const step = result.steps[i];
+              const unixSeconds = result.timestamps[i];
+              if (unixSeconds !== null) {
+                // Convert Unix seconds to ISO string for consistency
+                timestampArray[step] = new Date(
+                  unixSeconds * 1000,
+                ).toISOString();
+              }
             }
             metricDataCache.value[`${metric}_timestamp`] = timestampArray;
           }
@@ -435,8 +490,13 @@ async function fetchMetricsForTab() {
       metricDataCache.value.walltime = walltime;
       metricDataCache.value.relative_walltime = relativeWalltime;
     }
+
+    console.log(
+      `[fetchMetricsForTab] Completed. Cache keys:`,
+      Object.keys(metricDataCache.value),
+    );
   } catch (error) {
-    console.error("Error in fetchMetricsForTab:", error);
+    console.error("[fetchMetricsForTab] Error:", error);
     // Don't throw - allow page to render with partial data
   }
 }
@@ -446,6 +506,7 @@ const sparseData = computed(() => {
   for (const [key, values] of Object.entries(metricDataCache.value)) {
     data[key] = values;
   }
+  console.log(`[sparseData] Computed with ${Object.keys(data).length} metrics`);
   return data;
 });
 
@@ -509,10 +570,29 @@ const visibleCards = computed(() => {
 });
 
 watch(activeTab, () => {
+  // Don't fetch during initialization (prevents race condition)
+  if (isInitializing.value) {
+    console.log("[Watch] activeTab changed during init, skipping fetch");
+    return;
+  }
+
+  console.log("[Watch] activeTab changed to:", activeTab.value);
   currentPage.value = 0;
   fetchMetricsForTab();
   saveLayout();
 });
+
+// Watch route params to reinitialize when navigating between runs
+watch(
+  () => [route.params.project, route.params.id],
+  ([newProject, newId], [oldProject, oldId]) => {
+    if (oldId && (newId !== oldId || newProject !== oldProject)) {
+      console.log("[Watch] Route changed - reinitializing");
+      currentPage.value = 0;
+      initializeExperiment();
+    }
+  },
+);
 
 function saveLayout() {
   const layout = {
@@ -833,54 +913,19 @@ function onDragEnd(evt) {
 
 <template>
   <div class="container-main">
-    <div class="mb-6">
-      <!-- Desktop layout -->
-      <div v-if="!isMobile" class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl font-bold">Run: {{ route.params.id }}</h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Project: {{ route.params.project }}
-          </p>
-        </div>
-        <div class="flex gap-2">
-          <router-link
-            :to="`/projects/${route.params.project}`"
-            class="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm"
-          >
-            ← Back
-          </router-link>
-          <el-button type="primary" size="small" @click="addCard"
-            >Add Chart</el-button
-          >
-          <el-button size="small" @click="addTab">Add Tab</el-button>
-          <el-button size="small" @click="isEditingTabs = !isEditingTabs">
-            {{ isEditingTabs ? "Done Editing" : "Edit Tabs" }}
-          </el-button>
-        </div>
-      </div>
-
-      <!-- Mobile layout -->
-      <div v-else>
-        <h1 class="text-xl font-bold mb-1">Run: {{ route.params.id }}</h1>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Project: {{ route.params.project }}
-        </p>
-        <div class="flex gap-2">
-          <router-link
-            :to="`/projects/${route.params.project}`"
-            class="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm"
-          >
-            ← Back
-          </router-link>
-          <el-button type="primary" size="small" @click="addCard" class="flex-1"
-            >Add Chart</el-button
-          >
-          <el-button size="small" @click="addTab">Add Tab</el-button>
-          <el-button size="small" @click="isEditingTabs = !isEditingTabs">
-            {{ isEditingTabs ? "Done" : "Edit" }}
-          </el-button>
-        </div>
-      </div>
+    <!-- Action buttons -->
+    <div class="mb-6 flex items-center justify-end gap-2">
+      <el-button type="primary" size="small" @click="addCard">
+        <span v-if="!isMobile">Add Chart</span>
+        <span v-else>Add</span>
+      </el-button>
+      <el-button size="small" @click="addTab">
+        <span v-if="!isMobile">Add Tab</span>
+        <span v-else>Tab</span>
+      </el-button>
+      <el-button size="small" @click="isEditingTabs = !isEditingTabs">
+        {{ isEditingTabs ? "Done" : "Edit" }}
+      </el-button>
     </div>
 
     <el-tabs v-model="activeTab" type="card">

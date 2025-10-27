@@ -126,10 +126,14 @@ const hasDataError = computed(() => {
   const xData = props.sparseData[config.xMetric];
   if (!xData || xData.length === 0) return true;
 
-  // Check if all y metrics are empty or missing
+  // Check if all y metrics have no valid data (including NaN/inf as valid!)
   const allEmpty = config.yMetrics.every((yMetric) => {
     const yData = props.sparseData[yMetric];
-    return !yData || yData.length === 0;
+    if (!yData || yData.length === 0) return true;
+
+    // Check if there's at least ONE non-null value (including NaN/inf)
+    const hasAnyData = yData.some((val) => val !== null);
+    return !hasAnyData;
   });
 
   return allEmpty;
@@ -156,6 +160,9 @@ const processedChartData = computed(() => {
       const x = [];
       const y = [];
       let lastXValue = null;
+      let nanCount = 0;
+      let infCount = 0;
+      let negInfCount = 0;
 
       for (let i = 0; i < xData.length; i++) {
         let xVal = xData[i];
@@ -171,12 +178,38 @@ const processedChartData = computed(() => {
         }
 
         if (xVal !== null) lastXValue = xVal;
+
+        // Include NaN/inf values (they are not null!)
+        // Only skip if yVal is actually null (missing data)
         if (yVal !== null && lastXValue !== null) {
           x.push(lastXValue);
           y.push(yVal);
+
+          // Count special values for logging
+          if (isNaN(yVal)) {
+            nanCount++;
+          } else if (yVal === Infinity) {
+            infCount++;
+          } else if (yVal === -Infinity) {
+            negInfCount++;
+          }
         }
       }
 
+      const specialValuesLog = [];
+      if (nanCount > 0) specialValuesLog.push(`NaN=${nanCount}`);
+      if (infCount > 0) specialValuesLog.push(`+inf=${infCount}`);
+      if (negInfCount > 0) specialValuesLog.push(`-inf=${negInfCount}`);
+
+      console.log(
+        `[${props.cardId}] ${yMetric}: collected ${y.length} points` +
+          (specialValuesLog.length > 0
+            ? ` (${specialValuesLog.join(", ")})`
+            : ""),
+      );
+
+      // Return series even if all values are NaN/inf (x/y might be empty but we still need the series)
+      // The LinePlot component will handle special values
       return { name: yMetric, x, y };
     })
     .filter((d) => d !== null);

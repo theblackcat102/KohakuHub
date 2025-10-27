@@ -14,6 +14,8 @@ declare module 'vue' {
     ConfigurableChartCard: typeof import('./components/ConfigurableChartCard.vue')['default']
     DataTable: typeof import('./components/DataTable.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
+    ElBreadcrumb: typeof import('element-plus/es')['ElBreadcrumb']
+    ElBreadcrumbItem: typeof import('element-plus/es')['ElBreadcrumbItem']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
     ElCol: typeof import('element-plus/es')['ElCol']

@@ -16,14 +16,21 @@
             KohakuBoard
           </h1>
         </router-link>
-        <div class="flex items-center gap-1">
-          <router-link
-            to="/"
-            class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400"
+        <!-- Dynamic breadcrumb navigation -->
+        <el-breadcrumb separator="/" class="text-sm">
+          <el-breadcrumb-item :to="{ path: '/projects' }"
+            >Projects</el-breadcrumb-item
           >
-            Projects
-          </router-link>
-        </div>
+          <el-breadcrumb-item
+            v-if="currentProject"
+            :to="{ path: `/projects/${currentProject}` }"
+          >
+            {{ currentProject }}
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-if="currentRun">
+            {{ currentRun }}
+          </el-breadcrumb-item>
+        </el-breadcrumb>
       </div>
       <div class="flex items-center gap-2">
         <!-- Auth UI (only in remote mode) -->
@@ -99,7 +106,12 @@ import { ElMessage } from "element-plus";
 const { animationsEnabled, toggleAnimations } = useAnimationPreference();
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const systemInfo = ref(null);
+
+// Extract current project and run from route for breadcrumb
+const currentProject = computed(() => route.params.project || null);
+const currentRun = computed(() => route.params.id || null);
 
 const props = defineProps({
   darkMode: {

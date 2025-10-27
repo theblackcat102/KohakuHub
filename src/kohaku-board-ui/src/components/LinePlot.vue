@@ -282,24 +282,95 @@ const processedData = computed(() => {
   const rate = config.downsampleRate;
 
   return props.data.map((series) => {
-    const smoothedY = applySmoothing(series.y, mode, value);
-    const downsampledSmoothed = downsampleData(series.x, smoothedY, rate);
+    console.log(
+      `[LinePlot] Processing series: ${series.name}, data length: ${series.y.length}`,
+    );
+
+    // Build line segments separated by NaN/inf breaks
+    // If we have: [1, 2, NaN, 3, 4], we create 2 segments: [[1,2], [3,4]]
+    const segments = []; // Each segment: {x: [], y: []}
+    const nanX = [];
+    const infX = [];
+    const negInfX = [];
+
+    let currentSegmentX = [];
+    let currentSegmentY = [];
+
+    for (let i = 0; i < series.y.length; i++) {
+      const yVal = series.y[i];
+      const xVal = series.x[i];
+
+      if (Number.isNaN(yVal)) {
+        // NaN breaks the line - finish current segment
+        if (currentSegmentX.length > 0) {
+          segments.push({ x: currentSegmentX, y: currentSegmentY });
+          currentSegmentX = [];
+          currentSegmentY = [];
+        }
+        nanX.push(xVal);
+        console.log(
+          `[LinePlot] ${series.name}[${i}]: NaN at x=${xVal} - breaking line`,
+        );
+      } else if (yVal === Infinity) {
+        // +inf breaks the line
+        if (currentSegmentX.length > 0) {
+          segments.push({ x: currentSegmentX, y: currentSegmentY });
+          currentSegmentX = [];
+          currentSegmentY = [];
+        }
+        infX.push(xVal);
+        console.log(
+          `[LinePlot] ${series.name}[${i}]: +inf at x=${xVal} - breaking line`,
+        );
+      } else if (yVal === -Infinity) {
+        // -inf breaks the line
+        if (currentSegmentX.length > 0) {
+          segments.push({ x: currentSegmentX, y: currentSegmentY });
+          currentSegmentX = [];
+          currentSegmentY = [];
+        }
+        negInfX.push(xVal);
+        console.log(
+          `[LinePlot] ${series.name}[${i}]: -inf at x=${xVal} - breaking line`,
+        );
+      } else {
+        // Normal finite value - add to current segment
+        currentSegmentX.push(xVal);
+        currentSegmentY.push(yVal);
+      }
+    }
+
+    // Don't forget the last segment
+    if (currentSegmentX.length > 0) {
+      segments.push({ x: currentSegmentX, y: currentSegmentY });
+    }
+
+    console.log(
+      `[LinePlot] ${series.name}: ${segments.length} segments, NaN=${nanX.length}, +inf=${infX.length}, -inf=${negInfX.length}`,
+    );
+
+    // Process each segment separately (smoothing + downsampling)
+    const processedSegments = segments.map((seg) => {
+      const smoothedY = applySmoothing(seg.y, mode, value);
+      return downsampleData(seg.x, smoothedY, rate);
+    });
 
     const result = {
       name: series.name,
-      x: downsampledSmoothed.x,
-      y: downsampledSmoothed.y,
+      segments: processedSegments, // Multiple line segments
       original: null,
-      originalY: null,
+      originalSegments: null,
+      // Store special value x-positions for marker rendering
+      nanX,
+      infX,
+      negInfX,
     };
 
     if (mode !== "disabled" && config.showOriginal) {
-      const downsampledOriginal = downsampleData(series.x, series.y, rate);
-      result.original = {
-        x: downsampledOriginal.x,
-        y: downsampledOriginal.y,
-      };
-      result.originalY = downsampledOriginal.y;
+      const originalSegments = segments.map((seg) =>
+        downsampleData(seg.x, seg.y, rate),
+      );
+      result.originalSegments = originalSegments;
     }
 
     return result;
@@ -341,9 +412,14 @@ function createPlot() {
   const traces = [];
 
   data.forEach((series, index) => {
+    console.log(
+      `[LinePlot] createPlot - processing series ${series.name}: ${series.segments?.length || 0} segments, nanX=${series.nanX?.length || 0}, infX=${series.infX?.length || 0}, negInfX=${series.negInfX?.length || 0}`,
+    );
+
     const baseColor = plotlyColors[index % plotlyColors.length];
 
-    if (series.original) {
+    // Render original (smoothed) segments if enabled
+    if (series.originalSegments && series.originalSegments.length > 0) {
       // Convert to dimmer color (not opacity) - blend with gray
       let dimmerColor = baseColor;
       if (baseColor.startsWith("#")) {
@@ -358,68 +434,155 @@ function createPlot() {
         dimmerColor = `rgb(${dimR}, ${dimG}, ${dimB})`;
       }
 
-      traces.push({
-        type: "scattergl",
-        mode: "lines",
-        name: `${series.name} (original)`,
-        x: series.original.x,
-        y: series.original.y,
-        line: {
-          width: config.lineWidth * 0.5,
-          color: dimmerColor,
-        },
-        showlegend: false,
-        legendgroup: series.name,
-        hoverinfo: "skip",
+      // Add each original segment as a separate trace
+      series.originalSegments.forEach((seg, segIdx) => {
+        traces.push({
+          type: "scattergl",
+          mode: "lines",
+          name: `${series.name} (original)`,
+          x: seg.x,
+          y: seg.y,
+          line: {
+            width: config.lineWidth * 0.5,
+            color: dimmerColor,
+          },
+          showlegend: segIdx === 0, // Only first segment shows in legend
+          legendgroup: series.name + "_original",
+          hoverinfo: "skip",
+        });
       });
     }
 
-    const trace = {
-      type: "scattergl",
-      mode: config.showMarkers ? "lines+markers" : "lines",
-      name: series.name,
-      x: series.x,
-      y: series.y,
-      line: {
-        width: config.lineWidth,
-        color: baseColor,
-      },
-      marker: {
-        size: 3,
-        color: baseColor,
-      },
-      legendgroup: series.name,
-    };
+    // Render main line segments
+    if (series.segments && series.segments.length > 0) {
+      series.segments.forEach((seg, segIdx) => {
+        const trace = {
+          type: "scattergl",
+          mode: config.showMarkers ? "lines+markers" : "lines",
+          name: series.name,
+          x: seg.x,
+          y: seg.y,
+          line: {
+            width: config.lineWidth,
+            color: baseColor,
+          },
+          marker: {
+            size: 3,
+            color: baseColor,
+          },
+          showlegend: segIdx === 0, // Only first segment shows in legend
+          legendgroup: series.name,
+        };
 
-    // Custom hover template for relative_walltime
-    if (props.xaxis === "relative_walltime") {
-      trace.customdata = series.x.map((xVal, idx) => ({
-        duration: formatDuration(xVal),
-        original: series.originalY ? series.originalY[idx] : null,
-      }));
-      if (series.originalY) {
-        trace.hovertemplate =
-          "<b>%{fullData.name}</b><br>" +
-          "Time: %{customdata.duration}<br>" +
-          "Value: %{y:.4f} (%{customdata.original:.4f})<extra></extra>";
-      } else {
-        trace.hovertemplate =
-          "<b>%{fullData.name}</b><br>" +
-          "Time: %{customdata.duration}<br>" +
-          "Value: %{y:.4f}<extra></extra>";
-      }
-    } else if (series.originalY) {
-      trace.customdata = series.originalY.map((origY, idx) => ({
-        original: origY,
-        smoothed: series.y[idx],
-      }));
-      trace.hovertemplate =
-        "<b>%{fullData.name}</b>: %{y:.4f} (%{customdata.original:.4f})<extra></extra>";
-    } else {
-      trace.hovertemplate = "<b>%{fullData.name}</b>: %{y:.4f}<extra></extra>";
+        // Custom hover template for relative_walltime
+        if (props.xaxis === "relative_walltime") {
+          trace.customdata = seg.x.map((xVal, idx) => ({
+            duration: formatDuration(xVal),
+          }));
+          trace.hovertemplate =
+            "<b>%{fullData.name}</b><br>" +
+            "Time: %{customdata.duration}<br>" +
+            "Value: %{y:.4f}<extra></extra>";
+        } else {
+          trace.hovertemplate =
+            "<b>%{fullData.name}</b>: %{y:.4f}<extra></extra>";
+        }
+
+        traces.push(trace);
+      });
     }
 
-    traces.push(trace);
+    // Add special marker traces for NaN/inf values
+    // These render as dots at top/bottom without affecting axis range
+    const hasSpecialValues =
+      series.nanX.length > 0 ||
+      series.infX.length > 0 ||
+      series.negInfX.length > 0;
+
+    console.log(
+      `[LinePlot] ${series.name} special values: NaN=${series.nanX.length}, +inf=${series.infX.length}, -inf=${series.negInfX.length}`,
+    );
+
+    if (hasSpecialValues) {
+      // NaN markers (circle at top of chart)
+      if (series.nanX.length > 0) {
+        console.log(
+          `[LinePlot] Adding NaN markers for ${series.name}:`,
+          series.nanX,
+        );
+        traces.push({
+          type: "scattergl",
+          mode: "markers",
+          name: `${series.name} (NaN)`,
+          x: series.nanX,
+          y: series.nanX.map(() => 1), // Will be positioned at top via yaxis2
+          marker: {
+            symbol: "circle",
+            size: 8,
+            color: baseColor,
+            line: { color: "white", width: 1.5 },
+          },
+          yaxis: "y2", // Use secondary y-axis fixed at [0, 1]
+          showlegend: false,
+          legendgroup: series.name,
+          hoverinfo: "skip", // CRITICAL: Don't show in unified hover tooltip
+          // Individual hover still works when directly hovering the marker
+          text: series.nanX.map(() => `${series.name}: NaN`),
+        });
+      }
+
+      // +Infinity markers (triangle-up at top of chart)
+      if (series.infX.length > 0) {
+        console.log(
+          `[LinePlot] Adding +inf markers for ${series.name}:`,
+          series.infX,
+        );
+        traces.push({
+          type: "scattergl",
+          mode: "markers",
+          name: `${series.name} (+inf)`,
+          x: series.infX,
+          y: series.infX.map(() => 0.95), // Slightly below top
+          marker: {
+            symbol: "triangle-up",
+            size: 10,
+            color: baseColor,
+            line: { color: "white", width: 1.5 },
+          },
+          yaxis: "y2",
+          showlegend: false,
+          legendgroup: series.name,
+          hoverinfo: "skip", // CRITICAL: Don't show in unified hover tooltip
+          text: series.infX.map(() => `${series.name}: +inf`),
+        });
+      }
+
+      // -Infinity markers (triangle-down at bottom of chart)
+      if (series.negInfX.length > 0) {
+        console.log(
+          `[LinePlot] Adding -inf markers for ${series.name}:`,
+          series.negInfX,
+        );
+        traces.push({
+          type: "scattergl",
+          mode: "markers",
+          name: `${series.name} (-inf)`,
+          x: series.negInfX,
+          y: series.negInfX.map(() => 0.05), // Slightly above bottom
+          marker: {
+            symbol: "triangle-down",
+            size: 10,
+            color: baseColor,
+            line: { color: "white", width: 1.5 },
+          },
+          yaxis: "y2",
+          showlegend: false,
+          legendgroup: series.name,
+          hoverinfo: "skip", // CRITICAL: Don't show in unified hover tooltip
+          text: series.negInfX.map(() => `${series.name}: -inf`),
+        });
+      }
+    }
   });
 
   const xAxisConfig = config.xRange.auto
@@ -456,6 +619,16 @@ function createPlot() {
       spikedash: "solid",
       showline: false,
       ...yAxisConfig,
+    },
+    // Secondary y-axis for NaN/inf markers (fixed [0,1] range, overlaid)
+    yaxis2: {
+      overlaying: "y",
+      side: "right",
+      showgrid: false,
+      showticklabels: false,
+      showline: false,
+      range: [0, 1],
+      fixedrange: true,
     },
     dragmode: "zoom",
     height: props.height,
