@@ -1,5 +1,6 @@
 kohakuboard/
 !src/kohakuboard
+!docker/kohakuboard
 *.backup*
 .DS_store
 *_old.*
