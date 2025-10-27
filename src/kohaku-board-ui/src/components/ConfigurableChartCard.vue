@@ -10,6 +10,7 @@ const props = defineProps({
   availableMetrics: Array,
   initialConfig: Object,
   experimentId: String,
+  project: String, // Optional: if provided, use runs API instead of experiments API
   tabName: String,
   hoverSyncEnabled: {
     type: Boolean,
@@ -85,21 +86,26 @@ watch(
   async (type) => {
     isCardLoading.value = true;
     try {
+      // Use runs API if project is provided, otherwise use experiments API
+      const baseUrl = props.project
+        ? `/api/projects/${props.project}/runs/${props.experimentId}`
+        : `/api/experiments/${props.experimentId}`;
+
       if (type === "media" && props.initialConfig.mediaName) {
         const res = await fetch(
-          `/api/experiments/${props.experimentId}/media/${props.initialConfig.mediaName}`,
+          `${baseUrl}/media/${props.initialConfig.mediaName}`,
         );
         const data = await res.json();
         mediaData.value = data.data;
       } else if (type === "histogram" && props.initialConfig.histogramName) {
         const res = await fetch(
-          `/api/experiments/${props.experimentId}/histograms/${props.initialConfig.histogramName}`,
+          `${baseUrl}/histograms/${props.initialConfig.histogramName}`,
         );
         const data = await res.json();
         histogramData.value = data.data;
       } else if (type === "table" && props.initialConfig.tableName) {
         const res = await fetch(
-          `/api/experiments/${props.experimentId}/tables/${props.initialConfig.tableName}`,
+          `${baseUrl}/tables/${props.initialConfig.tableName}`,
         );
         const data = await res.json();
         tableData.value = data.data;

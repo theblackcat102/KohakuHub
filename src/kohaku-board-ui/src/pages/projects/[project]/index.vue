@@ -23,8 +23,8 @@ onMounted(async () => {
 });
 
 function viewRun(runId) {
-  // Use the main experiments viewer (the most important page!)
-  router.push(`/experiments/${runId}`);
+  // Route to the project-scoped experiment viewer
+  router.push(`/projects/${project.value}/${runId}`);
 }
 
 function formatDate(timestamp) {

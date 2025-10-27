@@ -19,9 +19,6 @@ declare module 'vue-router/auto-routes' {
    */
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
-    '/dashboard/[id]': RouteRecordInfo<'/dashboard/[id]', '/dashboard/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
-    '/experiments/': RouteRecordInfo<'/experiments/', '/experiments', Record<never, never>, Record<never, never>>,
-    '/experiments/[id]': RouteRecordInfo<'/experiments/[id]', '/experiments/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     '/projects/': RouteRecordInfo<'/projects/', '/projects', Record<never, never>, Record<never, never>>,
     '/projects/[project]/': RouteRecordInfo<'/projects/[project]/', '/projects/:project', { project: ParamValue<true> }, { project: ParamValue<false> }>,
     '/projects/[project]/[id]': RouteRecordInfo<'/projects/[project]/[id]', '/projects/:project/:id', { project: ParamValue<true>, id: ParamValue<true> }, { project: ParamValue<false>, id: ParamValue<false> }>,
@@ -40,18 +37,6 @@ declare module 'vue-router/auto-routes' {
   export interface _RouteFileInfoMap {
     'src/pages/index.vue': {
       routes: '/'
-      views: never
-    }
-    'src/pages/dashboard/[id].vue': {
-      routes: '/dashboard/[id]'
-      views: never
-    }
-    'src/pages/experiments/index.vue': {
-      routes: '/experiments/'
-      views: never
-    }
-    'src/pages/experiments/[id].vue': {
-      routes: '/experiments/[id]'
       views: never
     }
     'src/pages/projects/index.vue': {

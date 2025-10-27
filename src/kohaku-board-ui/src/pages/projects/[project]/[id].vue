@@ -56,18 +56,31 @@ onMounted(async () => {
     const projectName = route.params.project;
     const runId = route.params.id;
 
-    // Fetch summary using new project-based API
+    // Fetch summary using runs API
     const summaryResponse = await fetch(
       `/api/projects/${projectName}/runs/${runId}/summary`,
     );
-    const summary = await summaryResponse.json();
 
-    // Fetch available scalars
-    const scalarsResponse = await fetch(
-      `/api/projects/${projectName}/runs/${runId}/scalars`,
-    );
-    const scalarsData = await scalarsResponse.json();
-    availableMetrics.value = scalarsData.metrics;
+    if (!summaryResponse.ok) {
+      console.error(
+        "Failed to fetch summary:",
+        summaryResponse.status,
+        summaryResponse.statusText,
+      );
+      const errorText = await summaryResponse.text();
+      console.error("Error response:", errorText);
+      throw new Error(`Failed to fetch summary: ${summaryResponse.status}`);
+    }
+
+    const summary = await summaryResponse.json();
+    console.log("Summary response:", summary);
+
+    if (!summary.available_data || !summary.available_data.scalars) {
+      console.error("Invalid summary structure:", summary);
+      throw new Error("Invalid summary response structure");
+    }
+
+    availableMetrics.value = summary.available_data.scalars;
 
     // Add computed time metrics (will be calculated after fetching timestamp)
     // These are not in the backend, but calculated on frontend
@@ -106,7 +119,7 @@ onMounted(async () => {
       const metricsByNamespace = new Map();
       metricsByNamespace.set("", []); // Main namespace
 
-      for (const metric of summary.available_data.scalars) {
+      for (const metric of availableMetrics.value) {
         // Skip axis-only metrics - they shouldn't get default charts
         if (axisOnlyMetrics.has(metric)) {
           continue;
@@ -169,7 +182,7 @@ onMounted(async () => {
       }
 
       // Add tables to namespace tabs
-      for (const tableName of summary.available_tables || []) {
+      for (const tableName of summary.available_data?.tables || []) {
         const slashIdx = tableName.indexOf("/");
         if (slashIdx > 0) {
           const namespace = tableName.substring(0, slashIdx);
@@ -191,7 +204,7 @@ onMounted(async () => {
       }
 
       // Add histograms to namespace tabs
-      for (const histName of summary.available_histograms || []) {
+      for (const histName of summary.available_data?.histograms || []) {
         const slashIdx = histName.indexOf("/");
         if (slashIdx > 0) {
           const namespace = histName.substring(0, slashIdx);
@@ -228,7 +241,7 @@ onMounted(async () => {
       }
 
       // Media/tables/histograms without namespace go to main tab
-      for (const mediaName of summary.available_media || []) {
+      for (const mediaName of summary.available_data?.media || []) {
         if (!mediaName.includes("/")) {
           cards.push({
             id: `card-${cardId++}`,
@@ -244,7 +257,7 @@ onMounted(async () => {
         }
       }
 
-      for (const tableName of summary.available_tables || []) {
+      for (const tableName of summary.available_data?.tables || []) {
         if (!tableName.includes("/")) {
           cards.push({
             id: `card-${cardId++}`,
@@ -260,7 +273,7 @@ onMounted(async () => {
         }
       }
 
-      for (const histName of summary.available_histograms || []) {
+      for (const histName of summary.available_data?.histograms || []) {
         if (!histName.includes("/")) {
           cards.push({
             id: `card-${cardId++}`,
@@ -355,10 +368,9 @@ async function fetchMetricsForTab() {
     for (const metric of neededMetrics) {
       if (!metricDataCache.value[metric]) {
         try {
-          // URL-encode metric name (e.g., "train/loss" -> "train%2Floss")
-          const encodedMetric = encodeURIComponent(metric);
+          // Don't URL-encode - FastAPI :path parameter handles it
           const response = await fetch(
-            `/api/projects/${projectName}/runs/${runId}/scalars/${encodedMetric}`,
+            `/api/projects/${projectName}/runs/${runId}/scalars/${metric}`,
           );
 
           if (!response.ok) {
@@ -964,6 +976,7 @@ function onDragEnd(evt) {
         :key="card.id"
         :card-id="card.id"
         :experiment-id="route.params.id"
+        :project="route.params.project"
         :sparse-data="sparseData"
         :available-metrics="availableMetrics"
         :initial-config="{

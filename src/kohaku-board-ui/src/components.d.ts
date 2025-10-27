@@ -41,8 +41,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     ScatterPlot: typeof import('./components/ScatterPlot.vue')['default']
     TableViewer: typeof import('./components/TableViewer.vue')['default']
-  }
-  export interface GlobalDirectives {
-    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
+    TheFooter: typeof import('./components/layout/TheFooter.vue')['default']
+    TheHeader: typeof import('./components/layout/TheHeader.vue')['default']
   }
 }
