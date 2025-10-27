@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from kohakuboard.auth import get_current_user
 from kohakuboard.config import cfg
 from kohakuboard.db import Board, User
+from kohakuboard.db_operations import get_organization, get_user_organization
 from kohakuboard.logger import logger_api
 
 router = APIRouter()
@@ -71,9 +72,33 @@ async def sync_run(
 
     logger_api.info(f"Run ID: {run_id}, Name: {name}, Private: {private}")
 
+    # Determine owner (support org/project format)
+    owner = current_user
+    if "/" in project_name:
+        # Format: {org_name}/{project}
+        org_name, actual_project = project_name.split("/", 1)
+        org = get_organization(org_name)
+        if not org:
+            raise HTTPException(
+                404, detail={"error": f"Organization '{org_name}' not found"}
+            )
+
+        # Check if user is member of org
+        membership = get_user_organization(current_user, org)
+        if not membership or membership.role not in ["member", "admin", "super-admin"]:
+            raise HTTPException(
+                403,
+                detail={
+                    "error": f"You don't have permission to sync to organization '{org_name}'"
+                },
+            )
+
+        owner = org
+        project_name = actual_project
+
     # Check if board exists
     existing = Board.get_or_none(
-        (Board.owner == current_user)
+        (Board.owner == owner)
         & (Board.project_name == project_name)
         & (Board.run_id == run_id)
     )
@@ -84,18 +109,18 @@ async def sync_run(
         logger_api.info(f"Updating existing board: {board.id}")
     else:
         # Create new
-        storage_path = f"users/{current_user.username}/{project_name}/{run_id}"
+        storage_path = f"users/{owner.username}/{project_name}/{run_id}"
         board = Board.create(
             run_id=run_id,
             name=name,
             project_name=project_name,
-            owner=current_user,
+            owner=owner,
             private=private,
             config=json.dumps(config),
             storage_path=storage_path,
             backend="duckdb",
         )
-        logger_api.info(f"Created new board: {board.id}")
+        logger_api.info(f"Created new board: {board.id} (owner: {owner.username})")
 
     # Save files to filesystem
     base_dir = Path(cfg.app.board_data_dir)

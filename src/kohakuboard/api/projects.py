@@ -15,6 +15,74 @@ from kohakuboard.logger import logger_api
 router = APIRouter()
 
 
+def fetchProjectRuns(project_name: str, current_user: User | None):
+    """Helper to fetch project runs based on mode.
+
+    Args:
+        project_name: Project name
+        current_user: Current user (optional)
+
+    Returns:
+        dict with project info and runs list
+    """
+    if cfg.app.mode == "local":
+        # Local mode: project must be "local"
+        if project_name != "local":
+            raise HTTPException(404, detail={"error": "Project not found"})
+
+        # List all runs in base_dir
+        base_dir = Path(cfg.app.board_data_dir)
+        boards = list_boards(base_dir)
+
+        return {
+            "project": "local",
+            "runs": [
+                {
+                    "run_id": board["board_id"],
+                    "name": board["name"],
+                    "created_at": board["created_at"],
+                    "updated_at": board.get("updated_at"),
+                    "config": board.get("config", {}),
+                }
+                for board in boards
+            ],
+        }
+    else:
+        # Remote mode: require authentication
+        if not current_user:
+            raise HTTPException(401, detail={"error": "Authentication required"})
+
+        # Query runs from DB for current user
+        runs_query = (
+            Board.select()
+            .where((Board.owner == current_user) & (Board.project_name == project_name))
+            .order_by(Board.created_at.desc())
+        )
+
+        runs = []
+        for run in runs_query:
+            runs.append(
+                {
+                    "run_id": run.run_id,
+                    "name": run.name,
+                    "private": run.private,
+                    "created_at": run.created_at.isoformat(),
+                    "updated_at": run.updated_at.isoformat(),
+                    "last_synced_at": (
+                        run.last_synced_at.isoformat() if run.last_synced_at else None
+                    ),
+                    "total_size": run.total_size_bytes,
+                    "config": json.loads(run.config) if run.config else {},
+                }
+            )
+
+        return {
+            "project": project_name,
+            "owner": current_user.username,
+            "runs": runs,
+        }
+
+
 @router.get("/projects")
 async def list_projects(current_user: User | None = Depends(get_optional_user)):
     """List projects accessible to current user
@@ -97,62 +165,7 @@ async def list_runs(
         current_user: Current user (optional)
 
     Returns:
-        dict: {"project": ..., "runs": [...]}
+        dict: {"project": ..., "runs": [...], "owner": ...}
     """
     logger_api.info(f"Listing runs for project: {project_name}")
-
-    if cfg.app.mode == "local":
-        if project_name != "local":
-            raise HTTPException(404, detail={"error": "Project not found"})
-
-        # List all runs in base_dir
-        base_dir = Path(cfg.app.board_data_dir)
-        boards = list_boards(base_dir)
-
-        return {
-            "project": "local",
-            "runs": [
-                {
-                    "run_id": board["board_id"],
-                    "name": board["name"],
-                    "created_at": board["created_at"],
-                    "updated_at": board.get("updated_at"),
-                    "config": board.get("config", {}),
-                }
-                for board in boards
-            ],
-        }
-
-    else:  # remote mode
-        if not current_user:
-            raise HTTPException(401, detail={"error": "Authentication required"})
-
-        # Query runs from DB
-        runs_query = (
-            Board.select()
-            .where((Board.owner == current_user) & (Board.project_name == project_name))
-            .order_by(Board.created_at.desc())
-        )
-
-        runs = []
-        for run in runs_query:
-            runs.append(
-                {
-                    "run_id": run.run_id,
-                    "name": run.name,
-                    "private": run.private,
-                    "created_at": run.created_at.isoformat(),
-                    "updated_at": run.updated_at.isoformat(),
-                    "last_synced_at": (
-                        run.last_synced_at.isoformat() if run.last_synced_at else None
-                    ),
-                    "total_size": run.total_size_bytes,
-                    "config": json.loads(run.config) if run.config else {},
-                }
-            )
-
-        return {
-            "project": project_name,
-            "owner": current_user.username,
-            "runs": runs,
-        }
+    return fetchProjectRuns(project_name, current_user)

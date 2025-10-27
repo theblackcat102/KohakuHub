@@ -24,7 +24,8 @@ else:
     db_module.db = SqliteDatabase(":memory:")
 
 # Now import routers (after db is initialized)
-from kohakuboard.api import boards, projects, runs, sync, system
+from kohakuboard.api import boards, org, projects, runs, sync, system
+from kohakuboard.auth import router as auth_router
 
 app = FastAPI(
     title="KohakuBoard API",
@@ -43,7 +44,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register new routers (project-based API)
+# Register auth router (remote mode uses it, local mode ignores it)
+app.include_router(auth_router, prefix=cfg.app.api_base, tags=["auth"])
+
+# Register organization router (mounted at /org/, not /api/org/)
+app.include_router(org.router, prefix="/org", tags=["organizations"])
+
+# Register project/run routers
 app.include_router(system.router, prefix=cfg.app.api_base, tags=["system"])
 app.include_router(projects.router, prefix=cfg.app.api_base, tags=["projects"])
 app.include_router(runs.router, prefix=cfg.app.api_base, tags=["runs"])

@@ -58,7 +58,7 @@ def init_db(backend: str, database_url: str):
     # Create tables
     with db:
         db.create_tables(
-            [User, Session, Token, UserOrganization, Board],
+            [User, EmailVerification, Session, Token, UserOrganization, Board],
             safe=True,
         )
 
@@ -138,6 +138,21 @@ class Token(BaseModel):
 
     class Meta:
         table_name = "token"
+
+
+class EmailVerification(BaseModel):
+    """Email verification tokens - EXACTLY same as KohakuHub"""
+
+    id = AutoField()
+    user = ForeignKeyField(
+        User, backref="email_verifications", on_delete="CASCADE", index=True
+    )
+    token = CharField(unique=True, index=True)
+    expires_at = DateTimeField()
+    created_at = DateTimeField(default=partial(datetime.now, tz=timezone.utc))
+
+    class Meta:
+        table_name = "emailverification"
 
 
 class UserOrganization(BaseModel):

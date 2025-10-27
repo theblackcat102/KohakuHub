@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from kohakuboard.api.utils.board_reader import BoardReader
-from kohakuboard.auth import check_board_read_permission, get_optional_user
+from kohakuboard.auth import get_optional_user
+from kohakuboard.auth.permissions import check_board_read_permission
 from kohakuboard.config import cfg
 from kohakuboard.db import Board, User
 from kohakuboard.logger import logger_api
@@ -18,8 +19,10 @@ from kohakuboard.logger import logger_api
 router = APIRouter()
 
 
-def get_run_path(project: str, run_id: str, current_user: User | None) -> Path:
-    """Resolve run path based on mode
+def get_run_path(
+    project: str, run_id: str, current_user: User | None
+) -> tuple[Path, Board | None]:
+    """Resolve run path based on mode.
 
     Args:
         project: Project name
@@ -27,7 +30,7 @@ def get_run_path(project: str, run_id: str, current_user: User | None) -> Path:
         current_user: Current user (optional)
 
     Returns:
-        Path to run directory
+        Tuple of (run_path, board) - board is None in local mode
 
     Raises:
         HTTPException: 401/403/404 if access denied or not found
@@ -37,25 +40,20 @@ def get_run_path(project: str, run_id: str, current_user: User | None) -> Path:
     if cfg.app.mode == "local":
         if project != "local":
             raise HTTPException(404, detail={"error": "Project not found"})
-        return base_dir / run_id
+        return base_dir / run_id, None
 
     else:  # remote mode
-        if not current_user:
-            raise HTTPException(401, detail={"error": "Authentication required"})
-
-        # Get board from DB
+        # Get board from DB (don't filter by owner - check permissions instead)
         board = Board.get_or_none(
-            (Board.owner == current_user)
-            & (Board.project_name == project)
-            & (Board.run_id == run_id)
+            (Board.project_name == project) & (Board.run_id == run_id)
         )
         if not board:
             raise HTTPException(404, detail={"error": "Run not found"})
 
-        # Check permissions
+        # Check read permission (works for owner, org members, and public boards)
         check_board_read_permission(board, current_user)
 
-        return base_dir / board.storage_path
+        return base_dir / board.storage_path, board
 
 
 @router.get("/projects/{project}/runs/{run_id}/summary")
@@ -77,7 +75,7 @@ async def get_run_summary(
     """
     logger_api.info(f"Fetching summary for {project}/{run_id}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     summary = reader.get_summary()
 
@@ -116,7 +114,7 @@ async def get_run_metadata(
     """Get run metadata"""
     logger_api.info(f"Fetching metadata for {project}/{run_id}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     metadata = reader.get_metadata()
 
@@ -132,7 +130,7 @@ async def get_available_scalars(
     """Get list of available scalar metrics"""
     logger_api.info(f"Fetching available scalars for {project}/{run_id}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     metrics = reader.get_available_metrics()
 
@@ -154,7 +152,7 @@ async def get_scalar_data(
     """
     logger_api.info(f"Fetching scalar data for {project}/{run_id}/{metric}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     data = reader.get_scalar_data(metric, limit=limit)
 
@@ -170,7 +168,7 @@ async def get_available_media(
     """Get list of available media log names"""
     logger_api.info(f"Fetching available media for {project}/{run_id}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     media_names = reader.get_available_media_names()
 
@@ -188,7 +186,7 @@ async def get_media_data(
     """Get media data for a specific log name"""
     logger_api.info(f"Fetching media data for {project}/{run_id}/{name}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     data = reader.get_media_data(name, limit=limit)
 
@@ -220,7 +218,7 @@ async def get_media_file(
     """Serve media file (image/video/audio)"""
     logger_api.info(f"Serving media file: {project}/{run_id}/{filename}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     file_path = reader.get_media_file_path(filename)
 
@@ -260,7 +258,7 @@ async def get_available_tables(
     """Get list of available table log names"""
     logger_api.info(f"Fetching available tables for {project}/{run_id}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     table_names = reader.get_available_table_names()
 
@@ -278,7 +276,7 @@ async def get_table_data(
     """Get table data for a specific log name"""
     logger_api.info(f"Fetching table data for {project}/{run_id}/{name}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     data = reader.get_table_data(name, limit=limit)
 
@@ -294,7 +292,7 @@ async def get_available_histograms(
     """Get list of available histogram log names"""
     logger_api.info(f"Fetching available histograms for {project}/{run_id}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     histogram_names = reader.get_available_histogram_names()
 
@@ -312,7 +310,7 @@ async def get_histogram_data(
     """Get histogram data for a specific log name"""
     logger_api.info(f"Fetching histogram data for {project}/{run_id}/{name}")
 
-    run_path = get_run_path(project, run_id, current_user)
+    run_path, _ = get_run_path(project, run_id, current_user)
     reader = BoardReader(run_path)
     data = reader.get_histogram_data(name, limit=limit)
 
