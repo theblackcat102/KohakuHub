@@ -1,12 +1,14 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { initializeSliderSync } from "@/composables/useSliderSync";
+import { useAuthStore } from "@/stores/auth";
 import { getSystemInfo } from "@/utils/api";
 import TheHeader from "@/components/layout/TheHeader.vue";
 import TheFooter from "@/components/layout/TheFooter.vue";
 
 const darkMode = ref(false);
 const systemInfo = ref(null);
+const authStore = useAuthStore();
 
 onMounted(async () => {
   const savedTheme = localStorage.getItem("theme");
@@ -21,6 +23,11 @@ onMounted(async () => {
   // Fetch system info for mode detection
   try {
     systemInfo.value = await getSystemInfo();
+
+    // Initialize auth store if in remote mode
+    if (systemInfo.value?.mode === "remote") {
+      await authStore.init();
+    }
   } catch (error) {
     console.error("Failed to fetch system info:", error);
   }

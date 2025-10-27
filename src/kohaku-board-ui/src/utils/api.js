@@ -3,6 +3,7 @@ import axios from "axios";
 const api = axios.create({
   baseURL: "/api",
   timeout: 30000,
+  withCredentials: true, // For session cookies
 });
 
 /**
@@ -336,5 +337,41 @@ export async function fetchTableData(boardId, name, params = {}) {
   });
   return response.data;
 }
+
+/**
+ * Auth API
+ */
+export const authAPI = {
+  register: (data) => api.post("/auth/register", data),
+  login: (data) => api.post("/auth/login", data),
+  logout: () => api.post("/auth/logout"),
+  me: () => api.get("/auth/me"),
+  createToken: (data) => api.post("/auth/tokens/create", data),
+  listTokens: () => api.get("/auth/tokens"),
+  revokeToken: (id) =>
+    axios.delete(`/api/auth/tokens/${id}`, { withCredentials: true }),
+  listUserOrgs: (username) =>
+    axios.get(`/org/users/${username}/orgs`, { withCredentials: true }),
+};
+
+/**
+ * Organization API
+ */
+export const orgAPI = {
+  create: (data) => axios.post("/org/create", data, { withCredentials: true }),
+  getInfo: (orgName) => axios.get(`/org/${orgName}`, { withCredentials: true }),
+  addMember: (orgName, data) =>
+    axios.post(`/org/${orgName}/members`, data, { withCredentials: true }),
+  removeMember: (orgName, username) =>
+    axios.delete(`/org/${orgName}/members/${username}`, {
+      withCredentials: true,
+    }),
+  updateMemberRole: (orgName, username, data) =>
+    axios.put(`/org/${orgName}/members/${username}`, data, {
+      withCredentials: true,
+    }),
+  listMembers: (orgName) =>
+    axios.get(`/org/${orgName}/members`, { withCredentials: true }),
+};
 
 export default api;

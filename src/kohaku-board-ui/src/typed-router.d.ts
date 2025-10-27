@@ -19,9 +19,11 @@ declare module 'vue-router/auto-routes' {
    */
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
+    '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/projects/': RouteRecordInfo<'/projects/', '/projects', Record<never, never>, Record<never, never>>,
     '/projects/[project]/': RouteRecordInfo<'/projects/[project]/', '/projects/:project', { project: ParamValue<true> }, { project: ParamValue<false> }>,
     '/projects/[project]/[id]': RouteRecordInfo<'/projects/[project]/[id]', '/projects/:project/:id', { project: ParamValue<true>, id: ParamValue<true> }, { project: ParamValue<false>, id: ParamValue<false> }>,
+    '/register': RouteRecordInfo<'/register', '/register', Record<never, never>, Record<never, never>>,
   }
 
   /**
@@ -39,6 +41,10 @@ declare module 'vue-router/auto-routes' {
       routes: '/'
       views: never
     }
+    'src/pages/login.vue': {
+      routes: '/login'
+      views: never
+    }
     'src/pages/projects/index.vue': {
       routes: '/projects/'
       views: never
@@ -49,6 +55,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/projects/[project]/[id].vue': {
       routes: '/projects/[project]/[id]'
+      views: never
+    }
+    'src/pages/register.vue': {
+      routes: '/register'
       views: never
     }
   }

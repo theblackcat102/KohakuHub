@@ -1,14 +1,28 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { fetchProjects } from "@/utils/api";
+import { useAuthStore } from "@/stores/auth";
+import { fetchProjects, getSystemInfo } from "@/utils/api";
 
 const router = useRouter();
+const authStore = useAuthStore();
 const projects = ref([]);
 const loading = ref(true);
+const systemInfo = ref(null);
 
 onMounted(async () => {
   try {
+    // Get system mode
+    systemInfo.value = await getSystemInfo();
+
+    // Check if authentication required
+    if (systemInfo.value?.mode === "remote" && !authStore.isAuthenticated) {
+      // Don't fetch - show login prompt instead
+      loading.value = false;
+      return;
+    }
+
+    // Fetch projects
     const result = await fetchProjects();
     projects.value = result.projects;
   } catch (error) {
@@ -17,6 +31,11 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+const isRemoteMode = computed(() => systemInfo.value?.mode === "remote");
+const needsAuth = computed(
+  () => isRemoteMode.value && !authStore.isAuthenticated,
+);
 
 function viewProject(projectName) {
   router.push(`/projects/${projectName}`);
@@ -36,7 +55,35 @@ function formatDate(timestamp) {
       </h1>
     </div>
 
-    <div v-if="loading" class="text-center py-12">
+    <!-- Auth required prompt (remote mode only) -->
+    <div
+      v-if="needsAuth"
+      class="bg-white dark:bg-gray-900 rounded-lg shadow-md p-8 text-center border border-gray-200 dark:border-gray-800"
+    >
+      <div
+        class="i-ep-lock text-6xl text-gray-400 dark:text-gray-600 mb-4 inline-block"
+      />
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+        Authentication Required
+      </h2>
+      <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Please login to view your projects
+      </p>
+      <div class="flex gap-3 justify-center">
+        <el-button @click="$router.push('/login')" plain size="large">
+          Login
+        </el-button>
+        <el-button
+          type="primary"
+          @click="$router.push('/register')"
+          size="large"
+        >
+          Sign Up
+        </el-button>
+      </div>
+    </div>
+
+    <div v-else-if="loading" class="text-center py-12">
       <div class="text-gray-500 dark:text-gray-400">Loading projects...</div>
     </div>
 
