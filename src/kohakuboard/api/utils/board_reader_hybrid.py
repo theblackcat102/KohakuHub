@@ -386,22 +386,95 @@ class HybridBoardReader:
             conn.close()
 
     def get_available_histogram_names(self) -> List[str]:
-        """Get histogram names (always empty for hybrid backend)
+        """Get histogram names from Lance files
 
         Returns:
-            Empty list (histograms not stored locally)
+            List of unique histogram names
         """
-        return []
+        histograms_dir = self.board_dir / "data" / "histograms"
+        if not histograms_dir.exists():
+            return []
+
+        try:
+            names = set()
+
+            # Read from all histogram Lance files
+            for lance_file in histograms_dir.glob("*.lance"):
+                ds = LanceDataset(str(lance_file))
+                table = ds.to_table(columns=["name"])
+                names.update(table["name"].to_pylist())
+
+            return sorted(names)
+
+        except Exception as e:
+            logger.error(f"Failed to list histogram names: {e}")
+            return []
 
     def get_histogram_data(
         self, name: str, limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Get histogram data (always empty for hybrid backend)
+        """Get histogram data
+
+        Args:
+            name: Histogram name
+            limit: Optional limit
 
         Returns:
-            Empty list (histograms not stored locally)
+            List of histogram entries
         """
-        return []
+        histograms_dir = self.board_dir / "data" / "histograms"
+        if not histograms_dir.exists():
+            return []
+
+        try:
+            # Determine which file
+            namespace = name.split("/")[0] if "/" in name else name.replace("/", "__")
+
+            # Try both precisions
+            for suffix in ["_i32", "_u8"]:
+                lance_file = histograms_dir / f"{namespace}{suffix}.lance"
+                if not lance_file.exists():
+                    continue
+
+                ds = LanceDataset(str(lance_file))
+                table = ds.to_table(filter=f"name = '{name}'", limit=limit)
+
+                if len(table) == 0:
+                    continue
+
+                # Convert to list
+                result = []
+                for i in range(len(table)):
+                    counts = table["counts"][i].as_py()
+                    min_val = float(table["min"][i].as_py())
+                    max_val = float(table["max"][i].as_py())
+                    num_bins = len(counts)
+
+                    # Reconstruct bin edges from min/max/num_bins
+                    import numpy as np
+
+                    bin_edges = np.linspace(min_val, max_val, num_bins + 1).tolist()
+
+                    result.append(
+                        {
+                            "step": int(table["step"][i].as_py()),
+                            "global_step": (
+                                int(table["global_step"][i].as_py())
+                                if table["global_step"][i].as_py()
+                                else None
+                            ),
+                            "bins": bin_edges,  # Bin EDGES (K+1 values)
+                            "counts": counts,  # Counts (K values)
+                        }
+                    )
+
+                return result
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Failed to read histogram '{name}': {e}")
+            return []
 
     def get_media_file_path(self, filename: str) -> Optional[Path]:
         """Get full path to media file
@@ -455,9 +528,9 @@ class HybridBoardReader:
             "metrics_count": metrics_count,
             "media_count": media_count,
             "tables_count": tables_count,
-            "histograms_count": 0,  # Always 0 for hybrid
+            "histograms_count": len(self.get_available_histogram_names()),
             "available_metrics": self.get_available_metrics(),
             "available_media": self.get_available_media_names(),
             "available_tables": self.get_available_table_names(),
-            "available_histograms": [],  # Always empty for hybrid
+            "available_histograms": self.get_available_histogram_names(),
         }
