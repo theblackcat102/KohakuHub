@@ -284,62 +284,61 @@ export function useHoverSync() {
               const result = Plotly.Fx.hover(chartInfo.element, hoverData);
               console.log(`${LOG_PREFIX} Plotly.Fx.hover() result:`, result);
 
-              // Plotly.Fx.hover doesn't trigger spikes, so we need to simulate a mouse event
-              // to make Plotly render the spike lines
+              // Plotly.Fx.hover doesn't trigger spikes, so we manually draw them using Plotly's relayout
               try {
                 const plotlyDiv = chartInfo.element;
-                const plotArea = plotlyDiv.querySelector(".plot");
+                const currentLayout = plotlyDiv.layout || {};
                 const xaxis = plotlyDiv._fullLayout?.xaxis;
                 const yaxis = plotlyDiv._fullLayout?.yaxis;
 
-                if (plotArea && xaxis && yaxis) {
-                  // Convert data x-value to pixel position
-                  const xPixel = xaxis.l2p(xValue) + xaxis._offset;
+                if (xaxis && yaxis) {
+                  // Get axis ranges
+                  const xRange = xaxis.range || [0, 1];
+                  const yRange = yaxis.range || [0, 1];
 
-                  // Get a reasonable y-pixel position (middle of plot area)
-                  const yPixel = yaxis._offset + yaxis._length / 2;
+                  // Create vertical spike line shape at xValue
+                  const spikeShape = {
+                    type: "line",
+                    x0: xValue,
+                    x1: xValue,
+                    y0: yRange[0],
+                    y1: yRange[1],
+                    xref: "x",
+                    yref: "y",
+                    line: {
+                      color: xaxis.spikecolor || "#666666",
+                      width: xaxis.spikethickness || 1.5,
+                      dash: xaxis.spikedash || "solid",
+                    },
+                    layer: "above",
+                  };
 
-                  console.log(
-                    `${LOG_PREFIX} Calculated pixel position: x=${xPixel}, y=${yPixel}`,
+                  // Get existing shapes (excluding our sync spike if it exists)
+                  const existingShapes = (currentLayout.shapes || []).filter(
+                    (s) => !s._hoverSyncSpike,
                   );
-                  console.log(
-                    `${LOG_PREFIX} xaxis range:`,
-                    xaxis.range,
-                    "offset:",
-                    xaxis._offset,
-                  );
 
-                  // Get bounding rect for proper client coordinates
-                  const rect = plotArea.getBoundingClientRect();
+                  // Mark our shape as a hover sync spike for easy removal
+                  spikeShape._hoverSyncSpike = true;
 
-                  // Create and dispatch a mousemove event at the calculated position
-                  const mouseEvent = new MouseEvent("mousemove", {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window,
-                    clientX: rect.left + xPixel,
-                    clientY: rect.top + yPixel,
-                    screenX: window.screenX + rect.left + xPixel,
-                    screenY: window.screenY + rect.top + yPixel,
+                  // Add the spike line
+                  Plotly.relayout(plotlyDiv, {
+                    shapes: [...existingShapes, spikeShape],
                   });
 
-                  plotArea.dispatchEvent(mouseEvent);
                   console.log(
-                    `${LOG_PREFIX} Dispatched mousemove event to trigger spikes`,
+                    `${LOG_PREFIX} Drew spike line at x=${xValue} for chart:`,
+                    chartInfo.id,
                   );
                 } else {
-                  console.warn(
-                    `${LOG_PREFIX} Missing plotArea or axis layout:`,
-                    {
-                      hasPlotArea: !!plotArea,
-                      hasXaxis: !!xaxis,
-                      hasYaxis: !!yaxis,
-                    },
-                  );
+                  console.warn(`${LOG_PREFIX} Missing axis layout:`, {
+                    hasXaxis: !!xaxis,
+                    hasYaxis: !!yaxis,
+                  });
                 }
               } catch (spikeError) {
                 console.warn(
-                  `${LOG_PREFIX} Failed to trigger spike with mouse event:`,
+                  `${LOG_PREFIX} Failed to draw spike line:`,
                   spikeError,
                 );
               }
@@ -388,6 +387,25 @@ export function useHoverSync() {
         // Use Plotly.Fx.unhover to clear hover state
         Plotly.Fx.unhover(chartInfo.element);
         console.log(`${LOG_PREFIX} Cleared hover for chart:`, chartInfo.id);
+
+        // Remove any hover sync spike lines
+        const plotlyDiv = chartInfo.element;
+        const currentLayout = plotlyDiv.layout || {};
+
+        if (currentLayout.shapes) {
+          const filteredShapes = currentLayout.shapes.filter(
+            (s) => !s._hoverSyncSpike,
+          );
+
+          // Only relayout if we actually removed shapes
+          if (filteredShapes.length !== currentLayout.shapes.length) {
+            Plotly.relayout(plotlyDiv, { shapes: filteredShapes });
+            console.log(
+              `${LOG_PREFIX} Removed spike line for chart:`,
+              chartInfo.id,
+            );
+          }
+        }
       } catch (error) {
         console.error(
           `${LOG_PREFIX} Failed to clear hover for chart ${chartInfo.id}:`,
