@@ -61,7 +61,7 @@ class Board:
         config: Optional[Dict[str, Any]] = None,
         base_dir: Optional[Union[str, Path]] = None,
         capture_output: bool = True,
-        backend: str = "duckdb",
+        backend: str = "hybrid",
     ):
         """Create a new Board for logging
 
@@ -71,12 +71,12 @@ class Board:
             config: Configuration dict for this run (hyperparameters, etc.)
             base_dir: Base directory for boards (default: ./kohakuboard)
             capture_output: Whether to capture stdout/stderr to log file
-            backend: Storage backend ("duckdb" or "parquet", default: "duckdb")
+            backend: Storage backend ("hybrid", "duckdb", or "parquet", default: "hybrid")
         """
         # Validate backend
-        if backend not in ("duckdb", "parquet"):
+        if backend not in ("hybrid", "duckdb", "parquet"):
             raise ValueError(
-                f"Invalid backend: {backend}. Must be 'duckdb' or 'parquet'"
+                f"Invalid backend: {backend}. Must be 'hybrid', 'duckdb', or 'parquet'"
             )
 
         # Board metadata
@@ -101,6 +101,10 @@ class Board:
         # _global_step is set explicitly via step() method
         self._step = -1  # Start at -1, will be 0 on first log
         self._global_step: Optional[int] = None
+
+        # Shutdown tracking
+        self._is_finishing = False  # Prevent re-entrant finish() calls
+        self._interrupt_count = 0  # Track Ctrl+C presses for force exit
 
         # Multiprocessing setup
         self.queue = mp.Queue(
@@ -403,6 +407,11 @@ class Board:
         if not hasattr(self, "writer_process"):
             return  # Already finished
 
+        if self._is_finishing:
+            logger.debug("finish() already in progress, skipping re-entrant call")
+            return  # Prevent re-entrant calls from signal handler
+
+        self._is_finishing = True
         logger.info(f"Finishing board: {self.name}")
 
         # Stop output capture
@@ -411,6 +420,7 @@ class Board:
 
         # Signal writer to stop
         self.stop_event.set()
+        logger.info("Stop event set, waiting for writer to drain queue...")
 
         # Give writer a moment to start draining queue
         time.sleep(0.1)
@@ -425,25 +435,57 @@ class Board:
             logger.info(
                 f"Waiting for writer to process {queue_size} remaining messages..."
             )
-            # Wait longer if queue has many messages
-            time.sleep(min(2.0, queue_size * 0.01))
 
-        # Wait for writer to finish with generous timeout
-        timeout = max(10, queue_size * 0.02)  # At least 10s, plus 20ms per message
-        self.writer_process.join(timeout=timeout)
+        # Poll queue until empty or timeout
+        max_wait_time = max(
+            30, queue_size * 0.05
+        )  # At least 30s, plus 50ms per message
+        start_time = time.time()
+        last_size = queue_size
+
+        while time.time() - start_time < max_wait_time:
+            try:
+                current_size = self.queue.qsize()
+                if current_size == 0:
+                    logger.info("Queue is empty, writer should finish soon")
+                    break
+
+                # Log progress if queue size changed significantly
+                if (
+                    last_size - current_size >= 100
+                    or (time.time() - start_time) % 5 < 0.5
+                ):
+                    logger.info(f"Queue progress: {current_size} messages remaining...")
+                    last_size = current_size
+
+                time.sleep(0.5)  # Check every 500ms
+            except NotImplementedError:
+                # qsize() not supported, just wait
+                break
+
+        # Wait for writer process to exit (with generous timeout)
+        final_timeout = 10
+        logger.info(
+            f"Waiting for writer process to exit (timeout: {final_timeout}s)..."
+        )
+        self.writer_process.join(timeout=final_timeout)
 
         if self.writer_process.is_alive():
             logger.warning(
-                "Writer process did not stop gracefully, terminating forcefully..."
+                "Writer process did not exit gracefully after queue drained. Waiting 5 more seconds..."
             )
-            self.writer_process.terminate()
-            self.writer_process.join(timeout=2)
+            self.writer_process.join(timeout=5)
 
-            # Force kill if still alive
             if self.writer_process.is_alive():
-                logger.error("Writer process still alive, killing...")
-                self.writer_process.kill()
-                self.writer_process.join(timeout=1)
+                logger.error("Writer process still alive, terminating forcefully...")
+                self.writer_process.terminate()
+                self.writer_process.join(timeout=2)
+
+                # Force kill if still alive
+                if self.writer_process.is_alive():
+                    logger.error("Writer process did not terminate, killing...")
+                    self.writer_process.kill()
+                    self.writer_process.join(timeout=1)
 
         logger.info(f"Board finished: {self.name}")
 
@@ -460,15 +502,26 @@ class Board:
         """
 
         def signal_handler(signum, frame):
-            """Handle termination signals"""
+            """Handle termination signals (double Ctrl+C for force exit)"""
             sig_name = signal.Signals(signum).name
-            logger.warning(f"Received {sig_name}, shutting down gracefully...")
-            try:
-                self.finish()
-            except Exception as e:
-                logger.error(f"Error during signal handler cleanup: {e}")
-            finally:
-                sys.exit(0)
+            self._interrupt_count += 1
+
+            if self._interrupt_count == 1:
+                logger.warning(f"Received {sig_name}, shutting down gracefully...")
+                logger.warning("Press Ctrl+C again to force exit (may lose data)")
+                try:
+                    self.finish()
+                except Exception as e:
+                    logger.error(f"Error during signal handler cleanup: {e}")
+                finally:
+                    sys.exit(0)
+            else:
+                logger.error(
+                    f"Received {sig_name} again - FORCE EXIT (data may be lost!)"
+                )
+                if hasattr(self, "writer_process") and self.writer_process.is_alive():
+                    self.writer_process.kill()
+                sys.exit(1)
 
         # Register signal handlers (Ctrl+C, kill)
         signal.signal(signal.SIGINT, signal_handler)

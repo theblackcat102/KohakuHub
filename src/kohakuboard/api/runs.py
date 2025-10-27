@@ -56,6 +56,70 @@ def get_run_path(
         return base_dir / board.storage_path, board
 
 
+@router.get("/projects/{project}/runs/{run_id}/status")
+async def get_run_status(
+    project: str,
+    run_id: str,
+    current_user: User | None = Depends(get_optional_user),
+):
+    """Get run status with latest update timestamp
+
+    Returns minimal info for polling (last update time, row counts)
+    """
+    run_path, _ = get_run_path(project, run_id, current_user)
+
+    # Check metadata for creation time
+    metadata_file = run_path / "metadata.json"
+    if metadata_file.exists():
+        import json
+
+        with open(metadata_file, "r") as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
+
+    # Get row count and last update from storage
+    metrics_count = 0
+    last_updated = metadata.get("created_at")
+
+    try:
+        reader = BoardReader(run_path)
+
+        # Check if hybrid backend (has get_latest_step method)
+        if hasattr(reader, "get_latest_step"):
+            # Hybrid backend - get latest from steps table
+            latest_step_info = reader.get_latest_step()
+            if latest_step_info:
+                metrics_count = latest_step_info.get("step", 0) + 1  # step count
+                # Convert timestamp ms to ISO string
+                ts_ms = latest_step_info.get("timestamp")
+                if ts_ms:
+                    from datetime import datetime, timezone
+
+                    last_updated = datetime.fromtimestamp(
+                        ts_ms / 1000, tz=timezone.utc
+                    ).isoformat()
+        else:
+            # DuckDB backend - count rows
+            conn = reader._get_metrics_connection()
+            try:
+                metrics_count = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[
+                    0
+                ]
+            finally:
+                conn.close()
+
+    except Exception as e:
+        logger_api.warning(f"Failed to get status: {e}")
+
+    return {
+        "run_id": run_id,
+        "project": project,
+        "metrics_count": metrics_count,
+        "last_updated": last_updated,
+    }
+
+
 @router.get("/projects/{project}/runs/{run_id}/summary")
 async def get_run_summary(
     project: str,

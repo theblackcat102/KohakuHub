@@ -1,6 +1,15 @@
-"""Background writer process for non-blocking logging"""
+"""Background writer process for non-blocking logging
+
+NEW ARCHITECTURE:
+- Main dispatcher thread: reads mp.Queue, routes to per-DB queues
+- 4 worker threads: one per DuckDB file, processes independently
+- Each worker has persistent connection (released only on shutdown)
+- Parallel processing: histogram computation doesn't block scalar writes
+"""
 
 import multiprocessing as mp
+import queue
+import threading
 import time
 from pathlib import Path
 from queue import Empty
@@ -11,6 +20,7 @@ from loguru import logger
 from kohakuboard.client.media import MediaHandler
 from kohakuboard.client.storage import ParquetStorage
 from kohakuboard.client.storage_duckdb import DuckDBStorage
+from kohakuboard.client.storage_hybrid import HybridStorage
 
 
 class LogWriter:
@@ -33,7 +43,9 @@ class LogWriter:
         self.backend = backend
 
         # Initialize storage backend based on selection
-        if backend == "duckdb":
+        if backend == "hybrid":
+            self.storage = HybridStorage(board_dir / "data")
+        elif backend == "duckdb":
             self.storage = DuckDBStorage(board_dir / "data")
         else:  # parquet
             self.storage = ParquetStorage(board_dir / "data")
@@ -64,15 +76,18 @@ class LogWriter:
                         self._auto_flush()
 
                 except KeyboardInterrupt:
-                    # Received interrupt in worker - stop gracefully
-                    logger.warning("Writer received interrupt, stopping...")
-                    break
+                    # Received interrupt in worker - DRAIN QUEUE FIRST
+                    logger.warning(
+                        "Writer received interrupt, draining queue before stopping..."
+                    )
+                    # Continue processing until stop_event is set by main process
+                    # Don't break immediately!
 
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
 
-            # Final flush on shutdown
-            logger.info("LogWriter shutting down, flushing buffers...")
+            # Stop event is set - drain remaining queue
+            logger.info("Stop event detected, draining remaining queue...")
             self._final_flush()
 
         except KeyboardInterrupt:
@@ -190,27 +205,41 @@ class LogWriter:
         )
 
     def _final_flush(self):
-        """Final flush on shutdown"""
+        """Final flush on shutdown - drain ALL remaining messages"""
         try:
-            # Process remaining messages in queue (with limit to prevent hanging)
+            # Process ALL remaining messages in queue (no arbitrary limit!)
             remaining = 0
-            max_drain = 1000  # Limit drain to prevent infinite loop
+            last_log_count = 0
 
-            while not self.queue.empty() and remaining < max_drain:
+            while not self.queue.empty():
                 try:
                     message = self.queue.get_nowait()
                     self._process_message(message)
                     remaining += 1
+
+                    # Log progress every 1000 messages
+                    if remaining - last_log_count >= 1000:
+                        logger.info(
+                            f"Final drain progress: {remaining} messages processed..."
+                        )
+                        last_log_count = remaining
+
                 except Empty:
                     break
                 except KeyboardInterrupt:
-                    logger.warning("Final drain interrupted, stopping...")
-                    break
+                    logger.warning(
+                        f"Final drain interrupted after {remaining} messages!"
+                    )
+                    logger.warning("Press Ctrl+C again in main process for force exit")
+                    # Don't break - let main process handle force exit
                 except Exception as e:
-                    logger.error(f"Error during final drain: {e}")
-                    break
+                    logger.error(
+                        f"Error during final drain at message {remaining}: {e}"
+                    )
+                    # Continue processing other messages
 
             # Flush all buffers
+            logger.info(f"Flushing all buffers ({remaining} messages drained)...")
             self.storage.flush_all()
 
             # Close storage backend if it has a close method
@@ -218,7 +247,7 @@ class LogWriter:
                 self.storage.close()
 
             logger.info(
-                f"LogWriter stopped. Processed {self.messages_processed} messages "
+                f"LogWriter stopped. Processed {self.messages_processed} total messages "
                 f"({remaining} from final queue drain)"
             )
 

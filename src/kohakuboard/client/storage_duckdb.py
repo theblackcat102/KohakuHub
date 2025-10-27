@@ -1,14 +1,16 @@
 """Storage backend using DuckDB for true incremental appends
 
-NEW ARCHITECTURE (Multi-File):
+NEW ARCHITECTURE (Multi-File + Short-Lived Connections):
 - 4 separate DuckDB files (metrics, media, tables, histograms)
-- Enables concurrent read while write (different files)
-- Heavy logging isolated (histogram writes don't block scalar reads)
-- Compatible with ThreadPoolExecutor for parallel writes
+- Connection-per-operation pattern (open → write → close)
+- Enables concurrent read/write (connections released between batches)
+- Retry logic for transient lock conflicts
+- Heavy logging isolated (separate files/queues)
 """
 
 import json
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -49,14 +51,11 @@ class DuckDBStorage:
         self.tables_file = base_dir / "tables.duckdb"
         self.histograms_file = base_dir / "histograms.duckdb"
 
-        # Separate connections (one per file)
-        self.metrics_conn = duckdb.connect(str(self.metrics_file))
-        self.media_conn = duckdb.connect(str(self.media_file))
-        self.tables_conn = duckdb.connect(str(self.tables_file))
-        self.histograms_conn = duckdb.connect(str(self.histograms_file))
+        # NO persistent connections - use connection-per-operation pattern
+        # This enables concurrent read access between write batches
 
-        # Create tables in each database
-        self._init_tables()
+        # Initialize tables on first write (lazy initialization)
+        self.tables_initialized = False
 
         # In-memory buffers (one per data type)
         self.metrics_buffer: List[Dict[str, Any]] = []
@@ -67,74 +66,154 @@ class DuckDBStorage:
         # Track known columns for schema evolution
         self.known_metric_cols = {"step", "global_step", "timestamp"}
 
-        # Flush thresholds
-        self.flush_threshold = 10  # Metrics
-        self.histogram_flush_threshold = 100  # Histograms (batch aggressively)
+        # Flush thresholds (BALANCED)
+        # Balance between connection overhead and queue responsiveness
+        self.flush_threshold = 50  # Metrics (reasonable batch size)
+        self.media_flush_threshold = 20  # Media (smaller batches, less frequent)
+        self.tables_flush_threshold = 20  # Tables (smaller batches)
+        self.histogram_flush_threshold = 100  # Histograms (can batch more)
 
-    def _init_tables(self):
-        """Initialize database tables in separate files"""
-        # Metrics table (dynamic columns added as needed)
-        self.metrics_conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS metrics (
-                step BIGINT NOT NULL,
-                global_step BIGINT,
-                timestamp TIMESTAMP NOT NULL
-            )
-        """
-        )
-        self.metrics_conn.commit()
+        # Retry configuration
+        self.max_retries = 5
+        self.retry_delay = 0.1  # Initial delay in seconds
 
-        # Media table (fixed schema)
-        self.media_conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS media (
-                step BIGINT NOT NULL,
-                global_step BIGINT,
-                name VARCHAR NOT NULL,
-                caption VARCHAR,
-                media_id VARCHAR,
-                type VARCHAR,
-                filename VARCHAR,
-                path VARCHAR,
-                size_bytes BIGINT,
-                format VARCHAR,
-                width INTEGER,
-                height INTEGER
-            )
-        """
-        )
-        self.media_conn.commit()
+    def _connect_with_retry(
+        self, db_file: Path, read_only: bool = False
+    ) -> duckdb.DuckDBPyConnection:
+        """Open DuckDB connection with retry logic for lock conflicts
 
-        # Tables table (fixed schema, JSON for table data)
-        self.tables_conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tables (
-                step BIGINT NOT NULL,
-                global_step BIGINT,
-                name VARCHAR NOT NULL,
-                columns VARCHAR,
-                column_types VARCHAR,
-                rows VARCHAR
-            )
-        """
-        )
-        self.tables_conn.commit()
+        Args:
+            db_file: Path to database file
+            read_only: Whether to open in read-only mode
 
-        # Histograms table (pre-computed bins to save space)
-        self.histograms_conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS histograms (
-                step BIGINT NOT NULL,
-                global_step BIGINT,
-                name VARCHAR NOT NULL,
-                num_bins INTEGER,
-                bins VARCHAR,
-                counts VARCHAR
-            )
+        Returns:
+            DuckDB connection
+
+        Raises:
+            Exception: If all retries exhausted
         """
-        )
-        self.histograms_conn.commit()
+        attempt = 0
+        last_error = None
+
+        while attempt < self.max_retries:
+            try:
+                return duckdb.connect(str(db_file), read_only=read_only)
+            except duckdb.IOException as e:
+                # IOException = file lock conflict, retry
+                last_error = e
+                attempt += 1
+                if attempt < self.max_retries:
+                    delay = self.retry_delay * (
+                        2 ** (attempt - 1)
+                    )  # Exponential backoff
+                    logger.debug(
+                        f"Write locked (IOException), retry {attempt}/{self.max_retries} after {delay:.2f}s: {db_file.name}"
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        f"Failed to connect to {db_file.name} after {self.max_retries} retries: {e}"
+                    )
+                    raise
+            except Exception as e:
+                # Other errors, don't retry
+                logger.error(
+                    f"Non-lock error opening {db_file.name}: {type(e).__name__}: {e}"
+                )
+                raise
+
+        # Should never reach here
+        raise last_error
+
+    def _ensure_tables_initialized(self):
+        """Ensure database tables are initialized (lazy initialization)"""
+        if self.tables_initialized:
+            return
+
+        # Initialize each database file with its table schema
+        # Use short-lived connections
+
+        # Metrics table
+        conn = self._connect_with_retry(self.metrics_file)
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS metrics (
+                    step BIGINT NOT NULL,
+                    global_step BIGINT,
+                    timestamp TIMESTAMP NOT NULL
+                )
+            """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Media table
+        conn = self._connect_with_retry(self.media_file)
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS media (
+                    step BIGINT NOT NULL,
+                    global_step BIGINT,
+                    name VARCHAR NOT NULL,
+                    caption VARCHAR,
+                    media_id VARCHAR,
+                    type VARCHAR,
+                    filename VARCHAR,
+                    path VARCHAR,
+                    size_bytes BIGINT,
+                    format VARCHAR,
+                    width INTEGER,
+                    height INTEGER
+                )
+            """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Tables table
+        conn = self._connect_with_retry(self.tables_file)
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tables (
+                    step BIGINT NOT NULL,
+                    global_step BIGINT,
+                    name VARCHAR NOT NULL,
+                    columns VARCHAR,
+                    column_types VARCHAR,
+                    rows VARCHAR
+                )
+            """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Histograms table
+        conn = self._connect_with_retry(self.histograms_file)
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS histograms (
+                    step BIGINT NOT NULL,
+                    global_step BIGINT,
+                    name VARCHAR NOT NULL,
+                    num_bins INTEGER,
+                    bins VARCHAR,
+                    counts VARCHAR
+                )
+            """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        self.tables_initialized = True
+        logger.debug("Database tables initialized")
 
     def append_metrics(
         self,
@@ -151,6 +230,9 @@ class DuckDBStorage:
             metrics: Dict of metric name -> value (can contain "/" for namespaces)
             timestamp: Timestamp of log event (datetime object)
         """
+        # Lazy initialization on first write
+        self._ensure_tables_initialized()
+
         # Escape metric names (replace "/" with "__" for DuckDB)
         escaped_metrics = {k.replace("/", "__"): v for k, v in metrics.items()}
 
@@ -177,20 +259,28 @@ class DuckDBStorage:
         Args:
             new_cols: Set of new column names
         """
-        for col in new_cols:
-            try:
-                # Escape column name (replace "/" with "__" for DuckDB compatibility)
-                escaped_col = col.replace("/", "__")
-                # Add column as DOUBLE (works for most ML metrics)
-                self.metrics_conn.execute(
-                    f'ALTER TABLE metrics ADD COLUMN IF NOT EXISTS "{escaped_col}" DOUBLE'
-                )
-                self.known_metric_cols.add(col)
-                logger.debug(f"Added new metric column: {col} (as {escaped_col})")
-            except Exception as e:
-                logger.error(f"Failed to add column {col}: {e}")
+        if not new_cols:
+            return
 
-        self.metrics_conn.commit()
+        # Open connection, add columns, close
+        conn = self._connect_with_retry(self.metrics_file)
+        try:
+            for col in new_cols:
+                try:
+                    # Escape column name (replace "/" with "__" for DuckDB compatibility)
+                    escaped_col = col.replace("/", "__")
+                    # Add column as DOUBLE (works for most ML metrics)
+                    conn.execute(
+                        f'ALTER TABLE metrics ADD COLUMN IF NOT EXISTS "{escaped_col}" DOUBLE'
+                    )
+                    self.known_metric_cols.add(col)
+                    logger.debug(f"Added new metric column: {col} (as {escaped_col})")
+                except Exception as e:
+                    logger.error(f"Failed to add column {col}: {e}")
+
+            conn.commit()
+        finally:
+            conn.close()
 
     def append_media(
         self,
@@ -219,8 +309,9 @@ class DuckDBStorage:
             }
             self.media_buffer.append(row)
 
-        # Flush immediately
-        self.flush_media()
+        # Batch flush when threshold reached
+        if len(self.media_buffer) >= self.media_flush_threshold:
+            self.flush_media()
 
     def append_table(
         self,
@@ -247,14 +338,17 @@ class DuckDBStorage:
         }
         self.tables_buffer.append(row)
 
-        # Flush immediately
-        self.flush_tables()
+        # Batch flush when threshold reached
+        if len(self.tables_buffer) >= self.tables_flush_threshold:
+            self.flush_tables()
 
     def flush_metrics(self):
-        """Flush metrics buffer to DuckDB (preserves NaN/inf)"""
+        """Flush metrics buffer to DuckDB (preserves NaN/inf, short-lived connection)"""
         if not self.metrics_buffer:
             return
 
+        # Open connection with retry
+        conn = self._connect_with_retry(self.metrics_file)
         try:
             # Direct SQL INSERT to preserve NaN/inf as IEEE 754 values (not NULL)
             for row in self.metrics_buffer:
@@ -265,9 +359,9 @@ class DuckDBStorage:
                 placeholders = ", ".join("?" * len(columns))
                 query = f"INSERT INTO metrics ({col_names}) VALUES ({placeholders})"
 
-                self.metrics_conn.execute(query, values)
+                conn.execute(query, values)
 
-            self.metrics_conn.commit()
+            conn.commit()
 
             logger.debug(
                 f"Appended {len(self.metrics_buffer)} metrics rows (preserving NaN/inf)"
@@ -280,14 +374,17 @@ class DuckDBStorage:
         except Exception as e:
             logger.error(f"Failed to flush metrics: {e}")
             logger.exception(e)
+        finally:
+            conn.close()  # CRITICAL: Always close connection
 
     def flush_media(self):
-        """Flush media buffer to DuckDB (direct INSERT)"""
+        """Flush media buffer to DuckDB (direct INSERT, short-lived connection)"""
         if not self.media_buffer:
             return
 
+        conn = self._connect_with_retry(self.media_file)
         try:
-            # Direct SQL INSERT (consistent with metrics approach)
+            # Direct SQL INSERT
             for row in self.media_buffer:
                 columns = list(row.keys())
                 values = list(row.values())
@@ -296,9 +393,9 @@ class DuckDBStorage:
                 placeholders = ", ".join("?" * len(columns))
                 query = f"INSERT INTO media ({col_names}) VALUES ({placeholders})"
 
-                self.media_conn.execute(query, values)
+                conn.execute(query, values)
 
-            self.media_conn.commit()
+            conn.commit()
 
             logger.debug(f"Appended {len(self.media_buffer)} media rows")
             self.media_buffer.clear()
@@ -309,12 +406,15 @@ class DuckDBStorage:
         except Exception as e:
             logger.error(f"Failed to flush media: {e}")
             logger.exception(e)
+        finally:
+            conn.close()
 
     def flush_tables(self):
-        """Flush tables buffer to DuckDB (direct INSERT)"""
+        """Flush tables buffer to DuckDB (direct INSERT, short-lived connection)"""
         if not self.tables_buffer:
             return
 
+        conn = self._connect_with_retry(self.tables_file)
         try:
             # Direct SQL INSERT
             for row in self.tables_buffer:
@@ -325,9 +425,9 @@ class DuckDBStorage:
                 placeholders = ", ".join("?" * len(columns))
                 query = f"INSERT INTO tables ({col_names}) VALUES ({placeholders})"
 
-                self.tables_conn.execute(query, values)
+                conn.execute(query, values)
 
-            self.tables_conn.commit()
+            conn.commit()
 
             logger.debug(f"Appended {len(self.tables_buffer)} table rows")
             self.tables_buffer.clear()
@@ -338,6 +438,8 @@ class DuckDBStorage:
         except Exception as e:
             logger.error(f"Failed to flush tables: {e}")
             logger.exception(e)
+        finally:
+            conn.close()
 
     def append_histogram(
         self,
@@ -375,10 +477,11 @@ class DuckDBStorage:
             self.flush_histograms()
 
     def flush_histograms(self):
-        """Flush histograms buffer to DuckDB (direct INSERT)"""
+        """Flush histograms buffer to DuckDB (direct INSERT, short-lived connection)"""
         if not self.histograms_buffer:
             return
 
+        conn = self._connect_with_retry(self.histograms_file)
         try:
             # Direct SQL INSERT
             for row in self.histograms_buffer:
@@ -389,9 +492,9 @@ class DuckDBStorage:
                 placeholders = ", ".join("?" * len(columns))
                 query = f"INSERT INTO histograms ({col_names}) VALUES ({placeholders})"
 
-                self.histograms_conn.execute(query, values)
+                conn.execute(query, values)
 
-            self.histograms_conn.commit()
+            conn.commit()
 
             logger.debug(f"Appended {len(self.histograms_buffer)} histogram rows")
             self.histograms_buffer.clear()
@@ -402,6 +505,8 @@ class DuckDBStorage:
         except Exception as e:
             logger.error(f"Failed to flush histograms: {e}")
             logger.exception(e)
+        finally:
+            conn.close()
 
     def flush_all(self):
         """Flush all buffers"""
@@ -412,13 +517,11 @@ class DuckDBStorage:
         logger.info("Flushed all buffers to DuckDB")
 
     def close(self):
-        """Close all database connections"""
-        if hasattr(self, "metrics_conn") and self.metrics_conn:
-            self.metrics_conn.close()
-        if hasattr(self, "media_conn") and self.media_conn:
-            self.media_conn.close()
-        if hasattr(self, "tables_conn") and self.tables_conn:
-            self.tables_conn.close()
-        if hasattr(self, "histograms_conn") and self.histograms_conn:
-            self.histograms_conn.close()
-        logger.debug("Closed all DuckDB connections")
+        """Close storage (no-op with connection-per-operation pattern)
+
+        Connections are opened and closed for each operation,
+        so there's nothing to clean up here.
+        """
+        logger.debug(
+            "Storage close called (connection-per-operation: nothing to close)"
+        )

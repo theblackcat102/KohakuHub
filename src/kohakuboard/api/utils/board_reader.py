@@ -1,19 +1,59 @@
-"""Utility functions for reading board data from DuckDB files"""
+"""Utility functions for reading board data from DuckDB files
+
+NEW: Connection-per-operation pattern with retry logic
+- Opens read-only connection when needed
+- Closes immediately after read
+- Retries on lock conflicts (enables reading while writer is active)
+
+HYBRID BACKEND: Auto-detects Lance+SQLite format and delegates
+"""
 
 import json
 import math
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import duckdb
 from loguru import logger
 
+from kohakuboard.api.utils.board_reader_hybrid import HybridBoardReader
+
 
 class BoardReader:
-    """Read-only interface for accessing board data"""
+    """Read-only interface for accessing board data (auto-detects backend)"""
+
+    def __new__(cls, board_dir: Path):
+        """Factory method - returns appropriate reader based on detected backend
+
+        Args:
+            board_dir: Path to board directory
+
+        Returns:
+            HybridBoardReader, or DuckDBBoardReader instance
+        """
+        board_dir = Path(board_dir)
+
+        # Detect backend type
+        metrics_lance_dir = board_dir / "data" / "metrics"  # Per-metric Lance files
+        sqlite_db = board_dir / "data" / "metadata.db"
+        metrics_duckdb = board_dir / "data" / "metrics.duckdb"
+        legacy_duckdb = board_dir / "data" / "board.duckdb"
+
+        # Priority: hybrid > multi-file duckdb > legacy duckdb > parquet
+        if metrics_lance_dir.exists() or sqlite_db.exists():
+            logger.debug(f"Detected hybrid backend for {board_dir.name}")
+            return HybridBoardReader(board_dir)
+        else:
+            logger.debug(f"Detected DuckDB backend for {board_dir.name}")
+            return DuckDBBoardReader.__new__(DuckDBBoardReader, board_dir)
+
+
+class DuckDBBoardReader:
+    """DuckDB-based board reader (for backward compatibility)"""
 
     def __init__(self, board_dir: Path):
-        """Initialize board reader
+        """Initialize DuckDB board reader
 
         Args:
             board_dir: Path to board directory
@@ -22,14 +62,13 @@ class BoardReader:
         self.metadata_path = self.board_dir / "metadata.json"
         self.media_dir = self.board_dir / "media"
 
-        # Multi-file DuckDB structure (NEW)
-        # Try new structure first, fall back to legacy single file
+        # Multi-file DuckDB structure
         self.metrics_db = self.board_dir / "data" / "metrics.duckdb"
         self.media_db = self.board_dir / "data" / "media.duckdb"
         self.tables_db = self.board_dir / "data" / "tables.duckdb"
         self.histograms_db = self.board_dir / "data" / "histograms.duckdb"
 
-        # Legacy single file (for backward compatibility)
+        # Legacy single file
         self.legacy_db = self.board_dir / "data" / "board.duckdb"
 
         # Determine which structure to use
@@ -38,6 +77,10 @@ class BoardReader:
         # Validate paths
         if not self.board_dir.exists():
             raise FileNotFoundError(f"Board directory not found: {board_dir}")
+
+        # Retry configuration
+        self.max_retries = 5
+        self.retry_delay = 0.05
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get board metadata
@@ -51,53 +94,89 @@ class BoardReader:
         with open(self.metadata_path, "r") as f:
             return json.load(f)
 
+    def _connect_with_retry(self, db_path: Path) -> duckdb.DuckDBPyConnection:
+        """Open read-only DuckDB connection with retry logic
+
+        Args:
+            db_path: Path to database file
+
+        Returns:
+            DuckDB connection (read-only)
+
+        Raises:
+            Exception: If all retries exhausted
+        """
+        if not db_path.exists():
+            raise FileNotFoundError(f"Database not found: {db_path}")
+
+        attempt = 0
+        last_error = None
+
+        while attempt < self.max_retries:
+            try:
+                return duckdb.connect(str(db_path), read_only=True)
+            except duckdb.IOException as e:
+                # IOException = file lock conflict, retry
+                last_error = e
+                attempt += 1
+                if attempt < self.max_retries:
+                    delay = self.retry_delay * (
+                        2 ** (attempt - 1)
+                    )  # Exponential backoff
+                    logger.debug(
+                        f"Read locked (IOException), retry {attempt}/{self.max_retries} after {delay:.3f}s: {db_path.name}"
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.warning(
+                        f"Failed to open {db_path.name} after {self.max_retries} retries: {e}"
+                    )
+                    raise
+            except Exception as e:
+                # Other errors, don't retry
+                logger.error(
+                    f"Non-lock error opening {db_path.name}: {type(e).__name__}: {e}"
+                )
+                raise
+
+        # Should never reach here
+        raise last_error
+
     def _get_metrics_connection(self) -> duckdb.DuckDBPyConnection:
-        """Get read-only connection to metrics database
+        """Get read-only connection to metrics database with retry
 
         Returns:
             DuckDB connection
         """
         db_path = self.legacy_db if self.use_legacy else self.metrics_db
-        if not db_path.exists():
-            raise FileNotFoundError(f"Metrics database not found: {db_path}")
-
-        return duckdb.connect(str(db_path), read_only=True)
+        return self._connect_with_retry(db_path)
 
     def _get_media_connection(self) -> duckdb.DuckDBPyConnection:
-        """Get read-only connection to media database
+        """Get read-only connection to media database with retry
 
         Returns:
             DuckDB connection
         """
         db_path = self.legacy_db if self.use_legacy else self.media_db
-        if not db_path.exists():
-            raise FileNotFoundError(f"Media database not found: {db_path}")
-
-        return duckdb.connect(str(db_path), read_only=True)
+        return self._connect_with_retry(db_path)
 
     def _get_tables_connection(self) -> duckdb.DuckDBPyConnection:
-        """Get read-only connection to tables database
+        """Get read-only connection to tables database with retry
 
         Returns:
             DuckDB connection
         """
         db_path = self.legacy_db if self.use_legacy else self.tables_db
-        if not db_path.exists():
-            raise FileNotFoundError(f"Tables database not found: {db_path}")
-
-        return duckdb.connect(str(db_path), read_only=True)
+        return self._connect_with_retry(db_path)
 
     def _get_histograms_connection(self) -> duckdb.DuckDBPyConnection:
-        """Get read-only connection to histograms database
+        """Get read-only connection to histograms database with retry
 
         Returns:
             DuckDB connection
         """
         db_path = self.legacy_db if self.use_legacy else self.histograms_db
-        if not db_path.exists():
-            raise FileNotFoundError(f"Histograms database not found: {db_path}")
-
-        return duckdb.connect(str(db_path), read_only=True)
+        return self._connect_with_retry(db_path)
 
     def get_available_metrics(self) -> List[str]:
         """Get list of available scalar metrics
