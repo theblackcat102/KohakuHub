@@ -58,12 +58,13 @@ class LanceMetricsStorage:
         self.flush_interval = 2.0  # Flush every 2 seconds (not too aggressive)
 
         # Fixed schema for all metrics
+        # Use float32 for values (sufficient precision for ML metrics, saves space)
         self.schema = pa.schema(
             [
                 pa.field("step", pa.int64()),
                 pa.field("global_step", pa.int64()),
                 pa.field("timestamp", pa.int64()),
-                pa.field("value", pa.float64()),
+                pa.field("value", pa.float32()),  # float32, not float64
             ]
         )
 
@@ -116,17 +117,8 @@ class LanceMetricsStorage:
             if escaped_name not in self.last_flush_time:
                 self.last_flush_time[escaped_name] = time.time()
 
-            # Flush this metric if threshold reached OR time interval elapsed
-            current_time = time.time()
-            time_since_flush = current_time - self.last_flush_time[escaped_name]
-
-            should_flush = (
-                len(self.buffers[escaped_name]) >= self.flush_threshold
-                or time_since_flush >= self.flush_interval
-            )
-
-            if should_flush:
-                self._flush_metric(escaped_name)
+            # Don't auto-flush - writer will call flush() periodically
+            # This allows batching ALL pending data at once
 
     def _flush_metric(self, metric_name: str):
         """Flush a single metric's buffer to its Lance file

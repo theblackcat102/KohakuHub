@@ -3,6 +3,7 @@
 Combines the best of both worlds:
 - Lance: Dynamic schema, efficient columnar storage for metrics
 - SQLite: Fixed schema, excellent concurrency for media/tables
+- Adaptive histograms: Lance with percentile-based range tracking
 """
 
 from pathlib import Path
@@ -10,8 +11,9 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from kohakuboard.client.storage_lance import LanceMetricsStorage
-from kohakuboard.client.storage_sqlite import SQLiteMetadataStorage
+from kohakuboard.client.storage.histogram import HistogramStorage
+from kohakuboard.client.storage.lance import LanceMetricsStorage
+from kohakuboard.client.storage.sqlite import SQLiteMetadataStorage
 
 
 class HybridStorage:
@@ -42,8 +44,9 @@ class HybridStorage:
         # Initialize sub-storages
         self.metrics_storage = LanceMetricsStorage(base_dir)
         self.metadata_storage = SQLiteMetadataStorage(base_dir)
+        self.histogram_storage = HistogramStorage(base_dir, num_bins=64)
 
-        logger.debug("Hybrid storage initialized (Lance + SQLite)")
+        logger.debug("Hybrid storage initialized (Lance + SQLite + Histograms)")
 
     def append_metrics(
         self,
@@ -89,6 +92,12 @@ class HybridStorage:
             media_list: List of media metadata dicts
             caption: Optional caption
         """
+        # Record step info (use current timestamp)
+        from datetime import datetime, timezone
+
+        timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
+
         self.metadata_storage.append_media(step, global_step, name, media_list, caption)
 
     def append_table(
@@ -106,6 +115,12 @@ class HybridStorage:
             name: Table log name
             table_data: Table dict
         """
+        # Record step info
+        from datetime import datetime, timezone
+
+        timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
+
         self.metadata_storage.append_table(step, global_step, name, table_data)
 
     def append_histogram(
@@ -115,28 +130,27 @@ class HybridStorage:
         name: str,
         values: List[float],
         num_bins: int = 64,
+        precision: str = "compact",
     ):
-        """Append histogram (SKIPPED - not logged locally)
-
-        Histograms are not logged locally in hybrid backend (following wandb pattern).
-        This silently skips - no error, just logs debug message once per histogram name.
+        """Append histogram with configurable precision
 
         Args:
             step: Step number
             global_step: Global step
-            name: Histogram name
-            values: Values (ignored)
-            num_bins: Number of bins (ignored)
+            name: Histogram name (e.g., "gradients/layer1")
+            values: Raw values array
+            num_bins: Number of bins
+            precision: "compact" (uint8) or "exact" (int32)
         """
-        # Silent skip - only log once per histogram name to avoid spam
-        if not hasattr(self, "_logged_histogram_skip"):
-            self._logged_histogram_skip = set()
+        # Record step info
+        from datetime import datetime, timezone
 
-        if name not in self._logged_histogram_skip:
-            logger.debug(
-                f"Histogram '{name}' skipped (hybrid backend doesn't log histograms locally)"
-            )
-            self._logged_histogram_skip.add(name)
+        timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
+
+        self.histogram_storage.append_histogram(
+            step, global_step, name, values, num_bins, precision
+        )
 
     def flush_metrics(self):
         """Flush metrics buffer to Lance"""
@@ -151,18 +165,21 @@ class HybridStorage:
         self.metadata_storage._flush_tables()
 
     def flush_histograms(self):
-        """Flush histograms (no-op, skipped)"""
-        pass
+        """Flush histogram buffer"""
+        self.histogram_storage.flush()
 
     def flush_all(self):
         """Flush all buffers"""
         self.flush_metrics()
+        self.metadata_storage._flush_steps()  # CRITICAL: Flush step info!
         self.flush_media()
         self.flush_tables()
+        self.flush_histograms()
         logger.info("Flushed all buffers (hybrid storage)")
 
     def close(self):
         """Close all storage backends"""
         self.metrics_storage.close()
         self.metadata_storage.close()
+        self.histogram_storage.close()
         logger.debug("Hybrid storage closed")

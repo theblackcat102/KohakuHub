@@ -134,9 +134,7 @@ class SQLiteMetadataStorage:
         """
         self.step_buffer.append((step, global_step, timestamp))
 
-        # Batch flush when threshold reached
-        if len(self.step_buffer) >= self.step_flush_threshold:
-            self._flush_steps()
+        # Don't auto-flush - writer will call flush() periodically
 
     def _flush_steps(self):
         """Flush steps buffer"""
@@ -186,9 +184,7 @@ class SQLiteMetadataStorage:
             )
             self.media_buffer.append(row)
 
-        # Batch flush
-        if len(self.media_buffer) >= self.media_flush_threshold:
-            self._flush_media()
+        # Don't auto-flush - writer will call flush() periodically
 
     def _flush_media(self):
         """Flush media buffer"""
@@ -233,9 +229,7 @@ class SQLiteMetadataStorage:
         )
         self.table_buffer.append(row)
 
-        # Batch flush
-        if len(self.table_buffer) >= self.table_flush_threshold:
-            self._flush_tables()
+        # Don't auto-flush - writer will call flush() periodically
 
     def _flush_tables(self):
         """Flush tables buffer"""

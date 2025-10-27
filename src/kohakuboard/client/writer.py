@@ -18,9 +18,7 @@ from typing import Any
 from loguru import logger
 
 from kohakuboard.client.media import MediaHandler
-from kohakuboard.client.storage import ParquetStorage
-from kohakuboard.client.storage_duckdb import DuckDBStorage
-from kohakuboard.client.storage_hybrid import HybridStorage
+from kohakuboard.client.storage import DuckDBStorage, HybridStorage, ParquetStorage
 
 
 class LogWriter:
@@ -59,21 +57,57 @@ class LogWriter:
         self.auto_flush_interval = 5  # Auto-flush every 5 seconds (aggressive)
 
     def run(self):
-        """Main loop - process messages from queue"""
+        """Main loop - adaptive batching with exponential backoff"""
         logger.info(f"LogWriter started for {self.board_dir}")
+
+        # Adaptive sleep parameters
+        min_period = 0.01  # 10ms minimum sleep
+        max_period = 1.0  # 1s maximum sleep
+        consecutive_empty = 0  # Track consecutive empty queue reads
 
         try:
             while not self.stop_event.is_set():
                 try:
-                    # Get message from queue (shorter timeout for faster shutdown)
-                    message = self.queue.get(timeout=0.5)
-                    self._process_message(message)
-                    self.messages_processed += 1
+                    # Process ALL available messages in queue
+                    batch_count = 0
+                    batch_start = time.time()
 
-                except Empty:
-                    # No message - check if we need to auto-flush
-                    if time.time() - self.last_flush_time > self.auto_flush_interval:
-                        self._auto_flush()
+                    # Drain queue completely (up to 10k to allow stop_event check)
+                    while batch_count < 10000 and not self.stop_event.is_set():
+                        try:
+                            message = self.queue.get_nowait()
+                            self._process_message(message)
+                            self.messages_processed += 1
+                            batch_count += 1
+                        except Empty:
+                            break
+
+                    # Flush immediately after processing ANY messages
+                    if batch_count > 0:
+                        self.storage.flush_all()
+                        batch_time = time.time() - batch_start
+                        logger.debug(
+                            f"Processed and flushed {batch_count} messages in {batch_time*1000:.1f}ms"
+                        )
+                        self.last_flush_time = time.time()
+
+                        # Reset backoff counter - we had work to do
+                        consecutive_empty = 0
+                    else:
+                        # Queue empty - increase backoff
+                        consecutive_empty += 1
+
+                        # Adaptive sleep: min_period * 2^k, capped at max_period
+                        sleep_time = min(
+                            min_period * (2**consecutive_empty), max_period
+                        )
+
+                        # Sleep in small chunks to allow responsive shutdown
+                        # Instead of sleep(1.0), sleep(0.1) × 10 times and check stop_event
+                        slept = 0.0
+                        while slept < sleep_time and not self.stop_event.is_set():
+                            time.sleep(0.05)  # Sleep in 50ms chunks
+                            slept += 0.05
 
                 except KeyboardInterrupt:
                     # Received interrupt in worker - DRAIN QUEUE FIRST
@@ -81,7 +115,6 @@ class LogWriter:
                         "Writer received interrupt, draining queue before stopping..."
                     )
                     # Continue processing until stop_event is set by main process
-                    # Don't break immediately!
 
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
@@ -187,8 +220,11 @@ class LogWriter:
         name = message["name"]
         values = message["values"]
         num_bins = message.get("num_bins", 64)
+        precision = message.get("precision", "compact")
 
-        self.storage.append_histogram(step, global_step, name, values, num_bins)
+        self.storage.append_histogram(
+            step, global_step, name, values, num_bins, precision
+        )
 
     def _handle_flush(self):
         """Handle explicit flush request"""

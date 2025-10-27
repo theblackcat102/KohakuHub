@@ -448,6 +448,7 @@ class DuckDBStorage:
         name: str,
         values: List[float],
         num_bins: int = 64,
+        precision: str = "compact",
     ):
         """Append histogram log entry (pre-computed bins to save space)
 
@@ -457,6 +458,7 @@ class DuckDBStorage:
             name: Histogram log name
             values: List of values to create histogram from
             num_bins: Number of bins for histogram
+            precision: Ignored for DuckDB backend
         """
         # Compute histogram (bins + counts) instead of storing raw values
         values_array = np.array(values, dtype=np.float32)
