@@ -1,10 +1,12 @@
 """Media handling utilities for images, videos, and audio"""
 
 import hashlib
+import io
 import shutil
 from pathlib import Path
 from typing import Any, List, Union
 
+import numpy as np
 from loguru import logger
 
 
@@ -209,7 +211,6 @@ class MediaHandler:
 
             # Numpy array
             if hasattr(image, "__array__"):
-                import numpy as np
 
                 arr = np.array(image)
 
@@ -242,8 +243,6 @@ class MediaHandler:
 
     def _hash_media(self, pil_image) -> str:
         """Generate hash for image deduplication (also used as media ID)"""
-        import io
-
         # Convert to bytes
         buf = io.BytesIO()
         pil_image.save(buf, format="PNG")

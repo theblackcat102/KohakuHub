@@ -156,7 +156,8 @@ async def get_scalar_data(
     reader = BoardReader(run_path)
     data = reader.get_scalar_data(metric, limit=limit)
 
-    return {"metric": metric, "data": data}
+    # data is now columnar format: {steps: [], global_steps: [], timestamps: [], values: []}
+    return {"metric": metric, **data}
 
 
 @router.get("/projects/{project}/runs/{run_id}/media")

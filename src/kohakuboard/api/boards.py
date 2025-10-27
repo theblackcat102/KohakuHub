@@ -126,7 +126,8 @@ async def get_scalar_data(
         board_dir = Path(cfg.app.board_data_dir) / board_id
         reader = BoardReader(board_dir)
         data = reader.get_scalar_data(metric, limit=limit)
-        return {"metric": metric, "data": data}
+        # data is now columnar format: {steps: [], global_steps: [], timestamps: [], values: []}
+        return {"metric": metric, **data}
     except FileNotFoundError as e:
         logger_api.warning(f"Board not found: {board_id}")
         raise HTTPException(status_code=404, detail=str(e))

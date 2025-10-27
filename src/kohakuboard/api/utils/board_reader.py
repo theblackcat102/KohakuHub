@@ -1,6 +1,7 @@
 """Utility functions for reading board data from DuckDB files"""
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -19,8 +20,20 @@ class BoardReader:
         """
         self.board_dir = Path(board_dir)
         self.metadata_path = self.board_dir / "metadata.json"
-        self.db_path = self.board_dir / "data" / "board.duckdb"
         self.media_dir = self.board_dir / "media"
+
+        # Multi-file DuckDB structure (NEW)
+        # Try new structure first, fall back to legacy single file
+        self.metrics_db = self.board_dir / "data" / "metrics.duckdb"
+        self.media_db = self.board_dir / "data" / "media.duckdb"
+        self.tables_db = self.board_dir / "data" / "tables.duckdb"
+        self.histograms_db = self.board_dir / "data" / "histograms.duckdb"
+
+        # Legacy single file (for backward compatibility)
+        self.legacy_db = self.board_dir / "data" / "board.duckdb"
+
+        # Determine which structure to use
+        self.use_legacy = self.legacy_db.exists() and not self.metrics_db.exists()
 
         # Validate paths
         if not self.board_dir.exists():
@@ -38,16 +51,53 @@ class BoardReader:
         with open(self.metadata_path, "r") as f:
             return json.load(f)
 
-    def _get_connection(self) -> duckdb.DuckDBPyConnection:
-        """Get read-only DuckDB connection
+    def _get_metrics_connection(self) -> duckdb.DuckDBPyConnection:
+        """Get read-only connection to metrics database
 
         Returns:
             DuckDB connection
         """
-        if not self.db_path.exists():
-            raise FileNotFoundError(f"Database file not found: {self.db_path}")
+        db_path = self.legacy_db if self.use_legacy else self.metrics_db
+        if not db_path.exists():
+            raise FileNotFoundError(f"Metrics database not found: {db_path}")
 
-        return duckdb.connect(str(self.db_path), read_only=True)
+        return duckdb.connect(str(db_path), read_only=True)
+
+    def _get_media_connection(self) -> duckdb.DuckDBPyConnection:
+        """Get read-only connection to media database
+
+        Returns:
+            DuckDB connection
+        """
+        db_path = self.legacy_db if self.use_legacy else self.media_db
+        if not db_path.exists():
+            raise FileNotFoundError(f"Media database not found: {db_path}")
+
+        return duckdb.connect(str(db_path), read_only=True)
+
+    def _get_tables_connection(self) -> duckdb.DuckDBPyConnection:
+        """Get read-only connection to tables database
+
+        Returns:
+            DuckDB connection
+        """
+        db_path = self.legacy_db if self.use_legacy else self.tables_db
+        if not db_path.exists():
+            raise FileNotFoundError(f"Tables database not found: {db_path}")
+
+        return duckdb.connect(str(db_path), read_only=True)
+
+    def _get_histograms_connection(self) -> duckdb.DuckDBPyConnection:
+        """Get read-only connection to histograms database
+
+        Returns:
+            DuckDB connection
+        """
+        db_path = self.legacy_db if self.use_legacy else self.histograms_db
+        if not db_path.exists():
+            raise FileNotFoundError(f"Histograms database not found: {db_path}")
+
+        return duckdb.connect(str(db_path), read_only=True)
 
     def get_available_metrics(self) -> List[str]:
         """Get list of available scalar metrics
@@ -55,7 +105,7 @@ class BoardReader:
         Returns:
             List of metric names (INCLUDING step/global_step for x-axis selection)
         """
-        conn = self._get_connection()
+        conn = self._get_metrics_connection()
         try:
             # Get all columns from metrics table
             result = conn.execute("PRAGMA table_info(metrics)").fetchall()
@@ -79,7 +129,7 @@ class BoardReader:
 
     def get_scalar_data(
         self, metric: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, List]:
         """Get scalar data for a specific metric
 
         Args:
@@ -87,37 +137,54 @@ class BoardReader:
             limit: Optional row limit
 
         Returns:
-            List of dicts with step, global_step, value
+            Dict with columnar format: {steps: [], global_steps: [], timestamps: [], values: []}
         """
-        conn = self._get_connection()
+        conn = self._get_metrics_connection()
         try:
-            # Special handling for step/global_step/timestamp - they're already included
             # Escape metric name (convert "/" to "__" for DuckDB column name)
             escaped_metric = metric.replace("/", "__")
 
-            # Build query - always select step, global_step, timestamp, and the requested metric
+            # Build query - select ALL rows (don't filter out NaN!)
+            # This is critical: NaN values are data, not missing data
             query = f'SELECT step, global_step, timestamp, "{escaped_metric}" as value FROM metrics'
-
-            # For regular metrics, filter out NULLs
-            # For step/global_step/timestamp, include all rows (they're never NULL)
-            if metric not in ("step", "global_step", "timestamp"):
-                query += f' WHERE "{escaped_metric}" IS NOT NULL'
 
             if limit:
                 query += f" LIMIT {limit}"
 
             result = conn.execute(query).fetchall()
 
-            # Convert to list of dicts
-            return [
-                {
-                    "step": row[0],
-                    "global_step": row[1],
-                    "timestamp": row[2].isoformat() if row[2] else None,
-                    "value": row[3],
-                }
-                for row in result
-            ]
+            # Convert to columnar format (more efficient than row-based)
+            # Format: {steps: [], global_steps: [], timestamps: [], values: []}
+            steps = []
+            global_steps = []
+            timestamps = []
+            values = []
+
+            for row in result:
+                steps.append(row[0])
+                global_steps.append(row[1])
+                # Convert timestamp to Unix seconds (integer) for efficiency
+                timestamps.append(int(row[2].timestamp()) if row[2] else None)
+
+                value = row[3]
+                # Convert special values to string markers for JSON compatibility
+                # null = sparse/missing data (not logged at this step)
+                # "NaN" = explicitly logged NaN value
+                # "Infinity"/"-Infinity" = explicitly logged inf values
+                if value is not None:
+                    if math.isnan(value):
+                        value = "NaN"
+                    elif math.isinf(value):
+                        value = "Infinity" if value > 0 else "-Infinity"
+
+                values.append(value)
+
+            return {
+                "steps": steps,
+                "global_steps": global_steps,
+                "timestamps": timestamps,
+                "values": values,
+            }
         finally:
             conn.close()
 
@@ -127,7 +194,7 @@ class BoardReader:
         Returns:
             List of unique media log names
         """
-        conn = self._get_connection()
+        conn = self._get_media_connection()
         try:
             result = conn.execute(
                 "SELECT DISTINCT name FROM media ORDER BY name"
@@ -151,7 +218,7 @@ class BoardReader:
         Returns:
             List of dicts with step, global_step, caption, media metadata
         """
-        conn = self._get_connection()
+        conn = self._get_media_connection()
         try:
             query = f"SELECT * FROM media WHERE name = ?"
             if limit:
@@ -173,7 +240,7 @@ class BoardReader:
         Returns:
             List of unique table log names
         """
-        conn = self._get_connection()
+        conn = self._get_tables_connection()
         try:
             result = conn.execute(
                 "SELECT DISTINCT name FROM tables ORDER BY name"
@@ -197,7 +264,7 @@ class BoardReader:
         Returns:
             List of dicts with step, global_step, columns, column_types, rows
         """
-        conn = self._get_connection()
+        conn = self._get_tables_connection()
         try:
             query = f"SELECT * FROM tables WHERE name = ?"
             if limit:
@@ -233,7 +300,7 @@ class BoardReader:
         Returns:
             List of unique histogram log names
         """
-        conn = self._get_connection()
+        conn = self._get_histograms_connection()
         try:
             result = conn.execute(
                 "SELECT DISTINCT name FROM histograms ORDER BY name"
@@ -257,7 +324,7 @@ class BoardReader:
         Returns:
             List of dicts with step, global_step, bins, values
         """
-        conn = self._get_connection()
+        conn = self._get_histograms_connection()
         try:
             query = f"SELECT * FROM histograms WHERE name = ?"
             if limit:
@@ -305,43 +372,55 @@ class BoardReader:
         Returns:
             Dict with metadata, metrics, media, tables counts
         """
-        conn = self._get_connection()
+        metadata = self.get_metadata()
+
+        # Count rows from each database (use separate connections)
+        metrics_count = 0
+        media_count = 0
+        tables_count = 0
+        histograms_count = 0
+
         try:
-            metadata = self.get_metadata()
-
-            # Count rows
+            conn = self._get_metrics_connection()
             metrics_count = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
-
-            try:
-                media_count = conn.execute("SELECT COUNT(*) FROM media").fetchone()[0]
-            except Exception:
-                media_count = 0
-
-            try:
-                tables_count = conn.execute("SELECT COUNT(*) FROM tables").fetchone()[0]
-            except Exception:
-                tables_count = 0
-
-            try:
-                histograms_count = conn.execute(
-                    "SELECT COUNT(*) FROM histograms"
-                ).fetchone()[0]
-            except Exception:
-                histograms_count = 0
-
-            return {
-                "metadata": metadata,
-                "metrics_count": metrics_count,
-                "media_count": media_count,
-                "tables_count": tables_count,
-                "histograms_count": histograms_count,
-                "available_metrics": self.get_available_metrics(),
-                "available_media": self.get_available_media_names(),
-                "available_tables": self.get_available_table_names(),
-                "available_histograms": self.get_available_histogram_names(),
-            }
-        finally:
             conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to count metrics: {e}")
+
+        try:
+            conn = self._get_media_connection()
+            media_count = conn.execute("SELECT COUNT(*) FROM media").fetchone()[0]
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to count media: {e}")
+
+        try:
+            conn = self._get_tables_connection()
+            tables_count = conn.execute("SELECT COUNT(*) FROM tables").fetchone()[0]
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to count tables: {e}")
+
+        try:
+            conn = self._get_histograms_connection()
+            histograms_count = conn.execute(
+                "SELECT COUNT(*) FROM histograms"
+            ).fetchone()[0]
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to count histograms: {e}")
+
+        return {
+            "metadata": metadata,
+            "metrics_count": metrics_count,
+            "media_count": media_count,
+            "tables_count": tables_count,
+            "histograms_count": histograms_count,
+            "available_metrics": self.get_available_metrics(),
+            "available_media": self.get_available_media_names(),
+            "available_tables": self.get_available_table_names(),
+            "available_histograms": self.get_available_histogram_names(),
+        }
 
 
 def list_boards(base_dir: Path) -> List[Dict[str, Any]]:
