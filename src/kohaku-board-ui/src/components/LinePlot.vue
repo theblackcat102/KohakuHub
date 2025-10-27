@@ -657,6 +657,8 @@ function createPlot() {
     modebar: {
       bgcolor: "transparent",
     },
+    // Preserve user's zoom/pan state across data updates (prevents range flickering)
+    uirevision: props.chartId,
   };
 
   // Format x-axis based on metric type

@@ -7,25 +7,60 @@ const props = defineProps({
   height: Number,
   currentStep: Number,
   cardId: String,
+  autoAdvanceToLatest: {
+    type: Boolean,
+    default: true,
+  },
 });
 
-const emit = defineEmits(["update:currentStep"]);
+const emit = defineEmits(["update:currentStep", "update:autoAdvance"]);
 
 const stepIndex = computed({
   get() {
     if (!props.mediaData || props.mediaData.length === 0) return 0;
-    return props.mediaData.findIndex((item) => item.step === props.currentStep);
+    const index = props.mediaData.findIndex(
+      (item) => item.step === props.currentStep,
+    );
+    // If not found and autoAdvance enabled, return latest
+    if (index === -1 && props.autoAdvanceToLatest) {
+      return props.mediaData.length - 1;
+    }
+    return index >= 0 ? index : 0;
   },
   set(index) {
     if (props.mediaData && props.mediaData[index]) {
       const newStep = props.mediaData[index].step;
       emit("update:currentStep", newStep);
 
+      // Check if user moved to latest - enable auto-advance
+      if (index === props.mediaData.length - 1) {
+        if (!props.autoAdvanceToLatest) {
+          emit("update:autoAdvance", true);
+        }
+      } else {
+        // User moved away from latest - disable auto-advance
+        if (props.autoAdvanceToLatest) {
+          emit("update:autoAdvance", false);
+        }
+      }
+
       // Trigger synchronization if shift is pressed
       triggerSync(newStep);
     }
   },
 });
+
+// Watch for new data and auto-advance if enabled
+watch(
+  () => props.mediaData?.length,
+  (newLength, oldLength) => {
+    if (props.autoAdvanceToLatest && newLength > oldLength && newLength > 0) {
+      // New data and auto-advance enabled - move to latest
+      const latestStep = props.mediaData[newLength - 1].step;
+      emit("update:currentStep", latestStep);
+    }
+  },
+);
 
 const currentMedia = computed(() => {
   if (!props.mediaData || props.mediaData.length === 0) return null;

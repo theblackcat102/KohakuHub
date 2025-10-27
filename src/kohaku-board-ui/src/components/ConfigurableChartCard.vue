@@ -547,9 +547,16 @@ function startResizeRight(e) {
           v-else-if="cardType === 'media' && mediaData"
           :media-data="mediaData"
           :height="localHeight"
-          :current-step="props.initialConfig.currentStep || 0"
+          :current-step="
+            props.initialConfig.currentStep ??
+            (mediaData.length > 0 ? mediaData[mediaData.length - 1].step : 0)
+          "
           :card-id="props.cardId"
+          :auto-advance-to-latest="
+            props.initialConfig.autoAdvanceToLatest !== false
+          "
           @update:current-step="(s) => emitConfig({ currentStep: s })"
+          @update:auto-advance="(v) => emitConfig({ autoAdvanceToLatest: v })"
         />
         <HistogramViewer
           v-else-if="cardType === 'histogram' && histogramData"
@@ -569,9 +576,16 @@ function startResizeRight(e) {
           v-else-if="cardType === 'table' && tableData"
           :table-data="tableData"
           :height="localHeight"
-          :current-step="props.initialConfig.currentStep || 0"
+          :current-step="
+            props.initialConfig.currentStep ??
+            (tableData.length > 0 ? tableData[tableData.length - 1].step : 0)
+          "
           :card-id="props.cardId"
+          :auto-advance-to-latest="
+            props.initialConfig.autoAdvanceToLatest !== false
+          "
           @update:current-step="(s) => emitConfig({ currentStep: s })"
+          @update:auto-advance="(v) => emitConfig({ autoAdvanceToLatest: v })"
         />
         <el-empty v-else description="Select metrics" />
       </div>

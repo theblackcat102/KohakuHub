@@ -19,6 +19,12 @@ const showAddTabDialog = ref(false);
 const newTabName = ref("");
 const showGlobalSettings = ref(false);
 const isInitializing = ref(true); // Prevent watch triggers during init
+const removedMetrics = ref(new Set()); // Track explicitly removed metrics
+
+// Polling state
+const lastMetricsCount = ref(0);
+const pollingInterval = ref(null);
+const pollingEnabled = ref(true);
 
 // Pagination for WebGL context limit
 const currentPage = ref(0);
@@ -100,18 +106,132 @@ async function initializeExperiment() {
 
     // Try to load saved layout
     const saved = localStorage.getItem(storageKey.value);
+    let savedLayout = null;
+
     if (saved) {
-      const layout = JSON.parse(saved);
-      tabs.value = layout.tabs;
-      activeTab.value = layout.activeTab;
-      nextCardId.value = layout.nextCardId;
+      savedLayout = JSON.parse(saved);
+      activeTab.value = savedLayout.activeTab || "Metrics";
+      nextCardId.value = savedLayout.nextCardId || 1;
 
       // Load global settings if saved
-      if (layout.globalSettings) {
-        globalSettings.value = layout.globalSettings;
+      if (savedLayout.globalSettings) {
+        globalSettings.value = savedLayout.globalSettings;
       }
+
+      // Load removed metrics list
+      if (savedLayout.removedMetrics) {
+        removedMetrics.value = new Set(savedLayout.removedMetrics);
+      }
+    }
+
+    // Build default cards for new metrics (not in saved layout and not explicitly removed)
+    const savedMetricSet = new Set();
+    if (savedLayout?.tabs) {
+      // Collect all metrics from saved layout
+      for (const tab of savedLayout.tabs) {
+        for (const card of tab.cards) {
+          if (card.config.yMetrics) {
+            card.config.yMetrics.forEach((m) => savedMetricSet.add(m));
+          }
+        }
+      }
+    }
+
+    // Determine which metrics need default cards
+    const needsDefaultCard = (metric) => {
+      return (
+        !savedMetricSet.has(metric) && // Not in saved layout
+        !removedMetrics.value.has(metric) // Not explicitly removed
+      );
+    };
+
+    // If we have saved layout, use it as base and add new metrics
+    if (savedLayout?.tabs) {
+      tabs.value = savedLayout.tabs;
+
+      // Add default cards for new metrics to appropriate tabs
+      let cardId = nextCardId.value;
+      // Metrics that should NOT have default charts (only for axis selection)
+      const axisOnlyMetrics = new Set([
+        "step",
+        "global_step",
+        "timestamp",
+        "walltime",
+        "relative_walltime",
+      ]);
+
+      // Group NEW metrics by namespace
+      const metricsByNamespace = new Map();
+      metricsByNamespace.set("", []); // Main namespace
+
+      for (const metric of availableMetrics.value) {
+        // Skip axis-only metrics and metrics that already have cards or were removed
+        if (axisOnlyMetrics.has(metric) || !needsDefaultCard(metric)) {
+          continue;
+        }
+
+        const slashIdx = metric.indexOf("/");
+        if (slashIdx > 0) {
+          const namespace = metric.substring(0, slashIdx);
+          if (!metricsByNamespace.has(namespace)) {
+            metricsByNamespace.set(namespace, []);
+          }
+          metricsByNamespace.get(namespace).push(metric);
+        } else {
+          metricsByNamespace.get("").push(metric);
+        }
+      }
+
+      // Add new metric cards to main tab
+      const mainTab = tabs.value.find((t) => t.name === "Metrics");
+      if (mainTab) {
+        for (const metric of metricsByNamespace.get("")) {
+          mainTab.cards.push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "line",
+              title: metric,
+              widthPercent: 33,
+              height: 400,
+              xMetric: "global_step",
+              yMetrics: [metric],
+            },
+          });
+        }
+      }
+
+      // Add new namespaced metric cards (create tabs if needed)
+      for (const [namespace, metrics] of metricsByNamespace.entries()) {
+        if (namespace === "") continue; // Already handled
+
+        // Check if tab exists
+        let namespaceTab = tabs.value.find((t) => t.name === namespace);
+        if (!namespaceTab) {
+          // Create new tab for this namespace
+          namespaceTab = { name: namespace, cards: [] };
+          tabs.value.push(namespaceTab);
+          console.log(`[Init] Created new tab for namespace: ${namespace}`);
+        }
+
+        // Add cards for new metrics in this namespace
+        for (const metric of metrics) {
+          namespaceTab.cards.push({
+            id: `card-${cardId++}`,
+            config: {
+              type: "line",
+              title: metric,
+              widthPercent: 33,
+              height: 400,
+              xMetric: "global_step",
+              yMetrics: [metric],
+            },
+          });
+        }
+      }
+
+      nextCardId.value = cardId;
     } else {
-      // Default: one card per scalar metric + examples of other types
+      // No saved layout - create default layout
       const cards = [];
       let cardId = 1;
 
@@ -157,7 +277,7 @@ async function initializeExperiment() {
             title: metric,
             widthPercent: 33,
             height: 400,
-            xMetric: "step", // Will be updated to global_step if used
+            xMetric: "global_step",
             yMetrics: [metric],
           },
         });
@@ -311,6 +431,9 @@ async function initializeExperiment() {
     // Initialization complete - allow watch to fire on user tab changes
     isInitializing.value = false;
     console.log("[Init] Initialization complete");
+
+    // Start polling for updates (every 3 seconds)
+    startPolling();
   } catch (error) {
     console.error("Failed to load experiment:", error);
     isInitializing.value = false;
@@ -319,6 +442,11 @@ async function initializeExperiment() {
 
 onMounted(() => {
   initializeExperiment();
+});
+
+onUnmounted(() => {
+  // Stop polling when leaving page
+  stopPolling();
 });
 
 async function determineDefaultXAxis() {
@@ -355,10 +483,10 @@ async function determineDefaultXAxis() {
   }
 }
 
-async function fetchMetricsForTab() {
+async function fetchMetricsForTab(forceRefresh = false) {
   try {
     console.log(
-      `[fetchMetricsForTab] Starting fetch for tab: ${activeTab.value}`,
+      `[fetchMetricsForTab] Starting fetch for tab: ${activeTab.value}, forceRefresh: ${forceRefresh}`,
     );
     const tab = tabs.value.find((t) => t.name === activeTab.value);
     if (!tab) {
@@ -386,14 +514,19 @@ async function fetchMetricsForTab() {
       }
     }
 
-    // Fetch missing metrics
+    // Fetch missing or force-refresh metrics
     const projectName = route.params.project;
     const runId = route.params.id;
 
     for (const metric of neededMetrics) {
-      if (!metricDataCache.value[metric]) {
+      // Fetch if not in cache OR if force refresh
+      if (!metricDataCache.value[metric] || forceRefresh) {
         try {
-          console.log(`[fetchMetricsForTab] Fetching metric: ${metric}`);
+          const isUpdate = !!metricDataCache.value[metric] && forceRefresh;
+          console.log(
+            `[fetchMetricsForTab] ${isUpdate ? "Updating" : "Fetching"} metric: ${metric}`,
+          );
+
           // Don't URL-encode - FastAPI :path parameter handles it
           const response = await fetch(
             `/api/projects/${projectName}/runs/${runId}/scalars/${metric}`,
@@ -404,19 +537,79 @@ async function fetchMetricsForTab() {
               `[fetchMetricsForTab] Failed to fetch ${metric}: ${response.status}`,
             );
             // Set empty array so card can still render (just shows "no data")
-            metricDataCache.value[metric] = [];
+            if (!metricDataCache.value[metric]) {
+              metricDataCache.value[metric] = [];
+            }
             continue;
           }
 
           const result = await response.json();
-          console.log(
-            `[fetchMetricsForTab] Fetched ${metric}: ${result.values?.length || 0} values`,
-          );
+
+          // Check if data actually changed (for polling updates)
+          if (isUpdate) {
+            const oldArray = metricDataCache.value[metric];
+            const oldNonNullCount = oldArray.filter((v) => v !== null).length;
+            const newNonNullCount = result.values.length;
+
+            if (oldNonNullCount === newNonNullCount) {
+              console.log(
+                `[fetchMetricsForTab] ${metric}: No new data (${newNonNullCount} points), skipping update`,
+              );
+              continue; // CRITICAL: Skip update to prevent flickering
+            }
+
+            console.log(
+              `[fetchMetricsForTab] ${metric}: ${oldNonNullCount} → ${newNonNullCount} points`,
+            );
+          } else {
+            console.log(
+              `[fetchMetricsForTab] Fetched ${metric}: ${result.values?.length || 0} values`,
+            );
+          }
+
+          // Validate response structure
+          console.log(`[fetchMetricsForTab] ${metric} response:`, {
+            hasSteps: !!result.steps,
+            hasValues: !!result.values,
+            stepsIsArray: Array.isArray(result.steps),
+            valuesIsArray: Array.isArray(result.values),
+            stepsLength: result.steps?.length,
+            valuesLength: result.values?.length,
+          });
+
+          if (
+            !result.steps ||
+            !Array.isArray(result.steps) ||
+            result.steps.length === 0
+          ) {
+            console.warn(
+              `[fetchMetricsForTab] ${metric}: Invalid or empty steps array`,
+            );
+            if (!metricDataCache.value[metric]) {
+              metricDataCache.value[metric] = [];
+            }
+            continue;
+          }
 
           // New columnar format: {steps: [], global_steps: [], timestamps: [], values: []}
           // Convert to sparse array (indexed by step number)
           const maxStep = Math.max(...result.steps);
-          const sparseArray = new Array(maxStep + 1).fill(null);
+          console.log(
+            `[fetchMetricsForTab] ${metric}: maxStep = ${maxStep}, creating array of size ${maxStep + 1}`,
+          );
+
+          // Preserve existing array size if updating to avoid range flickering
+          const existingArray = metricDataCache.value[metric];
+          const targetSize =
+            isUpdate && existingArray
+              ? Math.max(maxStep + 1, existingArray.length)
+              : maxStep + 1;
+
+          console.log(
+            `[fetchMetricsForTab] ${metric}: targetSize = ${targetSize}`,
+          );
+
+          const sparseArray = new Array(targetSize).fill(null);
 
           for (let i = 0; i < result.steps.length; i++) {
             const step = result.steps[i];
@@ -588,11 +781,166 @@ watch(
   ([newProject, newId], [oldProject, oldId]) => {
     if (oldId && (newId !== oldId || newProject !== oldProject)) {
       console.log("[Watch] Route changed - reinitializing");
+      stopPolling();
       currentPage.value = 0;
+      lastMetricsCount.value = 0; // Reset count for new run
       initializeExperiment();
     }
   },
 );
+
+// Polling mechanism for live updates
+async function checkForUpdates() {
+  if (!pollingEnabled.value) return;
+
+  try {
+    const projectName = route.params.project;
+    const runId = route.params.id;
+
+    const response = await fetch(
+      `/api/projects/${projectName}/runs/${runId}/status`,
+    );
+    if (!response.ok) return;
+
+    const status = await response.json();
+    const newCount = status.metrics_count;
+
+    // Check if there's new data
+    if (lastMetricsCount.value > 0 && newCount > lastMetricsCount.value) {
+      console.log(
+        `[Poll] New data detected: ${lastMetricsCount.value} → ${newCount} metrics`,
+      );
+
+      // Re-fetch summary to check for new metrics (don't clear cache yet!)
+      const summaryResponse = await fetch(
+        `/api/projects/${projectName}/runs/${runId}/summary`,
+      );
+      if (summaryResponse.ok) {
+        const summary = await summaryResponse.json();
+        const oldMetrics = new Set(availableMetrics.value);
+        availableMetrics.value = summary.available_data.scalars;
+
+        // Add computed metrics
+        if (availableMetrics.value.includes("timestamp")) {
+          availableMetrics.value.push("walltime");
+          availableMetrics.value.push("relative_walltime");
+        }
+
+        // Check for new metrics and add default cards
+        const newMetrics = availableMetrics.value.filter(
+          (m) => !oldMetrics.has(m),
+        );
+        if (newMetrics.length > 0) {
+          console.log(`[Poll] New metrics found:`, newMetrics);
+          await addDefaultCardsForNewMetrics(newMetrics);
+        }
+
+        // Seamlessly update existing metrics (force refetch to get new data points)
+        // Old data stays visible during fetch, then smoothly updates
+        await fetchMetricsForTab(true); // forceRefresh = true
+      }
+    }
+
+    lastMetricsCount.value = newCount;
+  } catch (error) {
+    console.error("[Poll] Error checking for updates:", error);
+  }
+}
+
+async function addDefaultCardsForNewMetrics(newMetrics) {
+  const axisOnlyMetrics = new Set([
+    "step",
+    "global_step",
+    "timestamp",
+    "walltime",
+    "relative_walltime",
+  ]);
+
+  let cardId = nextCardId.value;
+
+  // Group by namespace
+  const metricsByNamespace = new Map();
+  metricsByNamespace.set("", []);
+
+  for (const metric of newMetrics) {
+    if (axisOnlyMetrics.has(metric) || removedMetrics.value.has(metric)) {
+      continue;
+    }
+
+    const slashIdx = metric.indexOf("/");
+    if (slashIdx > 0) {
+      const namespace = metric.substring(0, slashIdx);
+      if (!metricsByNamespace.has(namespace)) {
+        metricsByNamespace.set(namespace, []);
+      }
+      metricsByNamespace.get(namespace).push(metric);
+    } else {
+      metricsByNamespace.get("").push(metric);
+    }
+  }
+
+  // Add to main tab
+  const mainTab = tabs.value.find((t) => t.name === "Metrics");
+  if (mainTab) {
+    for (const metric of metricsByNamespace.get("")) {
+      mainTab.cards.push({
+        id: `card-${cardId++}`,
+        config: {
+          type: "line",
+          title: metric,
+          widthPercent: 33,
+          height: 400,
+          xMetric: "step",
+          yMetrics: [metric],
+        },
+      });
+    }
+  }
+
+  // Add namespaced metrics
+  for (const [namespace, metrics] of metricsByNamespace.entries()) {
+    if (namespace === "") continue;
+
+    let namespaceTab = tabs.value.find((t) => t.name === namespace);
+    if (!namespaceTab) {
+      namespaceTab = { name: namespace, cards: [] };
+      tabs.value.push(namespaceTab);
+      console.log(`[Poll] Created new tab: ${namespace}`);
+    }
+
+    for (const metric of metrics) {
+      namespaceTab.cards.push({
+        id: `card-${cardId++}`,
+        config: {
+          type: "line",
+          title: metric,
+          widthPercent: 33,
+          height: 400,
+          xMetric: "step",
+          yMetrics: [metric],
+        },
+      });
+    }
+  }
+
+  nextCardId.value = cardId;
+  saveLayout();
+}
+
+function startPolling() {
+  if (pollingInterval.value) return;
+
+  console.log("[Poll] Starting polling (every 10s)");
+  pollingInterval.value = setInterval(checkForUpdates, 10000);
+}
+
+function stopPolling() {
+  if (pollingInterval.value) {
+    console.log("[Poll] Stopping polling");
+    clearInterval(pollingInterval.value);
+    pollingInterval.value = null;
+  }
+}
 
 function saveLayout() {
   const layout = {
@@ -600,6 +948,7 @@ function saveLayout() {
     activeTab: activeTab.value,
     nextCardId: nextCardId.value,
     globalSettings: globalSettings.value,
+    removedMetrics: Array.from(removedMetrics.value), // Save removed metrics list
   };
   localStorage.setItem(storageKey.value, JSON.stringify(layout));
 }
@@ -614,7 +963,7 @@ function addCard() {
       title: `Chart ${nextCardId.value - 1}`,
       widthPercent: 33,
       height: 400,
-      xMetric: "step",
+      xMetric: "global_step",
       yMetrics: [],
     },
   };
@@ -785,6 +1134,16 @@ function updateCard({ id, config, syncAll, realtime }) {
 function removeCard(id) {
   const tab = tabs.value.find((t) => t.name === activeTab.value);
   if (tab) {
+    // Find the card being removed to track its metrics
+    const cardToRemove = tab.cards.find((c) => c.id === id);
+    if (cardToRemove?.config?.yMetrics) {
+      // Mark these metrics as explicitly removed
+      cardToRemove.config.yMetrics.forEach((metric) => {
+        removedMetrics.value.add(metric);
+        console.log(`[removeCard] Marked ${metric} as removed`);
+      });
+    }
+
     tab.cards = tab.cards.filter((c) => c.id !== id);
     saveLayout();
   }
