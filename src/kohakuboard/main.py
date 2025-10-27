@@ -24,7 +24,7 @@ else:
     db_module.db = SqliteDatabase(":memory:")
 
 # Now import routers (after db is initialized)
-from kohakuboard.api import boards, experiments, projects, runs, sync, system
+from kohakuboard.api import boards, projects, runs, sync, system
 
 app = FastAPI(
     title="KohakuBoard API",
@@ -51,11 +51,8 @@ app.include_router(runs.router, prefix=cfg.app.api_base, tags=["runs"])
 # Register sync router (remote mode only, but always registered for API docs)
 app.include_router(sync.router, prefix=cfg.app.api_base, tags=["sync"])
 
-# Keep legacy routers for backward compatibility
+# Keep legacy boards router for backward compatibility (media file serving)
 app.include_router(boards.router, prefix=cfg.app.api_base, tags=["boards (legacy)"])
-app.include_router(
-    experiments.router, prefix=cfg.app.api_base, tags=["experiments (legacy)"]
-)
 
 
 @app.get("/")
@@ -81,8 +78,6 @@ async def root():
         "endpoints": {
             "system": f"{cfg.app.api_base}/system/info",
             "projects": f"{cfg.app.api_base}/projects",
-            "experiments": f"{cfg.app.api_base}/experiments",
-            "boards": f"{cfg.app.api_base}/boards",
         },
     }
 

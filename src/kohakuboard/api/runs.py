@@ -73,6 +73,7 @@ async def get_run_summary(
 
     Returns:
         dict: Run summary with metadata, counts, available metrics/media/tables
+        Same format as experiments API for compatibility
     """
     logger_api.info(f"Fetching summary for {project}/{run_id}")
 
@@ -80,11 +81,30 @@ async def get_run_summary(
     reader = BoardReader(run_path)
     summary = reader.get_summary()
 
-    # Add project context
-    summary["project"] = project
-    summary["run_id"] = run_id
+    # Return in same format as experiments API for frontend compatibility
+    metadata = summary["metadata"]
 
-    return summary
+    return {
+        "experiment_id": run_id,  # For compatibility with ConfigurableChartCard
+        "project": project,
+        "run_id": run_id,
+        "experiment_info": {
+            "id": run_id,
+            "name": metadata.get("name", run_id),
+            "description": f"Config: {metadata.get('config', {})}",
+            "status": "completed",
+            "total_steps": summary["metrics_count"],
+            "duration": "N/A",
+            "created_at": metadata.get("created_at", ""),
+        },
+        "total_steps": summary["metrics_count"],
+        "available_data": {
+            "scalars": summary["available_metrics"],
+            "media": summary["available_media"],
+            "tables": summary["available_tables"],
+            "histograms": summary["available_histograms"],
+        },
+    }
 
 
 @router.get("/projects/{project}/runs/{run_id}/metadata")
@@ -119,7 +139,7 @@ async def get_available_scalars(
     return {"metrics": metrics}
 
 
-@router.get("/projects/{project}/runs/{run_id}/scalars/{metric}")
+@router.get("/projects/{project}/runs/{run_id}/scalars/{metric:path}")
 async def get_scalar_data(
     project: str,
     run_id: str,
@@ -127,7 +147,11 @@ async def get_scalar_data(
     limit: int | None = Query(None, description="Maximum number of data points"),
     current_user: User | None = Depends(get_optional_user),
 ):
-    """Get scalar data for a specific metric"""
+    """Get scalar data for a specific metric
+
+    Note: metric can contain slashes (e.g., "train/loss")
+    FastAPI path parameter automatically URL-decodes it
+    """
     logger_api.info(f"Fetching scalar data for {project}/{run_id}/{metric}")
 
     run_path = get_run_path(project, run_id, current_user)
@@ -153,7 +177,7 @@ async def get_available_media(
     return {"media": media_names}
 
 
-@router.get("/projects/{project}/runs/{run_id}/media/{name}")
+@router.get("/projects/{project}/runs/{run_id}/media/{name:path}")
 async def get_media_data(
     project: str,
     run_id: str,
@@ -168,7 +192,22 @@ async def get_media_data(
     reader = BoardReader(run_path)
     data = reader.get_media_data(name, limit=limit)
 
-    return {"name": name, "data": data}
+    # Transform to same format as experiments API
+    media_entries = []
+    for entry in data:
+        media_entries.append(
+            {
+                "name": entry.get("media_id", ""),
+                "step": entry.get("step", 0),
+                "type": entry.get("type", "image"),
+                "url": f"/api/projects/{project}/runs/{run_id}/media/files/{entry.get('filename', '')}",
+                "caption": entry.get("caption", ""),
+                "width": entry.get("width"),
+                "height": entry.get("height"),
+            }
+        )
+
+    return {"experiment_id": run_id, "media_name": name, "data": media_entries}
 
 
 @router.get("/projects/{project}/runs/{run_id}/media/files/{filename}")
@@ -228,7 +267,7 @@ async def get_available_tables(
     return {"tables": table_names}
 
 
-@router.get("/projects/{project}/runs/{run_id}/tables/{name}")
+@router.get("/projects/{project}/runs/{run_id}/tables/{name:path}")
 async def get_table_data(
     project: str,
     run_id: str,
@@ -243,7 +282,7 @@ async def get_table_data(
     reader = BoardReader(run_path)
     data = reader.get_table_data(name, limit=limit)
 
-    return {"name": name, "data": data}
+    return {"experiment_id": run_id, "table_name": name, "data": data}
 
 
 @router.get("/projects/{project}/runs/{run_id}/histograms")
@@ -262,7 +301,7 @@ async def get_available_histograms(
     return {"histograms": histogram_names}
 
 
-@router.get("/projects/{project}/runs/{run_id}/histograms/{name}")
+@router.get("/projects/{project}/runs/{run_id}/histograms/{name:path}")
 async def get_histogram_data(
     project: str,
     run_id: str,
@@ -277,4 +316,4 @@ async def get_histogram_data(
     reader = BoardReader(run_path)
     data = reader.get_histogram_data(name, limit=limit)
 
-    return {"name": name, "data": data}
+    return {"experiment_id": run_id, "histogram_name": name, "data": data}
