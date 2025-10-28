@@ -36,6 +36,8 @@ from kohakuhub.api.git.routers import lfs, ssh_keys
 from kohakuhub.api.repo.routers import crud as repo_crud
 from kohakuhub.api.repo.routers import info as repo_info
 from kohakuhub.api.repo.routers import tree as repo_tree
+from kohakuhub.api.xet.routers import cas as xet_cas
+from kohakuhub.api.xet.routers import xet as xet_token
 
 # Conditional import for Dataset Viewer
 if not cfg.app.disable_dataset_viewer:
@@ -102,6 +104,8 @@ app.include_router(org, prefix="/org", tags=["organizations"])
 app.include_router(git_http.router, tags=["git"])
 app.include_router(ssh_keys.router, tags=["ssh-keys"])
 app.include_router(validation.router, tags=["validation"])
+app.include_router(xet_token.router, prefix=cfg.app.api_base, tags=["xet"])
+app.include_router(xet_cas.router, tags=["xet-cas"])
 
 # Conditional: Dataset Viewer (Kohaku License)
 if not cfg.app.disable_dataset_viewer:

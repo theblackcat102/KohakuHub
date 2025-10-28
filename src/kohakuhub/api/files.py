@@ -31,6 +31,7 @@ from kohakuhub.auth.permissions import (
 from kohakuhub.utils.lakefs import get_lakefs_client, lakefs_repo_name
 from kohakuhub.utils.s3 import generate_download_presigned_url, parse_s3_uri
 from kohakuhub.api.fallback import with_repo_fallback
+from kohakuhub.api.xet import XET_ENABLE
 from kohakuhub.api.quota.util import check_quota
 from kohakuhub.api.utils.downloads import (
     get_or_create_tracking_cookie,
@@ -452,6 +453,16 @@ async def _get_file_metadata(
         ),
         "Content-Disposition": f"attachment; filename=\"{encoded_filename_ascii}\"; filename*=UTF-8''{encoded_filename_utf8}",
     }
+
+    if file_record and file_record.sha256 and file_record.lfs and XET_ENABLE:
+        # Try to enable xet here
+        logger.debug(
+            f"Enabling xet for {repo_type} {repo_id} {revision} {filename} with hash {file_record.sha256}"
+        )
+        response_headers["X-Xet-hash"] = file_record.sha256
+        response_headers["X-Xet-Refresh-Route"] = (
+            f"{cfg.app.base_url}/api/{repo_type}s/{repo_id}/xet-read-token/{revision}/{filename}"
+        )
 
     return presigned_url, response_headers
 
