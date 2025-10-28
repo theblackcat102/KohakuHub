@@ -34,8 +34,6 @@ class InterceptHandler(logging.Handler):
         try:
             level = logger.level(record.levelname).name
             api_name = record.name.upper()
-            if "UVICORN" in api_name:
-                api_name = "UVICORN"
         except ValueError:
             level = record.levelno
 
@@ -266,6 +264,8 @@ class LoggerFactory:
             _logger.handlers = []
             if "." not in logger_name:
                 _logger.addHandler(InterceptHandler())
+            else:
+                _logger.propagate = True
 
     @classmethod
     def get_logger(cls, api_name: str) -> Logger:
