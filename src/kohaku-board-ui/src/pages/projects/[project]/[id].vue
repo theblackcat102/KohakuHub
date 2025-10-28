@@ -1,4 +1,5 @@
 <script setup>
+import { ElMessage } from "element-plus";
 import { VueDraggable } from "vue-draggable-plus";
 import ConfigurableChartCard from "@/components/ConfigurableChartCard.vue";
 import { useAnimationPreference } from "@/composables/useAnimationPreference";
@@ -9,6 +10,7 @@ const { animationsEnabled } = useAnimationPreference();
 const { hoverSyncEnabled, toggleHoverSync } = useHoverSync();
 const metricDataCache = ref({});
 const availableMetrics = ref([]);
+const availableSummary = ref(null); // Store full summary data
 
 const tabs = ref([{ name: "Metrics", cards: [] }]);
 const activeTab = ref("Metrics");
@@ -20,6 +22,7 @@ const newTabName = ref("");
 const showGlobalSettings = ref(false);
 const showAddChartDialog = ref(false);
 const newChartType = ref("line");
+const newChartValue = ref([]); // Array for line charts, string for others
 const isInitializing = ref(true); // Prevent watch triggers during init
 const removedMetrics = ref(new Set()); // Track explicitly removed metrics
 
@@ -97,6 +100,8 @@ async function initializeExperiment() {
       throw new Error("Invalid summary response structure");
     }
 
+    // Store full summary for later use (media, tables, histograms)
+    availableSummary.value = summary;
     availableMetrics.value = summary.available_data.scalars;
 
     // Add computed time metrics (will be calculated after fetching timestamp)
@@ -958,14 +963,67 @@ function saveLayout() {
 function addCard() {
   showAddChartDialog.value = true;
   newChartType.value = "line";
+  newChartValue.value = []; // Reset selection (array for line, will be string for others)
 }
+
+const availableChartValues = computed(() => {
+  if (!availableSummary.value) return [];
+
+  if (newChartType.value === "line") {
+    // For line charts, show all metrics except axis-only ones
+    const axisOnlyMetrics = new Set([
+      "step",
+      "global_step",
+      "timestamp",
+      "walltime",
+      "relative_walltime",
+    ]);
+    return availableMetrics.value.filter((m) => !axisOnlyMetrics.has(m));
+  } else if (newChartType.value === "media") {
+    // Get available media from summary
+    return availableSummary.value.available_data?.media || [];
+  } else if (newChartType.value === "table") {
+    // Get available tables from summary
+    return availableSummary.value.available_data?.tables || [];
+  } else if (newChartType.value === "histogram") {
+    // Get available histograms from summary
+    return availableSummary.value.available_data?.histograms || [];
+  }
+  return [];
+});
 
 function confirmAddChart() {
   const tab = tabs.value.find((t) => t.name === activeTab.value);
   if (!tab) return;
 
+  // Validation based on chart type
+  if (newChartType.value === "line") {
+    if (
+      !Array.isArray(newChartValue.value) ||
+      newChartValue.value.length === 0
+    ) {
+      ElMessage.warning("Please select at least one metric");
+      return;
+    }
+  } else {
+    // Media/table/histogram require a single value
+    if (!newChartValue.value) {
+      ElMessage.warning(`Please select a ${newChartType.value}`);
+      return;
+    }
+  }
+
+  // Generate title based on selection
+  let title;
+  if (newChartType.value === "line") {
+    // Use comma-separated list of all selected metrics
+    title = newChartValue.value.join(", ");
+  } else {
+    title = newChartValue.value || `New ${newChartType.value}`;
+  }
+
   const baseConfig = {
-    title: `New ${newChartType.value}`,
+    title: title,
     widthPercent: 33,
     height: 400,
   };
@@ -976,17 +1034,27 @@ function confirmAddChart() {
       ...baseConfig,
       type: "line",
       xMetric: "global_step",
-      yMetrics: [],
+      yMetrics: newChartValue.value, // Already an array
     };
   } else if (newChartType.value === "media") {
-    config = { ...baseConfig, type: "media", mediaName: "", currentStep: 0 };
+    config = {
+      ...baseConfig,
+      type: "media",
+      mediaName: newChartValue.value,
+      currentStep: 0,
+    };
   } else if (newChartType.value === "table") {
-    config = { ...baseConfig, type: "table", tableName: "", currentStep: 0 };
+    config = {
+      ...baseConfig,
+      type: "table",
+      tableName: newChartValue.value,
+      currentStep: 0,
+    };
   } else if (newChartType.value === "histogram") {
     config = {
       ...baseConfig,
       type: "histogram",
-      histogramName: "",
+      histogramName: newChartValue.value,
       currentStep: 0,
     };
   }
@@ -999,6 +1067,12 @@ function confirmAddChart() {
   tab.cards.push(newCard);
   saveLayout();
   showAddChartDialog.value = false;
+  newChartValue.value = []; // Reset
+
+  // Fetch metrics for the new chart if needed (for line charts)
+  if (newChartType.value === "line") {
+    fetchMetricsForTab(false); // Fetch missing metrics
+  }
 }
 
 function resetLayout() {
@@ -1314,6 +1388,7 @@ function onDragEnd(evt) {
     <!-- Action buttons -->
     <div class="mb-6 flex items-center justify-end gap-2">
       <el-button type="primary" size="small" @click="addCard">
+        <i class="i-ep-plus mr-1" />
         <span v-if="!isMobile">Add Chart</span>
         <span v-else>Add</span>
       </el-button>
@@ -1323,6 +1398,11 @@ function onDragEnd(evt) {
       </el-button>
       <el-button size="small" @click="isEditingTabs = !isEditingTabs">
         {{ isEditingTabs ? "Done" : "Edit" }}
+      </el-button>
+      <el-button size="small" @click="resetLayout" type="danger" plain>
+        <i class="i-ep-refresh-left mr-1" />
+        <span v-if="!isMobile">Reset Layout</span>
+        <span v-else>Reset</span>
       </el-button>
     </div>
 
@@ -1442,13 +1522,91 @@ function onDragEnd(evt) {
 
     <!-- Add Chart Dialog -->
     <el-dialog v-model="showAddChartDialog" title="Add Chart" width="500px">
-      <el-form label-width="100px">
+      <el-form label-width="120px">
         <el-form-item label="Chart Type">
-          <el-select v-model="newChartType" class="w-full">
+          <el-select
+            v-model="newChartType"
+            class="w-full"
+            @change="newChartValue = newChartType === 'line' ? [] : ''"
+          >
             <el-option label="Line Chart" value="line" />
             <el-option label="Media Viewer" value="media" />
             <el-option label="Table Viewer" value="table" />
             <el-option label="Histogram" value="histogram" />
+          </el-select>
+        </el-form-item>
+
+        <!-- Line Chart: Multi-select for metrics -->
+        <el-form-item v-if="newChartType === 'line'" label="Select Metrics">
+          <el-select
+            v-model="newChartValue"
+            class="w-full"
+            placeholder="Choose one or more metrics"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+          >
+            <el-option
+              v-for="metric in availableChartValues"
+              :key="metric"
+              :label="metric"
+              :value="metric"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- Media: Single-select dropdown -->
+        <el-form-item v-if="newChartType === 'media'" label="Select Media">
+          <el-select
+            v-model="newChartValue"
+            class="w-full"
+            placeholder="Choose a media item"
+            filterable
+          >
+            <el-option
+              v-for="media in availableChartValues"
+              :key="media"
+              :label="media"
+              :value="media"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- Table: Single-select dropdown -->
+        <el-form-item v-if="newChartType === 'table'" label="Select Table">
+          <el-select
+            v-model="newChartValue"
+            class="w-full"
+            placeholder="Choose a table"
+            filterable
+          >
+            <el-option
+              v-for="table in availableChartValues"
+              :key="table"
+              :label="table"
+              :value="table"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- Histogram: Single-select dropdown -->
+        <el-form-item
+          v-if="newChartType === 'histogram'"
+          label="Select Histogram"
+        >
+          <el-select
+            v-model="newChartValue"
+            class="w-full"
+            placeholder="Choose a histogram"
+            filterable
+          >
+            <el-option
+              v-for="hist in availableChartValues"
+              :key="hist"
+              :label="hist"
+              :value="hist"
+            />
           </el-select>
         </el-form-item>
       </el-form>
