@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 from lance.dataset import LanceDataset
 from loguru import logger
 
@@ -451,8 +452,6 @@ class HybridBoardReader:
                     num_bins = len(counts)
 
                     # Reconstruct bin edges from min/max/num_bins
-                    import numpy as np
-
                     bin_edges = np.linspace(min_val, max_val, num_bins + 1).tolist()
 
                     result.append(

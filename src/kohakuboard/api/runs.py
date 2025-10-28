@@ -4,6 +4,9 @@ Unified API for accessing run data (scalars, media, tables, histograms).
 Works in both local and remote modes with project-based organization.
 """
 
+import asyncio
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -71,10 +74,12 @@ async def get_run_status(
     # Check metadata for creation time
     metadata_file = run_path / "metadata.json"
     if metadata_file.exists():
-        import json
+        # Use asyncio.to_thread to avoid blocking
+        def read_metadata():
+            with open(metadata_file, "r") as f:
+                return json.load(f)
 
-        with open(metadata_file, "r") as f:
-            metadata = json.load(f)
+        metadata = await asyncio.to_thread(read_metadata)
     else:
         metadata = {}
 
@@ -94,8 +99,6 @@ async def get_run_status(
                 # Convert timestamp ms to ISO string
                 ts_ms = latest_step_info.get("timestamp")
                 if ts_ms:
-                    from datetime import datetime, timezone
-
                     last_updated = datetime.fromtimestamp(
                         ts_ms / 1000, tz=timezone.utc
                     ).isoformat()

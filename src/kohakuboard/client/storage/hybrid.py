@@ -6,6 +6,8 @@ Combines the best of both worlds:
 - Adaptive histograms: Lance with percentile-based range tracking
 """
 
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -93,8 +95,6 @@ class HybridStorage:
             caption: Optional caption
         """
         # Record step info (use current timestamp)
-        from datetime import datetime, timezone
-
         timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
 
@@ -116,8 +116,6 @@ class HybridStorage:
             table_data: Table dict
         """
         # Record step info
-        from datetime import datetime, timezone
-
         timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
 
@@ -143,8 +141,6 @@ class HybridStorage:
             precision: "compact" (uint8) or "exact" (int32)
         """
         # Record step info
-        from datetime import datetime, timezone
-
         timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
 
