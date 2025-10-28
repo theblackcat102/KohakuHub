@@ -57,13 +57,13 @@ class ConvNeXtCIFAR(nn.Module):
         )
 
         # Stages
-        self.stage1 = nn.Sequential(*[ConvNeXtBlock(64) for _ in range(3)])
+        self.stage1 = nn.Sequential(*[ConvNeXtBlock(64) for _ in range(4)])
         self.downsample1 = nn.Sequential(
             nn.GroupNorm(1, 64),
             nn.Conv2d(64, 128, kernel_size=2, stride=2),
         )
 
-        self.stage2 = nn.Sequential(*[ConvNeXtBlock(128) for _ in range(3)])
+        self.stage2 = nn.Sequential(*[ConvNeXtBlock(128) for _ in range(4)])
         self.downsample2 = nn.Sequential(
             nn.GroupNorm(1, 128),
             nn.Conv2d(128, 256, kernel_size=2, stride=2),
@@ -73,7 +73,11 @@ class ConvNeXtCIFAR(nn.Module):
 
         # Head
         self.norm = nn.GroupNorm(1, 1024)
-        self.head = nn.Linear(1024, num_classes)
+        self.head = nn.Sequential(
+            nn.Linear(1024, 4096),
+            nn.Mish(),
+            nn.Linear(4096, num_classes),
+        )
 
     def forward(self, x):
         x = self.stem(x)
@@ -95,8 +99,8 @@ def main():
 
     # Config
     batch_size = 128
-    epochs = 25
-    lr = 1e-3
+    epochs = 2
+    lr = 2e-3
 
     # Create board
     board = Board(
@@ -136,7 +140,7 @@ def main():
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
         drop_last=True,
         persistent_workers=True,
@@ -144,7 +148,7 @@ def main():
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
         persistent_workers=True,
     )
