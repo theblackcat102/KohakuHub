@@ -162,15 +162,10 @@ function createPlot() {
     plotGlPixelRatio: 2,
   };
 
-  const transitionConfig = animationsEnabled.value
-    ? {
-        duration: 0,
-        easing: "linear",
-      }
-    : {
-        duration: 0,
-        easing: "linear",
-      };
+  const transitionConfig = {
+    duration: 0,
+    easing: "linear",
+  };
 
   Plotly.react(plotDiv.value, traces, layout, {
     ...plotConfig,

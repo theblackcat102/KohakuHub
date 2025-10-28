@@ -18,6 +18,8 @@ const isUpdating = ref(false);
 const showAddTabDialog = ref(false);
 const newTabName = ref("");
 const showGlobalSettings = ref(false);
+const showAddChartDialog = ref(false);
+const newChartType = ref("line");
 const isInitializing = ref(true); // Prevent watch triggers during init
 const removedMetrics = ref(new Set()); // Track explicitly removed metrics
 
@@ -954,21 +956,58 @@ function saveLayout() {
 }
 
 function addCard() {
+  showAddChartDialog.value = true;
+  newChartType.value = "line";
+}
+
+function confirmAddChart() {
   const tab = tabs.value.find((t) => t.name === activeTab.value);
   if (!tab) return;
 
-  const newCard = {
-    id: `card-${nextCardId.value++}`,
-    config: {
-      title: `Chart ${nextCardId.value - 1}`,
-      widthPercent: 33,
-      height: 400,
+  const baseConfig = {
+    title: `New ${newChartType.value}`,
+    widthPercent: 33,
+    height: 400,
+  };
+
+  let config;
+  if (newChartType.value === "line") {
+    config = {
+      ...baseConfig,
+      type: "line",
       xMetric: "global_step",
       yMetrics: [],
-    },
+    };
+  } else if (newChartType.value === "media") {
+    config = { ...baseConfig, type: "media", mediaName: "", currentStep: 0 };
+  } else if (newChartType.value === "table") {
+    config = { ...baseConfig, type: "table", tableName: "", currentStep: 0 };
+  } else if (newChartType.value === "histogram") {
+    config = {
+      ...baseConfig,
+      type: "histogram",
+      histogramName: "",
+      currentStep: 0,
+    };
+  }
+
+  const newCard = {
+    id: `card-${nextCardId.value++}`,
+    config,
   };
+
   tab.cards.push(newCard);
   saveLayout();
+  showAddChartDialog.value = false;
+}
+
+function resetLayout() {
+  if (
+    confirm("Reset to default layout? This will remove all customizations.")
+  ) {
+    localStorage.removeItem(storageKey.value);
+    location.reload();
+  }
 }
 
 function addTab() {
@@ -1400,6 +1439,24 @@ function onDragEnd(evt) {
     >
       <el-button type="primary" @click="addCard">Add Chart</el-button>
     </el-empty>
+
+    <!-- Add Chart Dialog -->
+    <el-dialog v-model="showAddChartDialog" title="Add Chart" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="Chart Type">
+          <el-select v-model="newChartType" class="w-full">
+            <el-option label="Line Chart" value="line" />
+            <el-option label="Media Viewer" value="media" />
+            <el-option label="Table Viewer" value="table" />
+            <el-option label="Histogram" value="histogram" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddChartDialog = false">Cancel</el-button>
+        <el-button type="primary" @click="confirmAddChart">Add</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="showAddTabDialog" title="Add Tab" width="400px">
       <el-form @submit.prevent="confirmAddTab">
