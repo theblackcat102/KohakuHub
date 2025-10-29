@@ -3,7 +3,48 @@
     class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3 shadow-sm"
   >
     <div class="flex items-center justify-between max-w-full mx-auto">
-      <div class="flex items-center gap-6">
+      <div class="flex items-center gap-3">
+        <!-- Sidebar toggle button (project page on mobile) -->
+        <button
+          v-if="projectSidebarState"
+          @click="handleSidebarToggle"
+          class="p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors active:bg-gray-200 dark:active:bg-gray-700"
+          :title="
+            projectSidebarState.collapsed
+              ? 'Show runs sidebar'
+              : 'Hide runs sidebar'
+          "
+        >
+          <svg
+            v-if="projectSidebarState.collapsed"
+            class="w-6 h-6 text-gray-700 dark:text-gray-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+          <svg
+            v-else
+            class="w-6 h-6 text-gray-700 dark:text-gray-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+
         <router-link to="/" class="flex items-center gap-2">
           <img
             src="/images/logo-square.svg"
@@ -113,14 +154,54 @@ const systemInfo = ref(null);
 const currentProject = computed(() => route.params.project || null);
 const currentRun = computed(() => route.params.id || null);
 
+// Check for project page sidebar state (provided via window object)
+const projectSidebarState = ref(null);
+
+// Poll for sidebar state updates
+watch(
+  () => route.path,
+  () => {
+    projectSidebarState.value = window.__projectSidebarState || null;
+  },
+  { immediate: true },
+);
+
+// Also check periodically in case state updates
+let sidebarStateInterval = null;
+onMounted(() => {
+  sidebarStateInterval = setInterval(() => {
+    projectSidebarState.value = window.__projectSidebarState || null;
+  }, 100);
+});
+
+onUnmounted(() => {
+  if (sidebarStateInterval) {
+    clearInterval(sidebarStateInterval);
+  }
+});
+
+function handleSidebarToggle() {
+  if (projectSidebarState.value?.toggle) {
+    projectSidebarState.value.toggle();
+  }
+}
+
 const props = defineProps({
   darkMode: {
     type: Boolean,
     required: true,
   },
+  showSidebarToggle: {
+    type: Boolean,
+    default: false,
+  },
+  sidebarCollapsed: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(["toggle-dark-mode"]);
+const emit = defineEmits(["toggle-dark-mode", "toggle-sidebar"]);
 
 onMounted(async () => {
   try {

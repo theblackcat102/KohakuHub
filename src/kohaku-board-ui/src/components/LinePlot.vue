@@ -65,6 +65,19 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  // Multi-run props
+  multiRunMode: {
+    type: Boolean,
+    default: false,
+  },
+  runColors: {
+    type: Object,
+    default: () => ({}),
+  },
+  runNames: {
+    type: Object,
+    default: () => ({}),
+  },
 });
 
 const plotDiv = ref(null);
@@ -281,9 +294,39 @@ const processedData = computed(() => {
   const value = config.smoothingValue;
   const rate = config.downsampleRate;
 
+  // Track duplicate names and add suffixes
+  const nameCount = new Map();
+
   return props.data.map((series) => {
+    // In multi-run mode, replace run_id with run_name in series name
+    let displayName = series.name;
+    let originalRunId = null; // Keep track of original run_id for color lookup
+
+    if (props.multiRunMode && series.name.includes(" (")) {
+      const runIdMatch = series.name.match(/\(([^)]+)\)$/);
+      if (runIdMatch) {
+        const runId = runIdMatch[1];
+        originalRunId = runId; // Store for color lookup
+        const runName = props.runNames[runId] || runId;
+        const baseMetric = series.name.substring(
+          0,
+          series.name.lastIndexOf(" ("),
+        );
+        displayName = `${baseMetric} (${runName})`;
+
+        // Handle duplicate names
+        if (nameCount.has(displayName)) {
+          const count = nameCount.get(displayName) + 1;
+          nameCount.set(displayName, count);
+          displayName = `${baseMetric} (${runName}_${count})`;
+        } else {
+          nameCount.set(displayName, 1);
+        }
+      }
+    }
+
     console.log(
-      `[LinePlot] Processing series: ${series.name}, data length: ${series.y.length}`,
+      `[LinePlot] Processing series: ${series.name} -> ${displayName}, data length: ${series.y.length}`,
     );
 
     // Build line segments separated by NaN/inf breaks
@@ -356,7 +399,7 @@ const processedData = computed(() => {
     });
 
     const result = {
-      name: series.name,
+      name: displayName, // Use display name (with run_name instead of run_id)
       segments: processedSegments, // Multiple line segments
       original: null,
       originalSegments: null,
@@ -364,6 +407,8 @@ const processedData = computed(() => {
       nanX,
       infX,
       negInfX,
+      // Store original run_id for color lookup
+      runId: originalRunId,
     };
 
     if (mode !== "disabled" && config.showOriginal) {
@@ -416,7 +461,23 @@ function createPlot() {
       `[LinePlot] createPlot - processing series ${series.name}: ${series.segments?.length || 0} segments, nanX=${series.nanX?.length || 0}, infX=${series.infX?.length || 0}, negInfX=${series.negInfX?.length || 0}`,
     );
 
-    const baseColor = plotlyColors[index % plotlyColors.length];
+    // In multi-run mode, use the stored run_id to look up color
+    let baseColor = plotlyColors[index % plotlyColors.length];
+    if (props.multiRunMode && series.runId) {
+      // Use the original run_id stored in processedData
+      const runId = series.runId;
+      if (props.runColors[runId]) {
+        baseColor = props.runColors[runId];
+        console.log(
+          `[LinePlot] Using run color for ${series.name}: ${baseColor} (runId: ${runId})`,
+        );
+      } else {
+        console.warn(
+          `[LinePlot] No color found for runId: ${runId}, available:`,
+          Object.keys(props.runColors),
+        );
+      }
+    }
 
     // Render original (smoothed) segments if enabled
     if (series.originalSegments && series.originalSegments.length > 0) {

@@ -16,6 +16,12 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  multiRunMode: {
+    type: Boolean,
+    default: false,
+  },
+  runColors: Object, // Map of run_id -> color (for multi-run mode)
+  runNames: Object, // Map of run_id -> name (for multi-run mode)
 });
 
 const emit = defineEmits(["update:config", "remove"]);
@@ -119,15 +125,63 @@ watch(
 
 const hasDataError = computed(() => {
   const config = props.initialConfig;
+  console.log(
+    `[${props.cardId}] hasDataError computed, cardType: ${cardType.value}`,
+  );
+
   if (cardType.value !== "line") return false;
   if (!config.xMetric || !config.yMetrics || config.yMetrics.length === 0)
     return false;
 
-  const xData = props.sparseData[config.xMetric];
-  if (!xData || xData.length === 0) return true;
+  // In multi-run mode, x-axis data is per-run (e.g., "global_step (run_id)")
+  // Check if at least one run has x-axis data
+  let hasAnyXData = false;
+  if (props.multiRunMode) {
+    for (const key of Object.keys(props.sparseData)) {
+      if (key.startsWith(config.xMetric + " (")) {
+        const xData = props.sparseData[key];
+        if (xData && xData.length > 0 && xData.some((v) => v !== null)) {
+          hasAnyXData = true;
+          break;
+        }
+      }
+    }
+    console.log(
+      `[${props.cardId}] hasDataError - multi-run xData check: ${hasAnyXData}`,
+    );
+  } else {
+    const xData = props.sparseData[config.xMetric];
+    hasAnyXData = xData && xData.length > 0;
+    console.log(
+      `[${props.cardId}] hasDataError - single-run xData:`,
+      xData ? `${xData.length} elements` : "missing",
+    );
+  }
+
+  if (!hasAnyXData) {
+    console.log(`[${props.cardId}] hasDataError = true (no xData)`);
+    return true;
+  }
+
+  // In multi-run mode, need to expand base metrics to find actual data keys
+  let metricsToCheck = config.yMetrics;
+  if (props.multiRunMode) {
+    metricsToCheck = [];
+    for (const baseMetric of config.yMetrics) {
+      for (const key of Object.keys(props.sparseData)) {
+        if (key.startsWith(baseMetric + " (") || key === baseMetric) {
+          metricsToCheck.push(key);
+        }
+      }
+    }
+    console.log(
+      `[${props.cardId}] hasDataError - expanded metrics:`,
+      metricsToCheck,
+    );
+  }
 
   // Check if all y metrics have no valid data (including NaN/inf as valid!)
-  const allEmpty = config.yMetrics.every((yMetric) => {
+  const allEmpty = metricsToCheck.every((yMetric) => {
     const yData = props.sparseData[yMetric];
     if (!yData || yData.length === 0) return true;
 
@@ -136,26 +190,97 @@ const hasDataError = computed(() => {
     return !hasAnyData;
   });
 
+  console.log(`[${props.cardId}] hasDataError = ${allEmpty}`);
   return allEmpty;
 });
 
 const processedChartData = computed(() => {
   const config = props.initialConfig;
   console.log(
-    `[${props.cardId}] processedChartData computed, type: ${cardType.value}`,
+    `[${props.cardId}] processedChartData computed START`,
+    `type: ${cardType.value}`,
+    `multiRunMode: ${props.multiRunMode}`,
+    `xMetric: ${config.xMetric}`,
+    `yMetrics:`,
+    config.yMetrics,
+    `sparseData keys:`,
+    Object.keys(props.sparseData),
   );
 
-  if (cardType.value !== "line") return [];
-  if (!config.xMetric || !config.yMetrics || config.yMetrics.length === 0)
+  if (cardType.value !== "line") {
+    console.log(`[${props.cardId}] Not line type, returning empty`);
     return [];
+  }
+  if (!config.xMetric || !config.yMetrics || config.yMetrics.length === 0) {
+    console.log(
+      `[${props.cardId}] Missing xMetric or yMetrics, returning empty`,
+    );
+    return [];
+  }
 
+  // In single-run mode, x-data is shared
+  // In multi-run mode, x-data is per-run (checked later)
   const xData = props.sparseData[config.xMetric];
-  if (!xData) return [];
 
-  return config.yMetrics
+  if (!props.multiRunMode) {
+    console.log(
+      `[${props.cardId}] Single-run mode - xData for ${config.xMetric}:`,
+      xData ? `${xData.length} elements` : "null/undefined",
+    );
+    if (!xData) {
+      console.log(`[${props.cardId}] No xData, returning empty`);
+      return [];
+    }
+  } else {
+    console.log(`[${props.cardId}] Multi-run mode - will use per-run xData`);
+  }
+
+  // In multi-run mode, expand each base metric to all runs
+  let expandedYMetrics = config.yMetrics;
+  if (props.multiRunMode) {
+    expandedYMetrics = [];
+    for (const baseMetric of config.yMetrics) {
+      // Find all keys in sparseData that match this metric (with any run suffix)
+      for (const key of Object.keys(props.sparseData)) {
+        if (key.startsWith(baseMetric + " (") || key === baseMetric) {
+          expandedYMetrics.push(key);
+        }
+      }
+    }
+    console.log(
+      `[${props.cardId}] Multi-run mode: base metrics:`,
+      config.yMetrics,
+    );
+    console.log(
+      `[${props.cardId}] Expanded to ${expandedYMetrics.length} series:`,
+      expandedYMetrics,
+    );
+    console.log(
+      `[${props.cardId}] Available in sparseData:`,
+      Object.keys(props.sparseData),
+    );
+  }
+
+  return expandedYMetrics
     .map((yMetric) => {
       const yData = props.sparseData[yMetric];
       if (!yData || yData.length === 0) return null; // Handle empty data gracefully
+
+      // In multi-run mode, each y-metric has a corresponding x-metric with same run suffix
+      // E.g., "train/loss (run1)" uses "global_step (run1)"
+      let xDataToUse = xData;
+      if (props.multiRunMode && yMetric.includes(" (")) {
+        // Extract run_id from y-metric: "train/loss (run_id)" -> "run_id"
+        const runIdMatch = yMetric.match(/\(([^)]+)\)$/);
+        if (runIdMatch) {
+          const runId = runIdMatch[1];
+          const xMetricWithRun = `${config.xMetric} (${runId})`;
+          xDataToUse = props.sparseData[xMetricWithRun] || xData;
+          console.log(
+            `[${props.cardId}] Using x-data ${xMetricWithRun} for ${yMetric}`,
+          );
+        }
+      }
 
       const x = [];
       const y = [];
@@ -164,8 +289,8 @@ const processedChartData = computed(() => {
       let infCount = 0;
       let negInfCount = 0;
 
-      for (let i = 0; i < xData.length; i++) {
-        let xVal = xData[i];
+      for (let i = 0; i < xDataToUse.length; i++) {
+        let xVal = xDataToUse[i];
         const yVal = yData[i];
 
         // Convert timestamp strings to Date objects for Plotly
@@ -539,6 +664,9 @@ function startResizeRight(e) {
           :tab-name="props.tabName"
           :chart-id="props.cardId"
           :hover-sync-enabled="props.hoverSyncEnabled"
+          :multi-run-mode="props.multiRunMode"
+          :run-colors="props.runColors"
+          :run-names="props.runNames"
           @update:smoothing-mode="(v) => emitConfig({ smoothingMode: v })"
           @update:smoothing-value="(v) => emitConfig({ smoothingValue: v })"
           @update:downsample-rate="(v) => emitConfig({ downsampleRate: v })"
