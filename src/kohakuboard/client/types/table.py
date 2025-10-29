@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional, Union
 
-from kohakuboard.client.media_types import Media, is_media
+from .media import Media, is_media
 
 
 class Table:

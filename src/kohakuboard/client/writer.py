@@ -17,7 +17,7 @@ from typing import Any
 
 from loguru import logger
 
-from kohakuboard.client.media import MediaHandler
+from kohakuboard.client.types.media_handler import MediaHandler
 from kohakuboard.client.storage import DuckDBStorage, HybridStorage, ParquetStorage
 
 
@@ -145,6 +145,8 @@ class LogWriter:
             self._handle_table(message)
         elif msg_type == "histogram":
             self._handle_histogram(message)
+        elif msg_type == "batch":
+            self._handle_batch(message)
         elif msg_type == "flush":
             self._handle_flush()
         else:
@@ -218,13 +220,122 @@ class LogWriter:
         step = message["step"]
         global_step = message.get("global_step")
         name = message["name"]
-        values = message["values"]
-        num_bins = message.get("num_bins", 64)
-        precision = message.get("precision", "compact")
+        precomputed = message.get("precomputed", False)
 
-        self.storage.append_histogram(
-            step, global_step, name, values, num_bins, precision
-        )
+        if precomputed:
+            # Precomputed bins/counts - store directly
+            bins = message["bins"]
+            counts = message["counts"]
+            precision = message.get("precision", "exact")
+
+            # For precomputed, we need to store bins/counts directly
+            # The storage layer needs to handle this appropriately
+            self.storage.append_histogram(
+                step,
+                global_step,
+                name,
+                None,
+                bins=bins,
+                counts=counts,
+                precision=precision,
+            )
+        else:
+            # Raw values - compute histogram in storage layer
+            values = message["values"]
+            num_bins = message.get("num_bins", 64)
+            precision = message.get("precision", "compact")
+
+            self.storage.append_histogram(
+                step, global_step, name, values, num_bins, precision
+            )
+
+    def _handle_batch(self, message: dict):
+        """Handle batched message containing multiple types
+
+        This processes scalars, media, tables, and histograms from a single message.
+        All items share the same step and global_step.
+        """
+        step = message["step"]
+        global_step = message.get("global_step")
+        timestamp = message.get("timestamp")
+
+        # Process scalars if present
+        if "scalars" in message:
+            scalars = message["scalars"]
+            self.storage.append_metrics(step, global_step, scalars, timestamp)
+
+        # Process media if present
+        if "media" in message:
+            media_dict = message["media"]
+            for name, media_data in media_dict.items():
+                media_type = media_data.get("media_type", "image")
+                media_obj_data = media_data["media_data"]
+                caption = media_data.get("caption")
+
+                # Process media
+                media_meta = self.media_handler.process_media(
+                    media_obj_data, name, step, media_type
+                )
+                media_list = [media_meta]
+
+                # Store metadata
+                self.storage.append_media(step, global_step, name, media_list, caption)
+
+        # Process tables if present
+        if "tables" in message:
+            tables_dict = message["tables"]
+            for name, table_data in tables_dict.items():
+                # Process any media objects in the table
+                media_objects = table_data.pop("media_objects", {})
+                if media_objects:
+                    # Process each media object and save to disk
+                    for row_idx, col_dict in media_objects.items():
+                        for col_idx, media_obj in col_dict.items():
+                            # Save media to disk
+                            media_meta = self.media_handler.process_media(
+                                media_obj.data,
+                                f"{name}_r{row_idx}_c{col_idx}",
+                                step,
+                                media_type=media_obj.media_type,
+                            )
+                            # Replace placeholder with media reference
+                            media_id = media_meta["media_id"]
+                            table_data["rows"][int(row_idx)][
+                                int(col_idx)
+                            ] = f"<media id={media_id}>"
+
+                self.storage.append_table(step, global_step, name, table_data)
+
+        # Process histograms if present
+        if "histograms" in message:
+            histograms_dict = message["histograms"]
+            for name, hist_data in histograms_dict.items():
+                computed = hist_data.get("computed", False)
+
+                if computed:
+                    # Precomputed bins/counts
+                    bins = hist_data["bins"]
+                    counts = hist_data["counts"]
+                    precision = hist_data.get("precision", "exact")
+
+                    self.storage.append_histogram(
+                        step,
+                        global_step,
+                        name,
+                        None,
+                        bins=bins,
+                        counts=counts,
+                        precision=precision,
+                    )
+                else:
+                    # Raw values - compute in storage layer
+                    values = hist_data["values"]
+                    num_bins = hist_data.get("num_bins", 64)
+                    precision = hist_data.get("precision", "compact")
+
+                    self.storage.append_histogram(
+                        step, global_step, name, values, num_bins, precision
+                    )
 
     def _handle_flush(self):
         """Handle explicit flush request"""

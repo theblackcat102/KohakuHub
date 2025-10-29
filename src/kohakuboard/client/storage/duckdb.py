@@ -446,9 +446,11 @@ class DuckDBStorage:
         step: int,
         global_step: Optional[int],
         name: str,
-        values: List[float],
+        values: Optional[List[float]] = None,
         num_bins: int = 64,
         precision: str = "compact",
+        bins: Optional[List[float]] = None,
+        counts: Optional[List[int]] = None,
     ):
         """Append histogram log entry (pre-computed bins to save space)
 
@@ -456,13 +458,22 @@ class DuckDBStorage:
             step: Auto-increment step
             global_step: Explicit global step
             name: Histogram log name
-            values: List of values to create histogram from
+            values: List of values to create histogram from (if not precomputed)
             num_bins: Number of bins for histogram
             precision: Ignored for DuckDB backend
+            bins: Precomputed bin edges (optional)
+            counts: Precomputed bin counts (optional)
         """
-        # Compute histogram (bins + counts) instead of storing raw values
-        values_array = np.array(values, dtype=np.float32)
-        counts, bin_edges = np.histogram(values_array, bins=num_bins)
+        # Check if precomputed
+        if bins is not None and counts is not None:
+            # Use precomputed bins/counts
+            bin_edges = np.array(bins, dtype=np.float32)
+            counts_array = np.array(counts, dtype=np.int32)
+            num_bins = len(counts_array)
+        else:
+            # Compute histogram (bins + counts) instead of storing raw values
+            values_array = np.array(values, dtype=np.float32)
+            counts_array, bin_edges = np.histogram(values_array, bins=num_bins)
 
         row = {
             "step": step,
@@ -470,7 +481,7 @@ class DuckDBStorage:
             "name": name,
             "num_bins": num_bins,
             "bins": json.dumps(bin_edges.tolist()),  # Bin edges
-            "counts": json.dumps(counts.tolist()),  # Counts per bin
+            "counts": json.dumps(counts_array.tolist()),  # Counts per bin
         }
         self.histograms_buffer.append(row)
 

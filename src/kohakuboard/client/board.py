@@ -14,8 +14,8 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 
 from kohakuboard.client.capture import OutputCapture
-from kohakuboard.client.media_types import Media, is_media
-from kohakuboard.client.table import Table
+from kohakuboard.client.types import Media, Table, Histogram
+from kohakuboard.client.types.media import is_media
 from kohakuboard.client.writer import writer_process_main
 
 
@@ -140,59 +140,208 @@ class Board:
         logger.info(f"Board created: {self.name} (ID: {self.board_id})")
         logger.info(f"Board directory: {self.board_dir}")
 
-    def log(self, **metrics: Union[int, float, Media]):
-        """Log scalar metrics or media (non-blocking)
+    def log(
+        self,
+        auto_step: bool = True,
+        **metrics: Union[int, float, Media, Table, Histogram],
+    ):
+        """Unified logging method supporting all data types (non-blocking)
 
-        Supports Python numbers, single-item tensors, numpy arrays, and Media objects.
+        Supports scalars, Media, Table, and Histogram objects in a single call.
+        All values logged in one call share the same step, eliminating step inflation.
 
         Args:
+            auto_step: Whether to auto-increment step (default: True)
             **metrics: Metric name-value pairs
-                      If value is Media object, equivalent to log_media(name, media)
+                - Scalars: Python numbers, single-item tensors, numpy scalars
+                - Media: Media objects (images/video/audio)
+                - Table: Table objects (tabular data)
+                - Histogram: Histogram objects (distributions)
 
-        Example:
+        Examples:
+            >>> # Scalars only
             >>> board.log(loss=0.5, accuracy=0.95, lr=0.001)
-            >>> board.log(sample_img=Media(image_array))  # Same as log_images("sample_img", ...)
-        """
-        # Increment step (auto-increment on every log call)
-        self._step += 1
 
-        # Separate scalars and media
+            >>> # Mixed types - all share same step
+            >>> board.log(
+            ...     loss=0.5,
+            ...     sample_img=Media(image_array),
+            ...     results=Table(data),
+            ...     gradients=Histogram(grad_values)
+            ... )
+
+            >>> # Multiple histograms without step inflation
+            >>> board.log(
+            ...     grad_layer1=Histogram(grad1),
+            ...     grad_layer2=Histogram(grad2),
+            ...     grad_layer3=Histogram(grad3),
+            ...     auto_step=True  # All get same step
+            ... )
+
+            >>> # Control step manually
+            >>> board.log(loss=0.5, auto_step=False)  # No step increment
+        """
+        # Increment step if auto_step is enabled
+        if auto_step:
+            self._step += 1
+
+        # Categorize values by type
         scalars = {}
         media_logs = []
+        table_logs = []
+        histogram_logs = []
 
         for key, value in metrics.items():
-            if is_media(value):
-                # Media object - log as media
+            if isinstance(value, Histogram):
+                # Histogram object
+                histogram_logs.append((key, value))
+            elif isinstance(value, Table):
+                # Table object
+                table_logs.append((key, value))
+            elif is_media(value):
+                # Media object
                 media_logs.append((key, value))
             else:
                 # Scalar - convert to Python number
                 scalars[key] = self._to_python_number(value)
 
-        # Send scalar message if we have scalars
+        # Use batched message if we have multiple types
+        if (
+            sum(
+                [
+                    bool(scalars),
+                    bool(media_logs),
+                    bool(table_logs),
+                    bool(histogram_logs),
+                ]
+            )
+            > 1
+        ):
+            # Send single batched message
+            self._send_batch_message(scalars, media_logs, table_logs, histogram_logs)
+        else:
+            # Send individual messages (backward compatible)
+            if scalars:
+                self._send_scalar_message(scalars)
+            if media_logs:
+                for media_name, media_obj in media_logs:
+                    self._send_media_message(media_name, media_obj)
+            if table_logs:
+                for table_name, table_obj in table_logs:
+                    self._send_table_message(table_name, table_obj)
+            if histogram_logs:
+                for hist_name, hist_obj in histogram_logs:
+                    self._send_histogram_message(hist_name, hist_obj)
+
+    def _send_scalar_message(self, scalars: Dict[str, Union[int, float]]):
+        """Send scalar metrics message"""
+        message = {
+            "type": "scalar",
+            "step": self._step,
+            "global_step": self._global_step,
+            "metrics": scalars,
+            "timestamp": datetime.now(timezone.utc),
+        }
+        self.queue.put(message)
+
+    def _send_media_message(self, name: str, media_obj: Media):
+        """Send single media message"""
+        message = {
+            "type": "media",
+            "step": self._step,
+            "global_step": self._global_step,
+            "name": name,
+            "media_type": media_obj.media_type,
+            "media_data": media_obj.data,
+            "caption": media_obj.caption,
+        }
+        self.queue.put(message)
+
+    def _send_table_message(self, name: str, table_obj: Table):
+        """Send single table message"""
+        message = {
+            "type": "table",
+            "step": self._step,
+            "global_step": self._global_step,
+            "name": name,
+            "table_data": table_obj.to_dict(),
+        }
+        self.queue.put(message)
+
+    def _send_histogram_message(self, name: str, hist_obj: Histogram):
+        """Send single histogram message"""
+        hist_data = hist_obj.to_dict()
+
+        if hist_data.get("computed", False):
+            # Precomputed histogram - send bins/counts
+            message = {
+                "type": "histogram",
+                "step": self._step,
+                "global_step": self._global_step,
+                "name": name,
+                "bins": hist_data["bins"],
+                "counts": hist_data["counts"],
+                "precision": hist_data["precision"],
+                "precomputed": True,
+            }
+        else:
+            # Raw values - send to writer for computation
+            message = {
+                "type": "histogram",
+                "step": self._step,
+                "global_step": self._global_step,
+                "name": name,
+                "values": hist_data["values"],
+                "num_bins": hist_data["num_bins"],
+                "precision": hist_data["precision"],
+                "precomputed": False,
+            }
+        self.queue.put(message)
+
+    def _send_batch_message(
+        self,
+        scalars: Dict[str, Union[int, float]],
+        media_logs: List[tuple],
+        table_logs: List[tuple],
+        histogram_logs: List[tuple],
+    ):
+        """Send batched message containing multiple types"""
+        batch_data = {
+            "type": "batch",
+            "step": self._step,
+            "global_step": self._global_step,
+            "timestamp": datetime.now(timezone.utc),
+        }
+
+        # Add scalars
         if scalars:
-            from datetime import datetime, timezone
+            batch_data["scalars"] = scalars
 
-            message = {
-                "type": "scalar",
-                "step": self._step,
-                "global_step": self._global_step,
-                "metrics": scalars,
-                "timestamp": datetime.now(timezone.utc),
+        # Add media
+        if media_logs:
+            batch_data["media"] = {
+                name: {
+                    "media_type": media_obj.media_type,
+                    "media_data": media_obj.data,
+                    "caption": media_obj.caption,
+                }
+                for name, media_obj in media_logs
             }
-            self.queue.put(message)
 
-        # Send media messages (each media gets same step since we already incremented)
-        for media_name, media_obj in media_logs:
-            message = {
-                "type": "media",
-                "step": self._step,
-                "global_step": self._global_step,
-                "name": media_name,
-                "media_type": media_obj.media_type,
-                "media_data": media_obj.data,
-                "caption": media_obj.caption,
+        # Add tables
+        if table_logs:
+            batch_data["tables"] = {
+                name: table_obj.to_dict() for name, table_obj in table_logs
             }
-            self.queue.put(message)
+
+        # Add histograms
+        if histogram_logs:
+            batch_data["histograms"] = {}
+            for name, hist_obj in histogram_logs:
+                hist_data = hist_obj.to_dict()
+                batch_data["histograms"][name] = hist_data
+
+        self.queue.put(batch_data)
 
     def log_images(
         self,

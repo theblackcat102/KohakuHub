@@ -126,9 +126,11 @@ class HybridStorage:
         step: int,
         global_step: Optional[int],
         name: str,
-        values: List[float],
+        values: Optional[List[float]] = None,
         num_bins: int = 64,
         precision: str = "compact",
+        bins: Optional[List[float]] = None,
+        counts: Optional[List[int]] = None,
     ):
         """Append histogram with configurable precision
 
@@ -136,16 +138,25 @@ class HybridStorage:
             step: Step number
             global_step: Global step
             name: Histogram name (e.g., "gradients/layer1")
-            values: Raw values array
+            values: Raw values array (if not precomputed)
             num_bins: Number of bins
             precision: "compact" (uint8) or "exact" (int32)
+            bins: Precomputed bin edges (optional)
+            counts: Precomputed bin counts (optional)
         """
         # Record step info
         timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         self.metadata_storage.append_step_info(step, global_step, timestamp_ms)
 
         self.histogram_storage.append_histogram(
-            step, global_step, name, values, num_bins, precision
+            step,
+            global_step,
+            name,
+            values,
+            num_bins,
+            precision,
+            bins=bins,
+            counts=counts,
         )
 
     def flush_metrics(self):

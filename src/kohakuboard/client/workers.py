@@ -114,7 +114,7 @@ def metadata_worker_main(
         board_dir / "logs" / "metadata_worker.log", rotation="10 MB", level="DEBUG"
     )
 
-    from kohakuboard.client.media import MediaHandler
+    from kohakuboard.client.types.media_handler import MediaHandler
 
     storage = SQLiteMetadataStorage(board_dir / "data")
     media_handler = MediaHandler(board_dir / "media")

@@ -76,9 +76,11 @@ class HistogramStorage:
         step: int,
         global_step: Optional[int],
         name: str,
-        values: List[float],
+        values: Optional[List[float]] = None,
         num_bins: int = None,
         precision: str = "exact",
+        bins: Optional[List[float]] = None,
+        counts: Optional[List[int]] = None,
     ):
         """Append histogram
 
@@ -86,47 +88,73 @@ class HistogramStorage:
             step: Step number
             global_step: Global step
             name: Histogram name (e.g., "gradients/layer1")
-            values: Raw values
+            values: Raw values (if not precomputed)
             num_bins: Ignored
             precision: "exact" (int32, default) or "compact" (uint8)
+            bins: Precomputed bin edges (optional)
+            counts: Precomputed bin counts (optional)
         """
-        if not values:
-            return
+        # Check if precomputed
+        if bins is not None and counts is not None:
+            # Precomputed histogram - use provided bins/counts
+            bins_array = np.array(bins, dtype=np.float32)
+            counts_array = np.array(counts, dtype=np.int32)
 
-        values_array = np.array(values, dtype=np.float32)
-        values_array = values_array[np.isfinite(values_array)]
+            # Use first and last bin edges as min/max
+            p1 = float(bins_array[0])
+            p99 = float(bins_array[-1])
 
-        if len(values_array) == 0:
-            return
-
-        # Compute p1-p99 range
-        p1 = float(np.percentile(values_array, 1))
-        p99 = float(np.percentile(values_array, 99))
-
-        if p99 - p1 < 1e-6:
-            p1 = float(values_array.min())
-            p99 = float(values_array.max())
-            if p99 - p1 < 1e-6:
-                p1 -= 0.5
-                p99 += 0.5
-
-        # Compute histogram
-        counts, _ = np.histogram(values_array, bins=self.num_bins, range=(p1, p99))
-
-        # Convert based on precision
-        if precision == "compact":
-            max_count = counts.max()
-            final_counts = (
-                (counts / max_count * 255).astype(np.uint8)
-                if max_count > 0
-                else counts.astype(np.uint8)
-            )
-            schema = self.schema_uint8
-            suffix = "_u8"
+            # Convert counts based on precision
+            if precision == "compact":
+                max_count = counts_array.max()
+                final_counts = (
+                    (counts_array / max_count * 255).astype(np.uint8)
+                    if max_count > 0
+                    else counts_array.astype(np.uint8)
+                )
+                suffix = "_u8"
+            else:
+                final_counts = counts_array.astype(np.int32)
+                suffix = "_i32"
         else:
-            final_counts = counts.astype(np.int32)
-            schema = self.schema_int32
-            suffix = "_i32"
+            # Compute histogram from raw values
+            if not values:
+                return
+
+            values_array = np.array(values, dtype=np.float32)
+            values_array = values_array[np.isfinite(values_array)]
+
+            if len(values_array) == 0:
+                return
+
+            # Compute p1-p99 range
+            p1 = float(np.percentile(values_array, 1))
+            p99 = float(np.percentile(values_array, 99))
+
+            if p99 - p1 < 1e-6:
+                p1 = float(values_array.min())
+                p99 = float(values_array.max())
+                if p99 - p1 < 1e-6:
+                    p1 -= 0.5
+                    p99 += 0.5
+
+            # Compute histogram
+            counts_array, _ = np.histogram(
+                values_array, bins=self.num_bins, range=(p1, p99)
+            )
+
+            # Convert based on precision
+            if precision == "compact":
+                max_count = counts_array.max()
+                final_counts = (
+                    (counts_array / max_count * 255).astype(np.uint8)
+                    if max_count > 0
+                    else counts_array.astype(np.uint8)
+                )
+                suffix = "_u8"
+            else:
+                final_counts = counts_array.astype(np.int32)
+                suffix = "_i32"
 
         # Extract namespace
         namespace = name.split("/")[0] if "/" in name else name.replace("/", "__")
@@ -148,10 +176,12 @@ class HistogramStorage:
             }
         )
 
-        # Store schema
+        # Store schema based on suffix
         if not hasattr(self, "_schemas"):
             self._schemas = {}
-        self._schemas[buffer_key] = schema
+        self._schemas[buffer_key] = (
+            self.schema_uint8 if suffix == "_u8" else self.schema_int32
+        )
 
     def flush(self):
         """Flush all buffers (writes to ~2-4 Lance files total)"""
