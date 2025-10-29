@@ -929,7 +929,7 @@ function confirmAddChart() {
   newChartValue.value = [];
 
   // Fetch metrics for the new chart
-  fetchMetricsForTab(false);
+  fetchMetricsForTab();
 }
 
 function resetLayout() {

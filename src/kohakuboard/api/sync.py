@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from kohakuboard.auth import get_current_user
@@ -133,10 +134,10 @@ async def sync_run(
     duckdb_path = data_dir / "board.duckdb"
 
     logger_api.info(f"Saving DuckDB file to: {duckdb_path}")
-    with open(duckdb_path, "wb") as f:
-        content = await duckdb_file.read()
-        f.write(content)
-        total_size = len(content)
+    content = await duckdb_file.read()
+    async with aiofiles.open(duckdb_path, "wb") as f:
+        await f.write(content)
+    total_size = len(content)
 
     # Save media files
     media_dir = run_dir / "media"
@@ -146,15 +147,15 @@ async def sync_run(
     for media_file in media_files:
         media_path = media_dir / media_file.filename
         logger_api.debug(f"Saving media file: {media_file.filename}")
-        with open(media_path, "wb") as f:
-            content = await media_file.read()
-            f.write(content)
-            total_size += len(content)
+        content = await media_file.read()
+        async with aiofiles.open(media_path, "wb") as f:
+            await f.write(content)
+        total_size += len(content)
 
     # Save metadata.json
     metadata_path = run_dir / "metadata.json"
-    with open(metadata_path, "w") as f:
-        json.dump(meta, f, indent=2)
+    async with aiofiles.open(metadata_path, "w") as f:
+        await f.write(json.dumps(meta, indent=2))
 
     # Update Board record
     board.total_size_bytes = total_size

@@ -13,6 +13,7 @@ license = { text = "Apache-2.0" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "aiofiles",
     "aiohttp",
     "bcrypt",
     "boto3",

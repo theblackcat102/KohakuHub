@@ -54,7 +54,6 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     RunSelectionList: typeof import('./components/RunSelectionList.vue')['default']
     ScatterPlot: typeof import('./components/ScatterPlot.vue')['default']
-    StandaloneMetricCard: typeof import('./components/StandaloneMetricCard.vue')['default']
     TableViewer: typeof import('./components/TableViewer.vue')['default']
     TheFooter: typeof import('./components/layout/TheFooter.vue')['default']
     TheHeader: typeof import('./components/layout/TheHeader.vue')['default']
