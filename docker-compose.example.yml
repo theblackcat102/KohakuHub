@@ -41,7 +41,7 @@ services:
 
       ## ===== Database Configuration =====
       - KOHAKU_HUB_DB_BACKEND=postgres
-      - KOHAKU_HUB_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/kohakuhub
+      - KOHAKU_HUB_DATABASE_URL=postgresql://<user>:<password>@postgres:5432/kohakuhub
       - KOHAKU_HUB_AUTO_MIGRATE=true # Auto-confirm database migrations (required for Docker)
 
       ## ===== S3 Storage Configuration =====
@@ -136,8 +136,8 @@ services:
     container_name: postgres
     restart: always
     environment:
-      - POSTGRES_USER=hub
-      - POSTGRES_PASSWORD=hubpass
+      - POSTGRES_USER=<user>
+      - POSTGRES_PASSWORD=<password>
       - POSTGRES_DB=kohakuhub
     ports:
       - "25432:5432" # Optional: for external access

@@ -45,7 +45,7 @@ services:
       ## ===== CRITICAL: Shared Database with KohakuHub =====
       ## Use the EXACT same database as KohakuHub for unified accounts
       - KOHAKU_BOARD_DB_BACKEND=postgres
-      - KOHAKU_BOARD_DATABASE_URL=postgresql://hub:hubpass@postgres:5432/kohakuhub
+      - KOHAKU_BOARD_DATABASE_URL=postgresql://<user>:<password>@postgres:5432/kohakuhub
 
       ## ===== CRITICAL: Shared Session Secret for SSO =====
       ## Must match KohakuHub's session secret for single sign-on

@@ -34,7 +34,7 @@ services:
 
       # Option 2: PostgreSQL (uncomment for production)
       # - KOHAKU_BOARD_DB_BACKEND=postgres
-      # - KOHAKU_BOARD_DATABASE_URL=postgresql://board:boardpass@postgres-board:5432/kohakuboard
+      # - KOHAKU_BOARD_DATABASE_URL=postgresql://<user>:<password>@postgres-board:5432/kohakuboard
 
       ## ===== Authentication Configuration =====
       - KOHAKU_BOARD_AUTH_SESSION_SECRET=change-me-in-production
@@ -66,8 +66,8 @@ services:
   #   container_name: postgres-board
   #   restart: always
   #   environment:
-  #     - POSTGRES_USER=board
-  #     - POSTGRES_PASSWORD=boardpass
+  #     - POSTGRES_USER=<user>
+  #     - POSTGRES_PASSWORD=<password>
   #     - POSTGRES_DB=kohakuboard
   #   ports:
   #     - "25433:5432"  # Optional: for external access
