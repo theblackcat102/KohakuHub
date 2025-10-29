@@ -25,6 +25,8 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 
 ## Features
 
+### KohakuHub (Model/Dataset Repository)
+
 - **HuggingFace Compatible** - Drop-in replacement for `huggingface_hub`, `hfutils`, `transformers`, `diffusers`
 - **External Source Fallback** - Browse HuggingFace (or other KohakuHub instances) when repos not found locally
 - **User External Tokens** - Configure your own tokens for external sources (HuggingFace, etc.) with encrypted storage
@@ -40,6 +42,14 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 - **File Deduplication** - Content-addressed storage by SHA256
 - **Trending & Likes** - Repository popularity tracking
 - **Pure Python Git Server** - No native dependencies, memory-efficient
+
+### KohakuBoard (Experiment Tracking) - Standalone Sub-Project
+
+- **Non-Blocking Logging** - Background writer process, zero training overhead
+- **Rich Data Types** - Scalars, images, videos, tables, histograms
+- **Hybrid Storage** - Lance (columnar) + SQLite (row-oriented) for optimal performance
+- **Local-First** - View experiments locally with `kobo open`, no server required
+- See [src/kohakuboard/README.md](./src/kohakuboard/README.md) for details
 
 ## Quick Start
 

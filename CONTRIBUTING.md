@@ -647,10 +647,16 @@ onMounted(async () => {
 
 ### 🚧 In Progress
 
+**KohakuHub:**
 - Rate limiting
 - Repository transfer between namespaces
 - Search functionality
 - Git push support
+
+**KohakuBoard** (Standalone Sub-Project):
+- Remote server mode with authentication (WIP)
+- Sync protocol for uploading local boards (WIP)
+- Frontend UI improvements (WIP)
 
 ### 📋 Planned Features
 
@@ -689,6 +695,12 @@ We're especially looking for help in:
 - Performance optimizations
 - Advanced repository features
 - Search functionality
+
+### 📊 KohakuBoard (Sub-Project)
+- Remote server authentication system
+- Sync protocol implementation
+- Frontend chart improvements
+- Documentation and examples
 
 ### 📚 Documentation
 - Tutorial videos
