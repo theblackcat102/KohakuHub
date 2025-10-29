@@ -653,7 +653,7 @@ onMounted(async () => {
 - Search functionality
 - Git push support
 
-**KohakuBoard** (Standalone Sub-Project):
+**KohakuBoard** (Standalone Repository - https://github.com/KohakuBlueleaf/KohakuBoard):
 - Remote server mode with authentication (WIP)
 - Sync protocol for uploading local boards (WIP)
 - Frontend UI improvements (WIP)
@@ -696,7 +696,8 @@ We're especially looking for help in:
 - Advanced repository features
 - Search functionality
 
-### 📊 KohakuBoard (Sub-Project)
+### 📊 KohakuBoard (Standalone Repository)
+- See https://github.com/KohakuBlueleaf/KohakuBoard for contributing to KohakuBoard
 - Remote server authentication system
 - Sync protocol implementation
 - Frontend chart improvements

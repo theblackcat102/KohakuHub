@@ -43,13 +43,15 @@ Self-hosted HuggingFace alternative with Git-like versioning for AI models and d
 - **Trending & Likes** - Repository popularity tracking
 - **Pure Python Git Server** - No native dependencies, memory-efficient
 
-### KohakuBoard (Experiment Tracking) - Standalone Sub-Project
+### KohakuBoard (Experiment Tracking) - Standalone Repository
+
+**Repository:** https://github.com/KohakuBlueleaf/KohakuBoard
 
 - **Non-Blocking Logging** - Background writer process, zero training overhead
 - **Rich Data Types** - Scalars, images, videos, tables, histograms
 - **Hybrid Storage** - Lance (columnar) + SQLite (row-oriented) for optimal performance
 - **Local-First** - View experiments locally with `kobo open`, no server required
-- See [src/kohakuboard/README.md](./src/kohakuboard/README.md) for details
+- See the KohakuBoard repository for full documentation
 
 ## Quick Start
 
