@@ -19,6 +19,9 @@ declare module 'vue-router/auto-routes' {
    */
   export interface RouteNamedMap {
     '/': RouteRecordInfo<'/', '/', Record<never, never>, Record<never, never>>,
+    '/docs/': RouteRecordInfo<'/docs/', '/docs', Record<never, never>, Record<never, never>>,
+    '/docs/[slug]': RouteRecordInfo<'/docs/[slug]', '/docs/:slug', { slug: ParamValue<true> }, { slug: ParamValue<false> }>,
+    '/docs/getting-started': RouteRecordInfo<'/docs/getting-started', '/docs/getting-started', Record<never, never>, Record<never, never>>,
     '/login': RouteRecordInfo<'/login', '/login', Record<never, never>, Record<never, never>>,
     '/projects/': RouteRecordInfo<'/projects/', '/projects', Record<never, never>, Record<never, never>>,
     '/projects/[project]/': RouteRecordInfo<'/projects/[project]/', '/projects/:project', { project: ParamValue<true> }, { project: ParamValue<false> }>,
@@ -40,6 +43,18 @@ declare module 'vue-router/auto-routes' {
   export interface _RouteFileInfoMap {
     'src/pages/index.vue': {
       routes: '/'
+      views: never
+    }
+    'src/pages/docs/index.vue': {
+      routes: '/docs/'
+      views: never
+    }
+    'src/pages/docs/[slug].vue': {
+      routes: '/docs/[slug]'
+      views: never
+    }
+    'src/pages/docs/getting-started.vue': {
+      routes: '/docs/getting-started'
       views: never
     }
     'src/pages/login.vue': {
