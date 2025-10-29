@@ -9,8 +9,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from kohakuboard.api.utils.board_reader import BoardReader
 from kohakuboard.auth import get_optional_user
@@ -20,6 +21,15 @@ from kohakuboard.db import Board, User
 from kohakuboard.logger import logger_api
 
 router = APIRouter()
+
+
+class BatchSummaryRequest(BaseModel):
+    run_ids: list[str]
+
+
+class BatchScalarsRequest(BaseModel):
+    run_ids: list[str]
+    metrics: list[str]
 
 
 def get_run_path(
@@ -383,3 +393,165 @@ async def get_histogram_data(
     data = reader.get_histogram_data(name, limit=limit)
 
     return {"experiment_id": run_id, "histogram_name": name, "data": data}
+
+
+def should_include_metric(metric_name: str) -> bool:
+    """Filter out params/ and gradients/ metrics."""
+    return not metric_name.startswith("params/") and not metric_name.startswith(
+        "gradients/"
+    )
+
+
+@router.post("/projects/{project}/runs/batch/summary")
+async def batch_get_run_summaries(
+    project: str,
+    batch_request: BatchSummaryRequest = Body(...),
+    current_user: User | None = Depends(get_optional_user),
+):
+    """Batch fetch summaries for multiple runs.
+
+    Args:
+        project: Project name
+        batch_request: List of run IDs to fetch
+
+    Returns:
+        dict: Map of run_id -> summary data (with params/gradients filtered)
+    """
+    logger_api.info(
+        f"Batch fetching summaries for {len(batch_request.run_ids)} runs in {project}"
+    )
+
+    async def fetch_one_summary(run_id: str) -> tuple[str, dict | None]:
+        try:
+            run_path, _ = get_run_path(project, run_id, current_user)
+            reader = BoardReader(run_path)
+
+            def get_summary_sync():
+                return reader.get_summary()
+
+            summary = await asyncio.to_thread(get_summary_sync)
+
+            # Filter out params/ and gradients/ from all metric types
+            filtered_summary = summary.copy()
+            filtered_summary["available_metrics"] = [
+                m for m in summary["available_metrics"] if should_include_metric(m)
+            ]
+            filtered_summary["available_media"] = [
+                m for m in summary["available_media"] if should_include_metric(m)
+            ]
+            filtered_summary["available_tables"] = [
+                m for m in summary["available_tables"] if should_include_metric(m)
+            ]
+            filtered_summary["available_histograms"] = [
+                m for m in summary["available_histograms"] if should_include_metric(m)
+            ]
+
+            # Return in same format as single summary endpoint
+            metadata = filtered_summary["metadata"]
+            return run_id, {
+                "experiment_id": run_id,
+                "project": project,
+                "run_id": run_id,
+                "experiment_info": {
+                    "id": run_id,
+                    "name": metadata.get("name", run_id),
+                    "description": f"Config: {metadata.get('config', {})}",
+                    "status": "completed",
+                    "total_steps": filtered_summary["metrics_count"],
+                    "duration": "N/A",
+                    "created_at": metadata.get("created_at", ""),
+                },
+                "total_steps": filtered_summary["metrics_count"],
+                "available_data": {
+                    "scalars": filtered_summary["available_metrics"],
+                    "media": filtered_summary["available_media"],
+                    "tables": filtered_summary["available_tables"],
+                    "histograms": filtered_summary["available_histograms"],
+                },
+            }
+        except Exception as e:
+            logger_api.warning(f"Failed to fetch summary for {run_id}: {e}")
+            return run_id, None
+
+    # Fetch all summaries concurrently
+    results = await asyncio.gather(
+        *[fetch_one_summary(run_id) for run_id in batch_request.run_ids]
+    )
+
+    # Build result map (exclude None values)
+    summaries = {run_id: summary for run_id, summary in results if summary is not None}
+
+    logger_api.info(
+        f"Successfully fetched {len(summaries)}/{len(batch_request.run_ids)} summaries"
+    )
+
+    return summaries
+
+
+@router.post("/projects/{project}/runs/batch/scalars")
+async def batch_get_scalar_data(
+    project: str,
+    body: BatchScalarsRequest = Body(...),
+    current_user: User | None = Depends(get_optional_user),
+):
+    """Batch fetch scalar data for multiple runs and metrics.
+
+    Args:
+        project: Project name
+        body: List of run IDs and metrics to fetch
+
+    Returns:
+        dict: Nested map of run_id -> metric -> data
+    """
+    logger_api.info(
+        f"Batch fetching {len(body.metrics)} metrics for {len(body.run_ids)} runs in {project}"
+    )
+
+    # Filter out params/ and gradients/ metrics
+    filtered_metrics = [m for m in body.metrics if should_include_metric(m)]
+
+    if not filtered_metrics:
+        logger_api.warning("No valid metrics after filtering params/gradients")
+        return {}
+
+    async def fetch_one_metric(
+        run_id: str, metric: str
+    ) -> tuple[str, str, dict | None]:
+        try:
+            run_path, _ = get_run_path(project, run_id, current_user)
+            reader = BoardReader(run_path)
+
+            def get_scalar_sync():
+                data = reader.get_scalar_data(metric, limit=None)
+                logger_api.debug(
+                    f"Fetched {metric} for {run_id}: "
+                    f"steps={len(data.get('steps', []))}, "
+                    f"values={len(data.get('values', []))}"
+                )
+                return data
+
+            data = await asyncio.to_thread(get_scalar_sync)
+            return run_id, metric, data
+        except Exception as e:
+            logger_api.warning(f"Failed to fetch {metric} for {run_id}: {e}")
+            return run_id, metric, None
+
+    # Fetch all combinations concurrently
+    tasks = []
+    for run_id in body.run_ids:
+        for metric in filtered_metrics:
+            tasks.append(fetch_one_metric(run_id, metric))
+
+    results = await asyncio.gather(*tasks)
+
+    # Build nested result map
+    scalar_data: dict[str, dict[str, dict]] = {}
+    for run_id, metric, data in results:
+        if data is not None:
+            if run_id not in scalar_data:
+                scalar_data[run_id] = {}
+            scalar_data[run_id][metric] = data
+
+    logger_api.info(f"Successfully fetched data for {len(scalar_data)} runs")
+
+    return scalar_data
