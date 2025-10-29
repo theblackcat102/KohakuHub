@@ -21,7 +21,7 @@ from torchvision.transforms import transforms
 from tqdm import tqdm
 from anyschedule import AnySchedule
 
-from kohakuboard.client import Board, Table, Media
+from kohakuboard.client import Board, Table, Media, Histogram
 
 
 class ConvNeXtBlock(nn.Module):
@@ -57,19 +57,19 @@ class ConvNeXtCIFAR(nn.Module):
         )
 
         # Stages
-        self.stage1 = nn.Sequential(*[ConvNeXtBlock(64) for _ in range(4)])
+        self.stage1 = nn.Sequential(*[ConvNeXtBlock(64) for _ in range(2)])
         self.downsample1 = nn.Sequential(
             nn.GroupNorm(1, 64),
             nn.Conv2d(64, 128, kernel_size=2, stride=2),
         )
 
-        self.stage2 = nn.Sequential(*[ConvNeXtBlock(128) for _ in range(4)])
+        self.stage2 = nn.Sequential(*[ConvNeXtBlock(128) for _ in range(2)])
         self.downsample2 = nn.Sequential(
             nn.GroupNorm(1, 128),
             nn.Conv2d(128, 256, kernel_size=2, stride=2),
         )
 
-        self.stage3 = nn.Sequential(*[ConvNeXtBlock(256) for _ in range(4)])
+        self.stage3 = nn.Sequential(*[ConvNeXtBlock(256) for _ in range(2)])
 
         # Head
         self.norm = nn.GroupNorm(1, 1024)
@@ -95,16 +95,19 @@ class ConvNeXtCIFAR(nn.Module):
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "mps" if torch.mps.is_available() else device
+    device = torch.device(device)
     print(f"Using device: {device}")
 
     # Config
     batch_size = 128
-    epochs = 2
+    warmup_ratio = 0.1
+    epochs = 10
     lr = 2e-3
 
     # Create board
     board = Board(
-        name="cifar10_convnext",
+        name=f"cifar10_convnext_bs{batch_size}_ep{epochs}_lr{lr}_warm{warmup_ratio}",
         config={
             "lr": lr,
             "batch_size": batch_size,
@@ -140,7 +143,7 @@ def main():
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=1,
+        num_workers=4,
         pin_memory=True,
         drop_last=True,
         persistent_workers=True,
@@ -148,7 +151,7 @@ def main():
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
-        num_workers=1,
+        num_workers=4,
         pin_memory=True,
         persistent_workers=True,
     )
@@ -172,7 +175,7 @@ def main():
             "lr": {
                 "mode": "cosine",
                 "end": total_steps + 1,
-                "warmup": len(train_loader) * 2,  # 2 epochs warmup
+                "warmup": int(total_steps * warmup_ratio),
                 "value": 1.0,
                 "min_value": 0.01,
             }
@@ -210,7 +213,7 @@ def main():
             optimizer.zero_grad()
 
             # Forward
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
+            with torch.autocast(device_type=device.type, dtype=torch.float16):
                 output = model(data)
                 loss = F.cross_entropy(output, target)
 
@@ -227,16 +230,34 @@ def main():
 
             # Log histograms every 32 steps
             if board._global_step % 32 == 0:
-                # Gradients
+                # NEW UNIFIED API: Log all histograms in a single call
+                # This avoids step inflation - all histograms share the same step!
+                histogram_data = {}
+
+                # Collect gradients
                 for i, (name, param) in enumerate(model.named_parameters()):
                     if param.grad is not None:
                         layer_name = name.replace(".", "_")
-                        board.log_histogram(f"gradients/{layer_name}", param.grad)
+                        # Create Histogram object (can optionally precompute with .compute_bins())
+                        histogram_data[f"gradients/{layer_name}"] = Histogram(
+                            param.grad
+                        ).compute_bins()
 
-                # Parameters
+                # Collect parameters
                 for i, (name, param) in enumerate(model.named_parameters()):
                     layer_name = name.replace(".", "_")
-                    board.log_histogram(f"params/{layer_name}", param)
+                    histogram_data[f"params/{layer_name}"] = Histogram(
+                        param
+                    ).compute_bins()
+
+                # Log all histograms at once - single step, single queue message!
+                board.log(**histogram_data)
+
+                # OLD API (still works but causes step inflation):
+                # for i, (name, param) in enumerate(model.named_parameters()):
+                #     if param.grad is not None:
+                #         layer_name = name.replace(".", "_")
+                #         board.log_histogram(f"gradients/{layer_name}", param.grad)  # Each call increments step!
 
             epoch_losses.append(loss.item())
             pbar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{current_lr:.6f}")
@@ -254,7 +275,10 @@ def main():
         sample_target = None
         sample_pred = None
 
-        with torch.no_grad():
+        with (
+            torch.no_grad(),
+            torch.autocast(device_type=device.type, dtype=torch.float16),
+        ):
             for batch_idx, (data, target) in enumerate(
                 tqdm(test_loader, desc="Validation", leave=False, ncols=100)
             ):
@@ -282,10 +306,8 @@ def main():
         val_loss = np.mean(val_losses)
         val_acc = correct / total
 
-        # Log validation metrics (val/ tab)
-        board.log(**{"val/loss": val_loss, "val/acc": val_acc})
-
-        # Log per-class accuracy table (val/ tab)
+        # NEW UNIFIED API: Log validation metrics AND table together
+        # All logged values share the same step!
         class_metrics = [
             {
                 "class": classes[i],
@@ -299,7 +321,19 @@ def main():
             }
             for i in range(10)
         ]
-        board.log_table("val/class_metrics", Table(class_metrics))
+
+        # Log scalars and table together - all at same step!
+        board.log(
+            **{
+                "val/loss": val_loss,
+                "val/acc": val_acc,
+                "val/class_metrics": Table(class_metrics),
+            }
+        )
+
+        # OLD API (still works):
+        # board.log(**{"val/loss": val_loss, "val/acc": val_acc})
+        # board.log_table("val/class_metrics", Table(class_metrics))  # Would be different step!
 
         # Log sample predictions table with images (val/ tab)
         if sample_pred is not None:
