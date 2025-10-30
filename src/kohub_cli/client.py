@@ -1213,19 +1213,80 @@ class KohubClient:
             )
         )
 
-        # File
-        ndjson_lines.append(
-            json.dumps(
-                {
-                    "key": "file",
-                    "value": {
-                        "path": repo_path,
-                        "content": content_b64,
-                        "encoding": "base64",
-                    },
-                }
+        # Check if file should use LFS based on size and extension
+        file_size = len(content)
+        file_ext = Path(repo_path).suffix.lower()
+        
+        # Common LFS extensions that servers typically require
+        lfs_extensions = {'.parquet', '.bin', '.safetensors', '.gguf', '.h5', '.onnx', 
+                         '.pkl', '.pickle', '.pt', '.pth', '.tar', '.gz', '.zip',
+                         '.arrow', '.feather', '.msgpack'}
+        
+        should_use_lfs = file_size >= 1000000 or file_ext in lfs_extensions
+        
+        if should_use_lfs:
+            # Use lfsFile operation for large files - needs OID (SHA256) and size
+            import hashlib
+            sha256_hash = hashlib.sha256(content).hexdigest()
+            
+            # First upload the actual file content via LFS batch API
+            # Step 1: Request upload URLs via LFS batch API
+            batch_request = {
+                "operation": "upload",
+                "transfers": ["basic"],
+                "objects": [{"oid": sha256_hash, "size": file_size}],
+                "hash_algo": "sha256"
+            }
+            
+            batch_response = self._request(
+                "POST",
+                f"/{repo_type}s/{namespace}/{name}.git/info/lfs/objects/batch",
+                json=batch_request,
+                headers={"Content-Type": "application/vnd.git-lfs+json"}
             )
-        )
+            
+            batch_data = batch_response.json()
+            
+            # Step 2: Upload file content to presigned URL
+            if batch_data.get("objects"):
+                lfs_object = batch_data["objects"][0]
+                if "actions" in lfs_object and "upload" in lfs_object["actions"]:
+                    upload_action = lfs_object["actions"]["upload"]
+                    upload_url = upload_action["href"]
+                    upload_headers = upload_action.get("header", {})
+                    
+                    # Upload the file content
+                    import requests
+                    upload_response = requests.put(upload_url, data=content, headers=upload_headers)
+                    upload_response.raise_for_status()
+            
+            # Then add the lfsFile operation to the commit
+            ndjson_lines.append(
+                json.dumps(
+                    {
+                        "key": "lfsFile",
+                        "value": {
+                            "path": repo_path,
+                            "oid": sha256_hash,
+                            "size": file_size,
+                        },
+                    }
+                )
+            )
+        else:
+            # Use regular file operation
+            ndjson_lines.append(
+                json.dumps(
+                    {
+                        "key": "file",
+                        "value": {
+                            "path": repo_path,
+                            "content": content_b64,
+                            "encoding": "base64",
+                        },
+                    }
+                )
+            )
 
         ndjson_payload = "\n".join(ndjson_lines)
 

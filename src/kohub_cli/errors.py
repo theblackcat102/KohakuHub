@@ -67,6 +67,9 @@ def handle_response_error(response):
     try:
         data = response.json()
         message = data.get("detail") or data.get("message") or response.text
+        # Ensure message is a string
+        if not isinstance(message, str):
+            message = str(message)
     except Exception:
         message = response.text or f"HTTP {status}"
 
